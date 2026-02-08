@@ -593,14 +593,20 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <Button 
                       variant={applicationFilter === 'all' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('all')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setApplicationFilter('all');
+                      }}
                     >
                       All ({applications.length})
                     </Button>
                     <Button 
                       variant={applicationFilter === 'R' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('R')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setApplicationFilter('R');
+                      }}
                     >
                       R - Permit Entire ({applications.filter((a: any) => {
                         const s = (a.status || '').toUpperCase();
@@ -610,7 +616,10 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <Button 
                       variant={applicationFilter === 'Q' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('Q')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setApplicationFilter('Q');
+                      }}
                     >
                       Q - Permit Partial ({applications.filter((a: any) => {
                         const s = (a.status || '').toUpperCase();
@@ -620,7 +629,10 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <Button 
                       variant={applicationFilter === 'P' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('P')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setApplicationFilter('P');
+                      }}
                     >
                       P - Approved ({applications.filter((a: any) => {
                         const s = (a.status || '').toUpperCase();
@@ -630,7 +642,10 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <Button 
                       variant={applicationFilter === 'J' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('J')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setApplicationFilter('J');
+                      }}
                     >
                       J - Disapproved ({applications.filter((a: any) => {
                         const s = (a.status || '').toUpperCase();
@@ -640,7 +655,10 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <Button 
                       variant={applicationFilter === 'in_process' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('in_process')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setApplicationFilter('in_process');
+                      }}
                     >
                       In Process ({applications.filter((a: any) => {
                         const s = (a.status || '').toUpperCase();
@@ -689,15 +707,19 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                                   return true;
                               }
                             })
-                            .map((app: any, idx: number) => (
-                              <ExpandableApplicationRow
-                                key={app.id || idx}
-                                application={app}
-                                index={idx}
-                                note={lineItemNotes[`application-${app.id || idx}`] || ''}
-                                onNoteChange={(note) => updateLineItemNote('application', app.id || String(idx), note)}
-                              />
-                            ))}
+                            .map((app: any, idx: number) => {
+                              const appKey = `${app.source || 'BIS'}-${app.id || app.application_number || idx}`;
+
+                              return (
+                                <ExpandableApplicationRow
+                                  key={appKey}
+                                  application={app}
+                                  index={idx}
+                                  note={lineItemNotes[`application-${appKey}`] || ''}
+                                  onNoteChange={(note) => updateLineItemNote('application', appKey, note)}
+                                />
+                              );
+                            })}
                         </TableBody>
                       </Table>
                     </ScrollArea>
