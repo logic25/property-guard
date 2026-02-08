@@ -18,6 +18,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   AlertTriangle, 
   Search,
@@ -27,7 +33,9 @@ import {
   ExternalLink,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  MoreHorizontal,
+  Wrench
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -54,12 +62,14 @@ interface PropertyViolationsTabProps {
   violations: Violation[];
   onRefresh: () => void;
   bbl?: string | null;
+  propertyId: string;
 }
 
 type SortField = 'issued_date' | 'agency' | 'status' | 'violation_number';
 type SortDirection = 'asc' | 'desc';
 
-export const PropertyViolationsTab = ({ violations, onRefresh, bbl }: PropertyViolationsTabProps) => {
+export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }: PropertyViolationsTabProps) => {
+  const [creatingWorkOrder, setCreatingWorkOrder] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [agencyFilter, setAgencyFilter] = useState<string>('all');
@@ -98,6 +108,28 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl }: PropertyVi
     return sortDirection === 'asc' 
       ? <ArrowUp className="w-3 h-3 ml-1" /> 
       : <ArrowDown className="w-3 h-3 ml-1" />;
+  };
+
+  const createWorkOrder = async (violation: Violation) => {
+    setCreatingWorkOrder(violation.id);
+    try {
+      const { error } = await supabase
+        .from('work_orders')
+        .insert({
+          property_id: propertyId,
+          linked_violation_id: violation.id,
+          scope: `Resolve ${violation.agency} violation #${violation.violation_number}${violation.description_raw ? `: ${violation.description_raw.substring(0, 100)}` : ''}`,
+          status: 'open'
+        });
+
+      if (error) throw error;
+      toast.success('Work order created successfully');
+    } catch (error) {
+      console.error('Error creating work order:', error);
+      toast.error('Failed to create work order');
+    } finally {
+      setCreatingWorkOrder(null);
+    }
   };
 
   const filteredAndSortedViolations = useMemo(() => {
@@ -212,6 +244,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl }: PropertyVi
                     Status {getSortIcon('status')}
                   </div>
                 </TableHead>
+                <TableHead className="font-semibold w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -229,15 +262,22 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl }: PropertyVi
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-auto py-1 px-2 ${getAgencyColor(violation.agency)}`}
-                      onClick={() => window.open(getAgencyLookupUrl(violation.agency, violation.violation_number, bbl), '_blank')}
-                    >
-                      {violation.agency}
-                      <ExternalLink className="w-3 h-3 ml-1" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Badge 
+                        className={`cursor-pointer ${getAgencyColor(violation.agency)}`}
+                        onClick={() => setAgencyFilter(violation.agency)}
+                      >
+                        {violation.agency}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => window.open(getAgencyLookupUrl(violation.agency, violation.violation_number, bbl), '_blank')}
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm">
                     {new Date(violation.issued_date).toLocaleDateString()}
@@ -271,6 +311,24 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl }: PropertyVi
                         <SelectItem value="closed">Closed</SelectItem>
                       </SelectContent>
                     </Select>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          onClick={() => createWorkOrder(violation)}
+                          disabled={creatingWorkOrder === violation.id}
+                        >
+                          <Wrench className="w-4 h-4 mr-2" />
+                          Create Work Order
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
