@@ -45,3 +45,6 @@ verify_jwt = false
 
 [functions.extract-document-text]
 verify_jwt = false
+
+[functions.sms-webhook]
+verify_jwt = false
