@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      portfolios: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null
@@ -109,6 +136,7 @@ export type Database = {
           overlay_district: string | null
           owner_name: string | null
           owner_phone: string | null
+          portfolio_id: string | null
           primary_use_group: string | null
           professional_cert_restricted: boolean | null
           residential_area_sqft: number | null
@@ -196,6 +224,7 @@ export type Database = {
           overlay_district?: string | null
           owner_name?: string | null
           owner_phone?: string | null
+          portfolio_id?: string | null
           primary_use_group?: string | null
           professional_cert_restricted?: boolean | null
           residential_area_sqft?: number | null
@@ -283,6 +312,7 @@ export type Database = {
           overlay_district?: string | null
           owner_name?: string | null
           owner_phone?: string | null
+          portfolio_id?: string | null
           primary_use_group?: string | null
           professional_cert_restricted?: boolean | null
           residential_area_sqft?: number | null
@@ -306,7 +336,15 @@ export type Database = {
           zoning_district?: string | null
           zoning_map?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "properties_portfolio_id_fkey"
+            columns: ["portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       property_activity_log: {
         Row: {
@@ -646,7 +684,16 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      agency_type: "DOB" | "ECB" | "FDNY"
+      agency_type:
+        | "DOB"
+        | "ECB"
+        | "FDNY"
+        | "HPD"
+        | "DEP"
+        | "DOT"
+        | "DSNY"
+        | "LPC"
+        | "DOF"
       jurisdiction_type: "NYC" | "NON_NYC"
       violation_status: "open" | "in_progress" | "closed"
       work_order_status: "open" | "in_progress" | "awaiting_docs" | "completed"
@@ -777,7 +824,17 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      agency_type: ["DOB", "ECB", "FDNY"],
+      agency_type: [
+        "DOB",
+        "ECB",
+        "FDNY",
+        "HPD",
+        "DEP",
+        "DOT",
+        "DSNY",
+        "LPC",
+        "DOF",
+      ],
       jurisdiction_type: ["NYC", "NON_NYC"],
       violation_status: ["open", "in_progress", "closed"],
       work_order_status: ["open", "in_progress", "awaiting_docs", "completed"],

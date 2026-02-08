@@ -11,6 +11,8 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import DashboardOverview from "@/pages/dashboard/DashboardOverview";
 import PropertiesPage from "@/pages/dashboard/PropertiesPage";
 import PropertyDetailPage from "@/pages/dashboard/PropertyDetailPage";
+import PortfoliosPage from "@/pages/dashboard/PortfoliosPage";
+import PortfolioDetailPage from "@/pages/dashboard/PortfolioDetailPage";
 import ViolationsPage from "@/pages/dashboard/ViolationsPage";
 import VendorsPage from "@/pages/dashboard/VendorsPage";
 import WorkOrdersPage from "@/pages/dashboard/WorkOrdersPage";
@@ -39,6 +41,8 @@ const App = () => (
               <Route index element={<DashboardOverview />} />
               <Route path="properties" element={<PropertiesPage />} />
               <Route path="properties/:id" element={<PropertyDetailPage />} />
+              <Route path="portfolios" element={<PortfoliosPage />} />
+              <Route path="portfolios/:id" element={<PortfolioDetailPage />} />
               <Route path="violations" element={<ViolationsPage />} />
               <Route path="vendors" element={<VendorsPage />} />
               <Route path="work-orders" element={<WorkOrdersPage />} />
