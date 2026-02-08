@@ -11,7 +11,9 @@ import {
   LogOut,
   FolderOpen,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FileStack,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -22,7 +24,9 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Overview', href: '/dashboard' },
   { icon: Home, label: 'Properties', href: '/dashboard/properties' },
   { icon: FolderOpen, label: 'Portfolios', href: '/dashboard/portfolios' },
+  { icon: FileStack, label: 'Applications', href: '/dashboard/applications' },
   { icon: AlertTriangle, label: 'Violations', href: '/dashboard/violations' },
+  { icon: FileText, label: 'DD Reports', href: '/dashboard/dd-reports' },
   { icon: Users, label: 'Vendors', href: '/dashboard/vendors' },
   { icon: ClipboardList, label: 'Work Orders', href: '/dashboard/work-orders' },
 ];

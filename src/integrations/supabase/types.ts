@@ -14,6 +14,161 @@ export type Database = {
   }
   public: {
     Tables: {
+      applications: {
+        Row: {
+          agency: string
+          applicant_name: string | null
+          application_number: string
+          application_type: string
+          approval_date: string | null
+          created_at: string
+          description: string | null
+          dwelling_units: number | null
+          estimated_cost: number | null
+          expiration_date: string | null
+          filing_date: string | null
+          floor_area: number | null
+          id: string
+          job_type: string | null
+          notes: string | null
+          owner_name: string | null
+          property_id: string
+          raw_data: Json | null
+          source: string
+          status: string | null
+          stories: number | null
+          synced_at: string | null
+          updated_at: string
+          work_type: string | null
+        }
+        Insert: {
+          agency?: string
+          applicant_name?: string | null
+          application_number: string
+          application_type: string
+          approval_date?: string | null
+          created_at?: string
+          description?: string | null
+          dwelling_units?: number | null
+          estimated_cost?: number | null
+          expiration_date?: string | null
+          filing_date?: string | null
+          floor_area?: number | null
+          id?: string
+          job_type?: string | null
+          notes?: string | null
+          owner_name?: string | null
+          property_id: string
+          raw_data?: Json | null
+          source?: string
+          status?: string | null
+          stories?: number | null
+          synced_at?: string | null
+          updated_at?: string
+          work_type?: string | null
+        }
+        Update: {
+          agency?: string
+          applicant_name?: string | null
+          application_number?: string
+          application_type?: string
+          approval_date?: string | null
+          created_at?: string
+          description?: string | null
+          dwelling_units?: number | null
+          estimated_cost?: number | null
+          expiration_date?: string | null
+          filing_date?: string | null
+          floor_area?: number | null
+          id?: string
+          job_type?: string | null
+          notes?: string | null
+          owner_name?: string | null
+          property_id?: string
+          raw_data?: Json | null
+          source?: string
+          status?: string | null
+          stories?: number | null
+          synced_at?: string | null
+          updated_at?: string
+          work_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "applications_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dd_reports: {
+        Row: {
+          address: string
+          ai_analysis: string | null
+          applications_data: Json | null
+          bbl: string | null
+          bin: string | null
+          building_data: Json | null
+          created_at: string
+          general_notes: string | null
+          id: string
+          line_item_notes: Json | null
+          orders_data: Json | null
+          pdf_url: string | null
+          prepared_by: string | null
+          prepared_for: string
+          report_date: string
+          status: string
+          updated_at: string
+          user_id: string
+          violations_data: Json | null
+        }
+        Insert: {
+          address: string
+          ai_analysis?: string | null
+          applications_data?: Json | null
+          bbl?: string | null
+          bin?: string | null
+          building_data?: Json | null
+          created_at?: string
+          general_notes?: string | null
+          id?: string
+          line_item_notes?: Json | null
+          orders_data?: Json | null
+          pdf_url?: string | null
+          prepared_by?: string | null
+          prepared_for: string
+          report_date?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          violations_data?: Json | null
+        }
+        Update: {
+          address?: string
+          ai_analysis?: string | null
+          applications_data?: Json | null
+          bbl?: string | null
+          bin?: string | null
+          building_data?: Json | null
+          created_at?: string
+          general_notes?: string | null
+          id?: string
+          line_item_notes?: Json | null
+          orders_data?: Json | null
+          pdf_url?: string | null
+          prepared_by?: string | null
+          prepared_for?: string
+          report_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          violations_data?: Json | null
+        }
+        Relationships: []
+      }
       lease_conversations: {
         Row: {
           created_at: string
