@@ -26,6 +26,7 @@ import {
   Ban
 } from 'lucide-react';
 import { getBoroughName } from '@/lib/property-utils';
+import { isActiveViolation } from '@/lib/violation-utils';
 import { LeaseQAWidget } from '@/components/lease/LeaseQAWidget';
 
 interface Property {
@@ -95,6 +96,7 @@ interface Property {
 interface Violation {
   id: string;
   status: string;
+  oath_status?: string | null;
   cure_due_date: string | null;
   hearing_date: string | null;
   is_stop_work_order: boolean;
@@ -127,12 +129,15 @@ export const PropertyOverviewTab = ({
   const [zoningOpen, setZoningOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   
-  const openViolations = violations.filter(v => v.status === 'open').length;
-  const inProgressViolations = violations.filter(v => v.status === 'in_progress').length;
+  // Filter to only active violations
+  const activeViolations = violations.filter(isActiveViolation);
+  
+  const openViolations = activeViolations.filter(v => v.status === 'open').length;
+  const inProgressViolations = activeViolations.filter(v => v.status === 'in_progress').length;
   const activeWorkOrders = workOrders.filter(w => w.status !== 'completed').length;
 
-  // Find next deadline
-  const upcomingDeadlines = violations
+  // Find next deadline from active violations
+  const upcomingDeadlines = activeViolations
     .filter(v => v.cure_due_date && new Date(v.cure_due_date) > new Date())
     .sort((a, b) => new Date(a.cure_due_date!).getTime() - new Date(b.cure_due_date!).getTime());
   
@@ -141,8 +146,8 @@ export const PropertyOverviewTab = ({
     ? Math.ceil((new Date(nextDeadline.cure_due_date!).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
 
-  // Calculate compliance score
-  const criticalIssues = violations.filter(v => v.is_stop_work_order || v.is_vacate_order).length;
+  // Calculate compliance score based on active violations
+  const criticalIssues = activeViolations.filter(v => v.is_stop_work_order || v.is_vacate_order).length;
   const complianceScore = Math.max(0, 100 - (openViolations * 5) - (criticalIssues * 25));
 
   const getCOStatusBadge = (status: string | null | undefined) => {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
+import { isActiveViolation } from '@/lib/violation-utils';
 import { 
   AlertOctagon, 
   Ban, 
@@ -16,6 +17,8 @@ interface CriticalViolation {
   agency: string;
   violation_number: string;
   description_raw: string | null;
+  status: string;
+  oath_status: string | null;
   cure_due_date: string | null;
   hearing_date: string | null;
   is_stop_work_order: boolean;
@@ -42,16 +45,22 @@ const CriticalViolationsWidget = () => {
             agency,
             violation_number,
             description_raw,
+            status,
+            oath_status,
             cure_due_date,
             hearing_date,
             is_stop_work_order,
             is_vacate_order,
             property:properties(id, address)
           `)
-          .neq('status', 'closed')
           .or('is_stop_work_order.eq.true,is_vacate_order.eq.true')
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(20);
+
+        // Filter to only active violations
+        const activeCritical = (critical || [])
+          .filter(v => isActiveViolation(v))
+          .slice(0, 5);
 
         // Fetch upcoming deadlines (next 14 days)
         const twoWeeksFromNow = new Date();
@@ -64,19 +73,25 @@ const CriticalViolationsWidget = () => {
             agency,
             violation_number,
             description_raw,
+            status,
+            oath_status,
             cure_due_date,
             hearing_date,
             is_stop_work_order,
             is_vacate_order,
             property:properties(id, address)
           `)
-          .neq('status', 'closed')
           .or(`cure_due_date.lte.${twoWeeksFromNow.toISOString()},hearing_date.lte.${twoWeeksFromNow.toISOString()}`)
           .order('cure_due_date', { ascending: true })
-          .limit(5);
+          .limit(20);
 
-        setCriticalViolations(critical as unknown as CriticalViolation[] || []);
-        setUpcomingDeadlines(deadlines as unknown as CriticalViolation[] || []);
+        // Filter to only active violations
+        const activeDeadlines = (deadlines || [])
+          .filter(v => isActiveViolation(v))
+          .slice(0, 5);
+
+        setCriticalViolations(activeCritical as unknown as CriticalViolation[]);
+        setUpcomingDeadlines(activeDeadlines as unknown as CriticalViolation[]);
       } catch (error) {
         console.error('Error fetching critical data:', error);
       } finally {

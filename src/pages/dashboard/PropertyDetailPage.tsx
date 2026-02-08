@@ -20,7 +20,7 @@ import { PropertySettingsTab } from '@/components/properties/PropertySettingsTab
 import { EditPropertyDialog } from '@/components/properties/EditPropertyDialog';
 import { getBoroughName } from '@/lib/property-utils';
 import { Badge } from '@/components/ui/badge';
-import { getAgencyColor } from '@/lib/violation-utils';
+import { getAgencyColor, isActiveViolation } from '@/lib/violation-utils';
 
 interface Property {
   id: string;
@@ -205,14 +205,19 @@ const PropertyDetailPage = () => {
     }
   };
 
-  // Count violations per agency - must be before early returns
+  // Filter to only active violations first
+  const activeViolations = useMemo(() => {
+    return violations.filter(isActiveViolation);
+  }, [violations]);
+
+  // Count violations per agency - only active ones
   const violationCountsByAgency = useMemo(() => {
     const counts: Record<string, number> = {};
-    violations.forEach(v => {
+    activeViolations.forEach(v => {
       counts[v.agency] = (counts[v.agency] || 0) + 1;
     });
     return counts;
-  }, [violations]);
+  }, [activeViolations]);
 
   if (loading) {
     return (
@@ -235,8 +240,8 @@ const PropertyDetailPage = () => {
   }
 
   const coStatus = getCOStatusDisplay(property.co_status);
-  const openViolations = violations.filter(v => v.status === 'open').length;
-  const criticalIssues = violations.filter(v => v.is_stop_work_order || v.is_vacate_order);
+  const openViolations = activeViolations.filter(v => v.status === 'open').length;
+  const criticalIssues = activeViolations.filter(v => v.is_stop_work_order || v.is_vacate_order);
 
   return (
     <div className="space-y-6">
