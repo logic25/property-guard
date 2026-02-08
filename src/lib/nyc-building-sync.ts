@@ -92,6 +92,9 @@ const PLUTO_API = 'https://data.cityofnewyork.us/resource/64uk-42ks.json';
 // DOB Job Application Filings (for building info)
 const DOB_JOBS_API = 'https://data.cityofnewyork.us/resource/ic3t-wcy2.json';
 
+// NYC Geoclient API for cross streets (requires BBL)
+const GEOCLIENT_PLACE_API = 'https://data.cityofnewyork.us/resource/ahrc-nbvq.json';
+
 // Helper to parse yes/no strings to boolean
 const parseYesNo = (value: string | undefined | null): boolean => {
   if (!value) return false;
@@ -203,6 +206,41 @@ export async function fetchPLUTOData(bbl: string): Promise<Partial<NYCBuildingDa
   }
 }
 
+// Fetch cross streets from NYC Property Address Directory (PAD)
+export async function fetchCrossStreets(bin: string): Promise<string | null> {
+  try {
+    // Use PAD BBL data which has cross streets info based on BIN
+    const url = new URL('https://data.cityofnewyork.us/resource/bc8t-ecyu.json');
+    url.searchParams.set('bin', bin);
+    url.searchParams.set('$limit', '1');
+
+    console.log('Fetching cross streets for BIN:', bin);
+    const response = await fetch(url.toString());
+    if (!response.ok) return null;
+
+    const results = await response.json();
+    if (!Array.isArray(results) || results.length === 0) return null;
+
+    const r = results[0] as Record<string, any>;
+    
+    // Build cross streets string from available fields
+    const crossStreets: string[] = [];
+    if (r.stname) crossStreets.push(r.stname);
+    if (r.segmentid && r.from_stnam) crossStreets.push(r.from_stnam);
+    if (r.to_stname) crossStreets.push(r.to_stname);
+    
+    // Alternative: use lhnd/hhnd (low/high house numbers) and street
+    if (crossStreets.length === 0 && r.sagrlhns && r.segrhhns) {
+      return `${r.sagrlhns} - ${r.segrhhns}`;
+    }
+
+    return crossStreets.length > 0 ? crossStreets.join(', ') : null;
+  } catch (error) {
+    console.error('Error fetching cross streets:', error);
+    return null;
+  }
+}
+
 // Fetch building data from DOB by address
 export async function fetchDOBData(
   houseNumber: string,
@@ -269,12 +307,14 @@ export async function syncNYCBuildingDataByIdentifiers(
 ): Promise<NYCBuildingData | null> {
   console.log('Syncing by identifiers - BIN:', bin, 'BBL:', bbl);
   
-  // Fetch PLUTO data if we have BBL
-  let plutoData: Partial<NYCBuildingData> | null = null;
-  if (bbl) {
-    plutoData = await fetchPLUTOData(bbl);
-    console.log('PLUTO data result:', plutoData);
-  }
+  // Fetch PLUTO data and cross streets in parallel
+  const [plutoData, crossStreets] = await Promise.all([
+    bbl ? fetchPLUTOData(bbl) : Promise.resolve(null),
+    bin ? fetchCrossStreets(bin) : Promise.resolve(null),
+  ]);
+  
+  console.log('PLUTO data result:', plutoData);
+  console.log('Cross streets result:', crossStreets);
 
   if (!plutoData) {
     console.error('No PLUTO data found for BBL:', bbl);
@@ -334,8 +374,8 @@ export async function syncNYCBuildingDataByIdentifiers(
     yearAltered1: plutoData.yearAltered1 ?? null,
     yearAltered2: plutoData.yearAltered2 ?? null,
 
-    // Location
-    crossStreets: null,
+    // Location - use fetched cross streets
+    crossStreets: crossStreets || null,
     specialPlaceName: null,
     buildingRemarks: null,
     latitude: plutoData.latitude ?? null,
