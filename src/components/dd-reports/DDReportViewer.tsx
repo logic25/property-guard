@@ -207,24 +207,24 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
               <p>{building.year_built || '—'}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Stories</p>
-              <p>{building.stories || '—'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Building Class</p>
-              <p>{building.building_class || '—'}</p>
+              <p className="text-sm text-muted-foreground">Dwelling Units</p>
+              <p>{building.dwelling_units || '—'}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Zoning</p>
               <p>{building.zoning_district || '—'}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Dwelling Units</p>
-              <p>{building.dwelling_units || '—'}</p>
+              <p className="text-sm text-muted-foreground">Landmark Status</p>
+              <p>{building.is_landmark ? 'Yes - Landmarked' : building.historic_district ? `Historic District: ${building.historic_district}` : 'No'}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Lot Area</p>
-              <p>{building.lot_area_sqft ? `${building.lot_area_sqft.toLocaleString()} sqft` : '—'}</p>
+              <p className="text-sm text-muted-foreground">Owner</p>
+              <p className="truncate">{building.owner_name || '—'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Building Area</p>
+              <p>{building.building_area_sqft ? `${building.building_area_sqft.toLocaleString()} sqft` : '—'}</p>
             </div>
           </div>
         </CardContent>
