@@ -210,21 +210,38 @@ async function fetchViolations(bin: string, bbl: string): Promise<any[]> {
       "$order": "issue_date DESC",
     });
     
-    violations.push(...dobViolations.map((v: any) => ({
-      id: v.isn_dob_bis_viol || v.number,
-      agency: "DOB",
-      violation_number: v.isn_dob_bis_viol || v.number,
-      violation_type: v.violation_type || null,
-      violation_class: v.violation_category || null,
-      description_raw: v.description || v.violation_type_code || null,
-      issued_date: v.issue_date || null,
-      severity: v.violation_category || null,
-      status: "open",
-      is_stop_work_order: (v.violation_type || '').toLowerCase().includes('stop work'),
-      is_partial_stop_work: (v.violation_type || '').toLowerCase().includes('partial stop work'),
-      is_vacate_order: (v.violation_type || '').toLowerCase().includes('vacate'),
-      disposition: v.disposition_comments || null,
-    })));
+    violations.push(...dobViolations.map((v: any) => {
+      const violationType = (v.violation_type || '').toLowerCase();
+      const description = (v.description || '').toLowerCase();
+      
+      // Check both violation_type AND description for order keywords
+      const isStopWork = violationType.includes('stop work') || 
+        description.includes('stop work') || 
+        description.includes('work stopped') ||
+        description.includes('stop all work');
+      const isPartialStopWork = violationType.includes('partial stop work') || 
+        description.includes('partial stop work') ||
+        description.includes('partial vacate');
+      const isVacate = violationType.includes('vacate') || 
+        description.includes('vacate order') ||
+        description.includes('vacate notice');
+      
+      return {
+        id: v.isn_dob_bis_viol || v.number,
+        agency: "DOB",
+        violation_number: v.isn_dob_bis_viol || v.number,
+        violation_type: v.violation_type || null,
+        violation_class: v.violation_category || null,
+        description_raw: v.description || v.violation_type_code || null,
+        issued_date: v.issue_date || null,
+        severity: v.violation_category || null,
+        status: "open",
+        is_stop_work_order: isStopWork,
+        is_partial_stop_work: isPartialStopWork,
+        is_vacate_order: isVacate,
+        disposition: v.disposition_comments || null,
+      };
+    }));
   }
   
   // ECB Violations by BIN - only RESOLVE status = open
@@ -267,19 +284,32 @@ async function fetchViolations(bin: string, bbl: string): Promise<any[]> {
       "$order": "inspectiondate DESC",
     });
     
-    violations.push(...hpdViolations.map((v: any) => ({
-      id: v.violationid,
-      agency: "HPD",
-      violation_number: v.violationid?.toString() || null,
-      violation_type: v.novdescription?.slice(0, 50) || null,
-      violation_class: v.class || null,
-      description_raw: v.novdescription || null,
-      issued_date: v.inspectiondate || v.novissueddate || null,
-      severity: v.class || null,
-      status: "open",
-      apartment: v.apartment || null,
-      story: v.story || null,
-    })));
+    violations.push(...hpdViolations.map((v: any) => {
+      const description = (v.novdescription || '').toLowerCase();
+      const violationClass = (v.class || '').toUpperCase();
+      
+      // HPD Class I = Immediately Hazardous, check for vacate keywords
+      const isVacate = description.includes('vacate') || 
+        description.includes('vacate order') ||
+        (violationClass === 'I' && description.includes('hazard'));
+      
+      return {
+        id: v.violationid,
+        agency: "HPD",
+        violation_number: v.violationid?.toString() || null,
+        violation_type: v.novdescription?.slice(0, 50) || null,
+        violation_class: v.class || null,
+        description_raw: v.novdescription || null,
+        issued_date: v.inspectiondate || v.novissueddate || null,
+        severity: v.class || null,
+        status: "open",
+        apartment: v.apartment || null,
+        story: v.story || null,
+        is_vacate_order: isVacate,
+        is_stop_work_order: false,
+        is_partial_stop_work: false,
+      };
+    }));
   }
   
   return violations;
@@ -573,10 +603,19 @@ serve(async (req) => {
     const violations = await fetchViolations(bin, bbl);
     console.log(`Found ${violations.length} total violations`);
 
-    // Step 4: Fetch applications
+    // Step 4: Fetch applications and dedupe
     console.log(`Fetching applications for BIN: ${bin}`);
-    const applications = await fetchApplications(bin);
-    console.log(`Found ${applications.length} applications`);
+    const rawApplications = await fetchApplications(bin);
+    
+    // Dedupe applications by source + application_number
+    const seenApps = new Set<string>();
+    const applications = rawApplications.filter((app: any) => {
+      const key = `${app.source || 'BIS'}-${app.application_number}`;
+      if (seenApps.has(key)) return false;
+      seenApps.add(key);
+      return true;
+    });
+    console.log(`Found ${rawApplications.length} applications, ${applications.length} unique`);
 
     // Step 5: Separate critical orders
     const orders = {
