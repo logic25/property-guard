@@ -119,13 +119,15 @@ interface PropertyOverviewTabProps {
   violations: Violation[];
   documents: Document[];
   workOrders: WorkOrder[];
+  onTabChange?: (tab: string) => void;
 }
 
 export const PropertyOverviewTab = ({ 
   property, 
   violations, 
   documents, 
-  workOrders 
+  workOrders,
+  onTabChange 
 }: PropertyOverviewTabProps) => {
   const [zoningOpen, setZoningOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -182,9 +184,12 @@ export const PropertyOverviewTab = ({
 
   return (
     <div className="space-y-6">
-      {/* Quick Stats Row - Merged with Activity */}
+      {/* Quick Stats Row - Clickable cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <Card>
+        <Card 
+          className="cursor-pointer hover:border-destructive/50 transition-colors"
+          onClick={() => onTabChange?.('violations')}
+        >
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-destructive/10 flex items-center justify-center">
@@ -198,7 +203,10 @@ export const PropertyOverviewTab = ({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:border-orange-500/50 transition-colors"
+          onClick={() => onTabChange?.('violations')}
+        >
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center">
@@ -212,7 +220,10 @@ export const PropertyOverviewTab = ({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:border-warning/50 transition-colors"
+          onClick={() => onTabChange?.('violations')}
+        >
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-warning/10 flex items-center justify-center">
@@ -228,7 +239,10 @@ export const PropertyOverviewTab = ({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:border-blue-500/50 transition-colors"
+          onClick={() => onTabChange?.('work-orders')}
+        >
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -242,7 +256,10 @@ export const PropertyOverviewTab = ({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card 
+          className="cursor-pointer hover:border-primary/50 transition-colors"
+          onClick={() => onTabChange?.('docs')}
+        >
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -256,7 +273,7 @@ export const PropertyOverviewTab = ({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="cursor-default">
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-success/10 flex items-center justify-center">

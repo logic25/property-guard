@@ -368,6 +368,7 @@ const PropertyDetailPage = () => {
             violations={violations}
             documents={documents}
             workOrders={workOrders}
+            onTabChange={setActiveTab}
           />
         </TabsContent>
 
