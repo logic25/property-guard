@@ -22,7 +22,7 @@ import { Loader2, Check, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SmartAddressAutocomplete } from './SmartAddressAutocomplete';
 import { determineApplicableAgencies, getBoroughName, type Agency } from '@/lib/property-utils';
-import { Checkbox } from '@/components/ui/checkbox';
+
 
 interface AddPropertyDialogProps {
   open: boolean;
@@ -422,18 +422,19 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
                   const isChecked = formData.selected_agencies.includes(agency);
                   const isSuggested = suggestedAgencies.includes(agency);
                   return (
-                    <div
+                    <label
                       key={agency}
                       className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                         isChecked 
                           ? 'border-primary bg-primary/5' 
                           : 'border-border hover:border-muted-foreground/50'
                       }`}
-                      onClick={() => toggleAgency(agency)}
                     >
-                      <Checkbox
+                      <input
+                        type="checkbox"
                         checked={isChecked}
-                        onCheckedChange={() => toggleAgency(agency)}
+                        onChange={() => toggleAgency(agency)}
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                       />
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">{agency}</span>
@@ -441,7 +442,7 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
                           <span className="text-xs text-muted-foreground">Recommended</span>
                         )}
                       </div>
-                    </div>
+                    </label>
                   );
                 })}
               </div>
