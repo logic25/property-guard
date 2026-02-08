@@ -114,17 +114,31 @@ const parseInt_ = (value: string | number | undefined | null): number | null => 
 };
 
 // Fetch building data from PLUTO by BBL
+// BBL format in PLUTO is numeric: e.g., 3036140041 (borough 3, block 03614, lot 0041)
 export async function fetchPLUTOData(bbl: string): Promise<Partial<NYCBuildingData> | null> {
   try {
+    // Clean BBL - remove any non-numeric characters
+    const cleanBbl = bbl.replace(/\D/g, '');
+    
+    // PLUTO accepts BBL in different formats, try numeric first
     const url = new URL(PLUTO_API);
-    url.searchParams.set('bbl', bbl);
+    url.searchParams.set('bbl', cleanBbl);
     url.searchParams.set('$limit', '1');
 
+    console.log('Fetching PLUTO data for BBL:', cleanBbl);
     const response = await fetch(url.toString());
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error('PLUTO API error:', response.status);
+      return null;
+    }
 
     const results = await response.json();
-    if (!Array.isArray(results) || results.length === 0) return null;
+    console.log('PLUTO results:', results);
+    
+    if (!Array.isArray(results) || results.length === 0) {
+      console.log('No PLUTO results found for BBL:', cleanBbl);
+      return null;
+    }
 
     const p = results[0] as Record<string, any>;
 
@@ -165,6 +179,7 @@ export async function fetchPLUTOData(bbl: string): Promise<Partial<NYCBuildingDa
       stories: parseInt_(p.numfloors),
       dwellingUnits: parseInt_(p.unitsres),
       grossSqft: parseInt_(p.bldgarea),
+      heightFt: parseInt_(p.heightroof),
 
       // Landmark & historic
       isLandmark: parseYesNo(p.landmark),
@@ -178,6 +193,9 @@ export async function fetchPLUTOData(bbl: string): Promise<Partial<NYCBuildingDa
 
       // Building count
       numberOfBuildings: parseInt_(p.numbldgs),
+      
+      // Address info from PLUTO
+      address: p.address ? `${p.address}`.trim() : null,
     };
   } catch (error) {
     console.error('Error fetching PLUTO data:', error);
@@ -244,7 +262,123 @@ export async function fetchDOBData(
   }
 }
 
-// Main sync function - combines PLUTO and DOB data
+// Sync using existing BIN and BBL (preferred method when we already have identifiers)
+export async function syncNYCBuildingDataByIdentifiers(
+  bin: string | null,
+  bbl: string | null
+): Promise<NYCBuildingData | null> {
+  console.log('Syncing by identifiers - BIN:', bin, 'BBL:', bbl);
+  
+  // Fetch PLUTO data if we have BBL
+  let plutoData: Partial<NYCBuildingData> | null = null;
+  if (bbl) {
+    plutoData = await fetchPLUTOData(bbl);
+    console.log('PLUTO data result:', plutoData);
+  }
+
+  if (!plutoData) {
+    console.error('No PLUTO data found for BBL:', bbl);
+    return null;
+  }
+
+  // Parse BBL to get borough, block, lot
+  const cleanBbl = (bbl || '').replace(/\D/g, '');
+  const borough = cleanBbl.length >= 1 ? cleanBbl.substring(0, 1) : '';
+  const block = cleanBbl.length >= 6 ? cleanBbl.substring(1, 6).replace(/^0+/, '') || '0' : '';
+  const lot = cleanBbl.length >= 10 ? cleanBbl.substring(6, 10).replace(/^0+/, '') || '0' : '';
+
+  // Build result from PLUTO data
+  const result: NYCBuildingData = {
+    // Identifiers
+    bin: bin || '',
+    bbl: cleanBbl,
+    borough,
+    block,
+    lot,
+    address: (plutoData as any).address || '',
+
+    // Dimensions from PLUTO
+    stories: plutoData.stories ?? null,
+    heightFt: plutoData.heightFt ?? null,
+    grossSqft: plutoData.grossSqft ?? null,
+    dwellingUnits: plutoData.dwellingUnits ?? null,
+    lotAreaSqft: plutoData.lotAreaSqft ?? null,
+    buildingAreaSqft: plutoData.buildingAreaSqft ?? null,
+    residentialAreaSqft: plutoData.residentialAreaSqft ?? null,
+    commercialAreaSqft: plutoData.commercialAreaSqft ?? null,
+    officeAreaSqft: plutoData.officeAreaSqft ?? null,
+    retailAreaSqft: plutoData.retailAreaSqft ?? null,
+    garageAreaSqft: plutoData.garageAreaSqft ?? null,
+    factoryAreaSqft: plutoData.factoryAreaSqft ?? null,
+    storageAreaSqft: plutoData.storageAreaSqft ?? null,
+    otherAreaSqft: plutoData.otherAreaSqft ?? null,
+
+    // Zoning from PLUTO
+    zoningDistrict: plutoData.zoningDistrict ?? null,
+    zoningMap: plutoData.zoningMap ?? null,
+    overlayDistrict: plutoData.overlayDistrict ?? null,
+    specialDistrict: plutoData.specialDistrict ?? null,
+    commercialOverlay: plutoData.commercialOverlay ?? null,
+    floorAreaRatio: plutoData.floorAreaRatio ?? null,
+    maxFloorAreaRatio: plutoData.maxFloorAreaRatio ?? null,
+    airRightsSqft: plutoData.unusedFar && plutoData.lotAreaSqft 
+      ? Math.floor(plutoData.unusedFar * plutoData.lotAreaSqft) 
+      : null,
+    unusedFar: plutoData.unusedFar ?? null,
+
+    // Building classification
+    buildingClass: plutoData.buildingClass ?? null,
+    occupancyGroup: null,
+    occupancyClassification: null,
+    yearBuilt: plutoData.yearBuilt ?? null,
+    yearAltered1: plutoData.yearAltered1 ?? null,
+    yearAltered2: plutoData.yearAltered2 ?? null,
+
+    // Location
+    crossStreets: null,
+    specialPlaceName: null,
+    buildingRemarks: null,
+    latitude: plutoData.latitude ?? null,
+    longitude: plutoData.longitude ?? null,
+    communityBoard: plutoData.communityBoard ?? null,
+    councilDistrict: plutoData.councilDistrict ?? null,
+    censusTract: plutoData.censusTract ?? null,
+    ntaName: null,
+
+    // Landmark & special status
+    isLandmark: plutoData.isLandmark ?? false,
+    landmarkStatus: plutoData.isLandmark ? 'LANDMARK' : null,
+    specialStatus: null,
+    historicDistrict: plutoData.historicDistrict ?? null,
+
+    // Regulatory restrictions (not available in PLUTO - would need BIS)
+    localLaw: null,
+    loftLaw: false,
+    sroRestricted: false,
+    taRestricted: false,
+    ubRestricted: false,
+    environmentalRestrictions: null,
+    grandfatheredSign: false,
+    legalAdultUse: false,
+    isCityOwned: false,
+    professionalCertRestricted: false,
+
+    // Additional info
+    additionalBins: [],
+    hpdMultipleDwelling: false,
+    numberOfBuildings: plutoData.numberOfBuildings ?? 1,
+    numberOfFloors: plutoData.stories ?? null,
+    basementCode: null,
+    assessedLandValue: plutoData.assessedLandValue ?? null,
+    assessedTotalValue: plutoData.assessedTotalValue ?? null,
+    exemptLandValue: plutoData.exemptLandValue ?? null,
+    exemptTotalValue: plutoData.exemptTotalValue ?? null,
+  };
+
+  return result;
+}
+
+// Main sync function - combines PLUTO and DOB data (fallback for address-based lookup)
 export async function syncNYCBuildingData(address: string): Promise<NYCBuildingData | null> {
   // Parse address into house number and street
   const parts = address.split(',')[0].trim().split(/\s+/);

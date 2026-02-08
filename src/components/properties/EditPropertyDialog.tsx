@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, RefreshCw } from 'lucide-react';
-import { syncNYCBuildingData, toPropertyUpdate } from '@/lib/nyc-building-sync';
+import { syncNYCBuildingData, syncNYCBuildingDataByIdentifiers, toPropertyUpdate } from '@/lib/nyc-building-sync';
 
 const propertySchema = z.object({
   address: z.string().min(1, 'Address is required').max(500),
@@ -162,18 +162,43 @@ export const EditPropertyDialog = ({
 
   // Sync building data from NYC PLUTO + BIS
   const handleSyncBuildingData = async () => {
-    const address = form.getValues('address');
-    if (!address) {
-      toast.error('Please enter an address first');
-      return;
+    // Try to use existing BIN/BBL first
+    const bin = form.getValues('bin');
+    const block = form.getValues('block');
+    const lot = form.getValues('lot');
+    const borough = form.getValues('borough');
+    
+    // Build BBL from form values
+    let bbl: string | null = null;
+    if (borough && block && lot) {
+      bbl = combineToBBL(borough, block, lot);
+    } else if (property.bbl) {
+      bbl = property.bbl;
     }
 
     setIsSyncing(true);
     try {
-      const data = await syncNYCBuildingData(address);
+      let data = null;
+      
+      // Prefer using existing identifiers
+      if (bin || bbl) {
+        console.log('Syncing using identifiers - BIN:', bin, 'BBL:', bbl);
+        data = await syncNYCBuildingDataByIdentifiers(bin || property.bin, bbl);
+      }
+      
+      // Fallback to address-based lookup
+      if (!data) {
+        const address = form.getValues('address');
+        if (!address) {
+          toast.error('Please enter an address, BIN, or BBL');
+          return;
+        }
+        console.log('Falling back to address-based lookup:', address);
+        data = await syncNYCBuildingData(address);
+      }
 
       if (!data) {
-        toast.error('No building found for this address in NYC datasets');
+        toast.error('No building found in NYC datasets. Verify the BIN/BBL is correct.');
         return;
       }
 
@@ -199,7 +224,7 @@ export const EditPropertyDialog = ({
         console.error('Error saving synced data:', error);
         toast.error('Data fetched but failed to save to database');
       } else {
-        toast.success(`Synced comprehensive data for BIN ${data.bin}`);
+        toast.success(`Synced comprehensive data for ${data.bbl ? 'BBL ' + data.bbl : 'BIN ' + data.bin}`);
       }
     } catch (error) {
       console.error('Error syncing building data:', error);
@@ -314,7 +339,32 @@ export const EditPropertyDialog = ({
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-4 gap-4">
+                <FormField
+                  control={form.control}
+                  name="borough"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Borough</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="1">Manhattan</SelectItem>
+                          <SelectItem value="2">Bronx</SelectItem>
+                          <SelectItem value="3">Brooklyn</SelectItem>
+                          <SelectItem value="4">Queens</SelectItem>
+                          <SelectItem value="5">Staten Island</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={form.control}
                   name="bin"
@@ -322,7 +372,7 @@ export const EditPropertyDialog = ({
                     <FormItem>
                       <FormLabel>BIN</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value || ''} placeholder="Building ID Number" />
+                        <Input {...field} value={field.value || ''} placeholder="3012345" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -336,7 +386,7 @@ export const EditPropertyDialog = ({
                     <FormItem>
                       <FormLabel>Block</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value || ''} placeholder="e.g., 835" />
+                        <Input {...field} value={field.value || ''} placeholder="835" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -350,38 +400,13 @@ export const EditPropertyDialog = ({
                     <FormItem>
                       <FormLabel>Lot</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value || ''} placeholder="e.g., 32" />
+                        <Input {...field} value={field.value || ''} placeholder="32" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-
-              <FormField
-                control={form.control}
-                name="borough"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Borough</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ''}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select borough" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="1">Manhattan</SelectItem>
-                        <SelectItem value="2">Bronx</SelectItem>
-                        <SelectItem value="3">Brooklyn</SelectItem>
-                        <SelectItem value="4">Queens</SelectItem>
-                        <SelectItem value="5">Staten Island</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
 
             {/* Building Dimensions */}
