@@ -47,9 +47,16 @@ export type Database = {
       properties: {
         Row: {
           address: string
+          applicable_agencies: string[] | null
           assigned_phone_number: string | null
+          bbl: string | null
           bin: string | null
+          borough: string | null
+          co_data: Json | null
+          co_status: string | null
+          compliance_status: string | null
           created_at: string
+          dwelling_units: number | null
           gross_sqft: number | null
           has_boiler: boolean | null
           has_elevator: boolean | null
@@ -58,6 +65,10 @@ export type Database = {
           height_ft: number | null
           id: string
           jurisdiction: Database["public"]["Enums"]["jurisdiction_type"]
+          last_synced_at: string | null
+          owner_phone: string | null
+          primary_use_group: string | null
+          sms_enabled: boolean | null
           stories: number | null
           updated_at: string
           use_type: string | null
@@ -65,9 +76,16 @@ export type Database = {
         }
         Insert: {
           address: string
+          applicable_agencies?: string[] | null
           assigned_phone_number?: string | null
+          bbl?: string | null
           bin?: string | null
+          borough?: string | null
+          co_data?: Json | null
+          co_status?: string | null
+          compliance_status?: string | null
           created_at?: string
+          dwelling_units?: number | null
           gross_sqft?: number | null
           has_boiler?: boolean | null
           has_elevator?: boolean | null
@@ -76,6 +94,10 @@ export type Database = {
           height_ft?: number | null
           id?: string
           jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
+          last_synced_at?: string | null
+          owner_phone?: string | null
+          primary_use_group?: string | null
+          sms_enabled?: boolean | null
           stories?: number | null
           updated_at?: string
           use_type?: string | null
@@ -83,9 +105,16 @@ export type Database = {
         }
         Update: {
           address?: string
+          applicable_agencies?: string[] | null
           assigned_phone_number?: string | null
+          bbl?: string | null
           bin?: string | null
+          borough?: string | null
+          co_data?: Json | null
+          co_status?: string | null
+          compliance_status?: string | null
           created_at?: string
+          dwelling_units?: number | null
           gross_sqft?: number | null
           has_boiler?: boolean | null
           has_elevator?: boolean | null
@@ -94,12 +123,78 @@ export type Database = {
           height_ft?: number | null
           id?: string
           jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
+          last_synced_at?: string | null
+          owner_phone?: string | null
+          primary_use_group?: string | null
+          sms_enabled?: boolean | null
           stories?: number | null
           updated_at?: string
           use_type?: string | null
           user_id?: string
         }
         Relationships: []
+      }
+      property_documents: {
+        Row: {
+          created_at: string
+          description: string | null
+          document_name: string
+          document_type: string
+          expiration_date: string | null
+          file_size_bytes: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          is_current: boolean | null
+          metadata: Json | null
+          property_id: string
+          updated_at: string
+          uploaded_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          document_name: string
+          document_type: string
+          expiration_date?: string | null
+          file_size_bytes?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          is_current?: boolean | null
+          metadata?: Json | null
+          property_id: string
+          updated_at?: string
+          uploaded_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          document_name?: string
+          document_type?: string
+          expiration_date?: string | null
+          file_size_bytes?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          is_current?: boolean | null
+          metadata?: Json | null
+          property_id?: string
+          updated_at?: string
+          uploaded_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_documents_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendors: {
         Row: {
@@ -140,47 +235,80 @@ export type Database = {
       violations: {
         Row: {
           agency: Database["public"]["Enums"]["agency_type"]
+          certification_due_date: string | null
           created_at: string
           cure_due_date: string | null
+          daily_penalty_amount: number | null
           description_raw: string | null
           hearing_date: string | null
           id: string
+          is_stop_work_order: boolean | null
+          is_vacate_order: boolean | null
           issued_date: string
+          penalty_amount: number | null
+          penalty_paid: boolean | null
           penalty_text: string | null
           property_id: string
+          respondent_address: string | null
+          respondent_name: string | null
+          severity: string | null
           source: string | null
           status: Database["public"]["Enums"]["violation_status"]
+          synced_at: string | null
           updated_at: string
+          violation_class: string | null
           violation_number: string
         }
         Insert: {
           agency: Database["public"]["Enums"]["agency_type"]
+          certification_due_date?: string | null
           created_at?: string
           cure_due_date?: string | null
+          daily_penalty_amount?: number | null
           description_raw?: string | null
           hearing_date?: string | null
           id?: string
+          is_stop_work_order?: boolean | null
+          is_vacate_order?: boolean | null
           issued_date: string
+          penalty_amount?: number | null
+          penalty_paid?: boolean | null
           penalty_text?: string | null
           property_id: string
+          respondent_address?: string | null
+          respondent_name?: string | null
+          severity?: string | null
           source?: string | null
           status?: Database["public"]["Enums"]["violation_status"]
+          synced_at?: string | null
           updated_at?: string
+          violation_class?: string | null
           violation_number: string
         }
         Update: {
           agency?: Database["public"]["Enums"]["agency_type"]
+          certification_due_date?: string | null
           created_at?: string
           cure_due_date?: string | null
+          daily_penalty_amount?: number | null
           description_raw?: string | null
           hearing_date?: string | null
           id?: string
+          is_stop_work_order?: boolean | null
+          is_vacate_order?: boolean | null
           issued_date?: string
+          penalty_amount?: number | null
+          penalty_paid?: boolean | null
           penalty_text?: string | null
           property_id?: string
+          respondent_address?: string | null
+          respondent_name?: string | null
+          severity?: string | null
           source?: string | null
           status?: Database["public"]["Enums"]["violation_status"]
+          synced_at?: string | null
           updated_at?: string
+          violation_class?: string | null
           violation_number?: string
         }
         Relationships: [

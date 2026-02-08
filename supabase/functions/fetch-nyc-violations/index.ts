@@ -7,38 +7,31 @@ const corsHeaders = {
 };
 
 // NYC Open Data API endpoints (Socrata) - No API key needed, 1000 req/hr limit
+// IMPORTANT: Using correct dataset IDs per Phase 1 spec
 const NYC_OPEN_DATA_ENDPOINTS = {
-  DOB: "https://data.cityofnewyork.us/resource/3h2n-5cm9.json", // DOB Violations
+  DOB_OLD: "https://data.cityofnewyork.us/resource/3h2n-5cm9.json", // DOB Violations (legacy)
+  DOB_NEW: "https://data.cityofnewyork.us/resource/855j-jady.json", // DOB Violations (new)
   ECB: "https://data.cityofnewyork.us/resource/6bgk-3dad.json", // ECB Violations
+  HPD: "https://data.cityofnewyork.us/resource/wvxf-dwi5.json", // HPD Violations
+  FDNY: "https://data.cityofnewyork.us/resource/ktas-47y7.json", // FDNY Violations (CORRECT ID)
+  CO: "https://data.cityofnewyork.us/resource/bs8b-p36w.json", // Certificate of Occupancy
 };
 
-interface DOBViolation {
-  violation_number?: string;
-  bin?: string;
-  boro?: string;
-  block?: string;
-  lot?: string;
-  issue_date?: string;
-  violation_type?: string;
-  violation_category?: string;
-  description?: string;
-  house_number?: string;
-  street_name?: string;
-}
-
-interface ECBViolation {
-  ecb_violation_number?: string;
-  bin?: string;
-  boro?: string;
-  block?: string;
-  lot?: string;
-  issue_date?: string;
-  violation_type?: string;
-  severity?: string;
-  violation_description?: string;
-  scheduled_hearing_date?: string;
-  house_number?: string;
-  street?: string;
+interface ViolationRecord {
+  agency: "DOB" | "ECB" | "HPD" | "FDNY";
+  violation_number: string;
+  issued_date: string;
+  hearing_date: string | null;
+  cure_due_date: string | null;
+  description_raw: string | null;
+  property_id: string;
+  severity: string | null;
+  violation_class: string | null;
+  is_stop_work_order: boolean;
+  is_vacate_order: boolean;
+  penalty_amount: number | null;
+  respondent_name: string | null;
+  synced_at: string;
 }
 
 Deno.serve(async (req) => {
@@ -57,77 +50,179 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { address, bin, property_id } = await req.json();
+    const { bin, property_id, applicable_agencies } = await req.json();
 
-    if (!address && !bin) {
-      throw new Error("Either address or BIN is required");
+    if (!bin) {
+      throw new Error("BIN is required");
     }
 
-    console.log(`Fetching violations for: ${address || bin}`);
+    console.log(`Fetching violations for BIN: ${bin}, Agencies: ${(applicable_agencies || []).join(', ')}`);
 
-    const violations: Array<{
-      agency: "DOB" | "ECB";
-      violation_number: string;
-      issued_date: string;
-      hearing_date: string | null;
-      description_raw: string | null;
-      property_id: string;
-    }> = [];
+    const violations: ViolationRecord[] = [];
+    const agenciesToSync: string[] = applicable_agencies || ["DOB", "ECB"];
+    const now = new Date().toISOString();
 
-    // Fetch DOB Violations
-    if (bin) {
-      const dobUrl = `${NYC_OPEN_DATA_ENDPOINTS.DOB}?bin=${bin}&$limit=50&$order=issue_date DESC`;
-      console.log(`Fetching DOB violations: ${dobUrl}`);
-      
-      const dobResponse = await fetch(dobUrl);
-      if (dobResponse.ok) {
-        const dobData: DOBViolation[] = await dobResponse.json();
-        console.log(`Found ${dobData.length} DOB violations`);
-        
-        for (const v of dobData) {
-          if (v.violation_number && v.issue_date) {
-            violations.push({
-              agency: "DOB",
-              violation_number: v.violation_number,
-              issued_date: v.issue_date.split("T")[0],
-              hearing_date: null,
-              description_raw: v.description || v.violation_category || null,
-              property_id,
-            });
-          }
+    // Helper to safely fetch
+    const safeFetch = async (url: string, agency: string): Promise<unknown[]> => {
+      try {
+        console.log(`Fetching ${agency}: ${url}`);
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.error(`${agency} API error: ${response.status}`);
+          return [];
         }
-      } else {
-        console.error(`DOB API error: ${dobResponse.status}`);
+        return await response.json();
+      } catch (error) {
+        console.error(`${agency} fetch error:`, error);
+        return [];
       }
+    };
 
-      // Fetch ECB Violations
-      const ecbUrl = `${NYC_OPEN_DATA_ENDPOINTS.ECB}?bin=${bin}&$limit=50&$order=issue_date DESC`;
-      console.log(`Fetching ECB violations: ${ecbUrl}`);
-      
-      const ecbResponse = await fetch(ecbUrl);
-      if (ecbResponse.ok) {
-        const ecbData: ECBViolation[] = await ecbResponse.json();
-        console.log(`Found ${ecbData.length} ECB violations`);
+    // Fetch DOB Violations (both old and new datasets)
+    if (agenciesToSync.includes("DOB")) {
+      const [dobOldData, dobNewData] = await Promise.all([
+        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_OLD}?bin=${bin}&$limit=100&$order=issue_date DESC`, "DOB_OLD"),
+        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_NEW}?bin=${bin}&$limit=100&$order=issue_date DESC`, "DOB_NEW"),
+      ]);
+
+      console.log(`Found ${dobOldData.length} DOB (old) violations, ${dobNewData.length} DOB (new) violations`);
+
+      for (const v of [...dobOldData, ...dobNewData] as Record<string, unknown>[]) {
+        const violationNum = (v.violation_number || v.ecb_violation_number || v.number) as string;
+        const issueDate = v.issue_date as string;
         
-        for (const v of ecbData) {
-          if (v.ecb_violation_number && v.issue_date) {
-            violations.push({
-              agency: "ECB",
-              violation_number: v.ecb_violation_number,
-              issued_date: v.issue_date.split("T")[0],
-              hearing_date: v.scheduled_hearing_date?.split("T")[0] || null,
-              description_raw: v.violation_description || null,
-              property_id,
-            });
-          }
+        if (violationNum && issueDate) {
+          violations.push({
+            agency: "DOB",
+            violation_number: violationNum,
+            issued_date: issueDate.split("T")[0],
+            hearing_date: null,
+            cure_due_date: (v.certification_status as string)?.includes("REQUIRED") ? null : null,
+            description_raw: (v.description || v.violation_category || v.violation_type) as string || null,
+            property_id,
+            severity: (v.violation_type || v.severity) as string || null,
+            violation_class: (v.violation_category || v.class) as string || null,
+            is_stop_work_order: String(v.disposition_comments || "").toLowerCase().includes("stop work"),
+            is_vacate_order: String(v.disposition_comments || "").toLowerCase().includes("vacate"),
+            penalty_amount: v.penality_imposed ? parseFloat(v.penality_imposed as string) : null,
+            respondent_name: (v.respondent_name || v.owner) as string || null,
+            synced_at: now,
+          });
         }
-      } else {
-        console.error(`ECB API error: ${ecbResponse.status}`);
       }
     }
+
+    // Fetch ECB Violations
+    if (agenciesToSync.includes("ECB")) {
+      const ecbData = await safeFetch(
+        `${NYC_OPEN_DATA_ENDPOINTS.ECB}?bin=${bin}&$limit=100&$order=issue_date DESC`,
+        "ECB"
+      );
+
+      console.log(`Found ${ecbData.length} ECB violations`);
+
+      for (const v of ecbData as Record<string, unknown>[]) {
+        const violationNum = v.ecb_violation_number as string;
+        const issueDate = v.issue_date as string;
+        
+        if (violationNum && issueDate) {
+          violations.push({
+            agency: "ECB",
+            violation_number: violationNum,
+            issued_date: issueDate.split("T")[0],
+            hearing_date: v.scheduled_hearing_date ? (v.scheduled_hearing_date as string).split("T")[0] : null,
+            cure_due_date: null,
+            description_raw: (v.violation_description || v.infraction_code1) as string || null,
+            property_id,
+            severity: (v.severity || v.aggravated_level) as string || null,
+            violation_class: null,
+            is_stop_work_order: false,
+            is_vacate_order: false,
+            penalty_amount: v.penality_imposed ? parseFloat(v.penality_imposed as string) : null,
+            respondent_name: v.respondent_name as string || null,
+            synced_at: now,
+          });
+        }
+      }
+    }
+
+    // Fetch HPD Violations (only for multi-family)
+    if (agenciesToSync.includes("HPD")) {
+      const hpdData = await safeFetch(
+        `${NYC_OPEN_DATA_ENDPOINTS.HPD}?bin=${bin}&$limit=100&$order=inspectiondate DESC`,
+        "HPD"
+      );
+
+      console.log(`Found ${hpdData.length} HPD violations`);
+
+      for (const v of hpdData as Record<string, unknown>[]) {
+        const violationNum = v.violationid as string;
+        const issueDate = (v.inspectiondate || v.novissueddate) as string;
+        
+        if (violationNum && issueDate) {
+          violations.push({
+            agency: "HPD",
+            violation_number: String(violationNum),
+            issued_date: issueDate.split("T")[0],
+            hearing_date: null,
+            cure_due_date: v.certifieddate ? (v.certifieddate as string).split("T")[0] : null,
+            description_raw: (v.novdescription || v.violationstatus) as string || null,
+            property_id,
+            severity: (v.class || v.violationstatus) as string || null,
+            violation_class: v.class as string || null,
+            is_stop_work_order: false,
+            is_vacate_order: String(v.class || "").toUpperCase() === "I",
+            penalty_amount: null,
+            respondent_name: null,
+            synced_at: now,
+          });
+        }
+      }
+    }
+
+    // Fetch FDNY Violations
+    if (agenciesToSync.includes("FDNY")) {
+      const fdnyData = await safeFetch(
+        `${NYC_OPEN_DATA_ENDPOINTS.FDNY}?bin=${bin}&$limit=100`,
+        "FDNY"
+      );
+
+      console.log(`Found ${fdnyData.length} FDNY violations`);
+
+      for (const v of fdnyData as Record<string, unknown>[]) {
+        const violationNum = (v.violation_number || v.summons_number) as string;
+        const issueDate = (v.issue_date || v.inspection_date) as string;
+        
+        if (violationNum && issueDate) {
+          violations.push({
+            agency: "FDNY",
+            violation_number: String(violationNum),
+            issued_date: issueDate.split("T")[0],
+            hearing_date: null,
+            cure_due_date: null,
+            description_raw: (v.violation_type || v.description) as string || null,
+            property_id,
+            severity: "critical",
+            violation_class: null,
+            is_stop_work_order: false,
+            is_vacate_order: String(v.violation_type || "").toLowerCase().includes("vacate"),
+            penalty_amount: v.penalty_amount ? parseFloat(v.penalty_amount as string) : null,
+            respondent_name: null,
+            synced_at: now,
+          });
+        }
+      }
+    }
+
+    // Deduplicate by violation number
+    const uniqueViolations = Array.from(
+      new Map(violations.map((v) => [v.violation_number, v])).values()
+    );
+
+    console.log(`Total unique violations: ${uniqueViolations.length}`);
 
     // Insert new violations (upsert to avoid duplicates)
-    if (violations.length > 0 && property_id) {
+    if (uniqueViolations.length > 0 && property_id) {
       const { data: existingViolations } = await supabase
         .from("violations")
         .select("violation_number")
@@ -137,7 +232,7 @@ Deno.serve(async (req) => {
         existingViolations?.map((v) => v.violation_number) || []
       );
 
-      const newViolations = violations.filter(
+      const newViolations = uniqueViolations.filter(
         (v) => !existingNumbers.has(v.violation_number)
       );
 
@@ -152,13 +247,20 @@ Deno.serve(async (req) => {
           console.log(`Inserted ${newViolations.length} new violations`);
         }
       }
+
+      // Update property last_synced_at
+      await supabase
+        .from("properties")
+        .update({ last_synced_at: now })
+        .eq("id", property_id);
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        total_found: violations.length,
-        violations,
+        total_found: uniqueViolations.length,
+        agencies_synced: agenciesToSync,
+        violations: uniqueViolations,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
