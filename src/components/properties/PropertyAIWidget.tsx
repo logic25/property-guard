@@ -93,11 +93,15 @@ export const PropertyAIWidget = ({
     },
   });
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    // Use a small delay to ensure the DOM has updated
+    const timer = setTimeout(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [messages]);
 
   const sendMessage = async () => {
@@ -310,7 +314,7 @@ export const PropertyAIWidget = ({
                 </div>
 
                 {/* Messages */}
-                <ScrollArea className="flex-1 p-4" ref={scrollRef as any}>
+                <div className="flex-1 overflow-y-auto p-4" ref={scrollRef}>
                   {messages.length === 0 ? (
                     <div className="text-center py-8">
                       <Sparkles className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
@@ -381,7 +385,7 @@ export const PropertyAIWidget = ({
                       )}
                     </div>
                   )}
-                </ScrollArea>
+                </div>
 
                 {/* Input */}
                 <div className="p-4 border-t border-border">
