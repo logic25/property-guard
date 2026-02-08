@@ -165,14 +165,43 @@ Deno.serve(async (req) => {
       const data = await safeFetch(
         `${NYC_OPEN_DATA_ENDPOINTS.OATH_HEARINGS}?issuing_agency=${encodeURIComponent(oathAgencyName)}&violation_location_borough=${encodeURIComponent(boroughName)}&violation_location_block_no=${block}&violation_location_lot_no=${lot}&$limit=100&$order=violation_date DESC`,
         `${agency}/OATH`
-      );
+       );
+ 
+       console.log(`Found ${data.length} ${agency} violations from OATH Hearings`);
+       if (data.length > 0) {
+         const sample = data[0] as Record<string, unknown>;
+         console.log(
+           `${agency}/OATH sample keys: ${Object.keys(sample).slice(0, 40).join(", ")}`
+         );
+         console.log(
+           `${agency}/OATH sample status fields: ${JSON.stringify({
+             hearing_status: sample.hearing_status,
+             violation_status: sample.violation_status,
+             status: sample.status,
+             case_status: sample.case_status,
+             record_status: sample.record_status,
+             summons_status: sample.summons_status,
+             disposition: sample.disposition,
+             outcome: sample.outcome,
+           })}`
+         );
+       }
+ 
+       for (const v of data as Record<string, unknown>[]) {
+          const violationNum = v.ticket_number as string;
+          const issueDate = v.violation_date as string;
 
-      console.log(`Found ${data.length} ${agency} violations from OATH Hearings`);
-
-      for (const v of data as Record<string, unknown>[]) {
-        const violationNum = v.ticket_number as string;
-        const issueDate = v.violation_date as string;
-        const oathStatus = (v.hearing_status || v.violation_status || v.status || "") as string;
+          // Combine multiple OATH fields so values like "Written Off" aren't lost.
+          const oathStatus = [
+            v.hearing_status,
+            v.hearing_result,
+            v.compliance_status,
+            v.violation_status,
+            v.status,
+          ]
+            .map((s) => (typeof s === 'string' ? s.trim() : ''))
+            .filter(Boolean)
+            .join(' | ');
 
         if (violationNum && issueDate) {
           // Determine if violation is closed based on OATH status
@@ -404,28 +433,44 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Insert new violations
+    // Insert new violations + refresh status for existing ones
     if (uniqueViolations.length > 0 && property_id) {
-      const { data: existingViolations } = await supabase
+      // We refresh existing records every sync so OATH "Written Off" (etc.) actually updates counters.
+      const { data: existingViolations, error: existingError } = await supabase
         .from("violations")
-        .select("violation_number")
+        .select("id, violation_number")
         .eq("property_id", property_id);
 
-      const existingNumbers = new Set(
-        existingViolations?.map((v) => v.violation_number) || []
+      if (existingError) {
+        console.error("Error fetching existing violations:", existingError);
+      }
+
+      const existingMap = new Map(
+        (existingViolations || []).map((v) => [v.violation_number, v.id] as const)
       );
 
-      const newViolations = uniqueViolations.filter(
-        (v) => !existingNumbers.has(v.violation_number)
-      );
+       const newViolations = uniqueViolations.filter(
+         (v) => !existingMap.has(v.violation_number)
+       );
+
+       const existingToUpdate = uniqueViolations.filter((v) =>
+         existingMap.has(v.violation_number)
+       );
+
+       console.log(
+         `Existing violations in DB: ${existingMap.size}. New: ${newViolations.length}. Refreshing existing: ${existingToUpdate.length}.`
+       );
 
       newViolationsCount = newViolations.length;
-      criticalCount = newViolations.filter(v => v.is_stop_work_order || v.is_vacate_order || v.severity === "critical").length;
+      criticalCount = uniqueViolations.filter(
+        (v) => v.is_stop_work_order || v.is_vacate_order || v.severity === "critical"
+      ).length;
 
+      // Insert new
       if (newViolations.length > 0) {
         // Remove source field before insert as it's not in the DB schema
         const violationsToInsert = newViolations.map(({ source, ...rest }) => rest);
-        
+
         const { error: insertError } = await supabase
           .from("violations")
           .insert(violationsToInsert);
@@ -435,6 +480,51 @@ Deno.serve(async (req) => {
         } else {
           console.log(`Inserted ${newViolations.length} new violations`);
         }
+      }
+
+      // Update existing (status + oath_status + synced_at, etc.)
+      if (existingToUpdate.length > 0) {
+        const updateResults = await Promise.all(
+          existingToUpdate.map(async ({ source, ...v }) => {
+            const id = existingMap.get(v.violation_number);
+            if (!id) return { ok: true };
+
+            const { error } = await supabase
+              .from("violations")
+              .update({
+                agency: v.agency,
+                issued_date: v.issued_date,
+                hearing_date: v.hearing_date,
+                cure_due_date: v.cure_due_date,
+                description_raw: v.description_raw,
+                severity: v.severity,
+                violation_class: v.violation_class,
+                is_stop_work_order: v.is_stop_work_order,
+                is_vacate_order: v.is_vacate_order,
+                penalty_amount: v.penalty_amount,
+                respondent_name: v.respondent_name,
+                synced_at: v.synced_at,
+                oath_status: v.oath_status ?? null,
+                status: v.status,
+              })
+              .eq("id", id);
+
+            if (error) {
+              console.error(
+                `Error updating violation ${v.violation_number} (${v.agency}):`,
+                error
+              );
+              return { ok: false };
+            }
+
+            return { ok: true };
+          })
+        );
+
+        const failed = updateResults.filter((r) => !r.ok).length;
+        console.log(
+          `Updated ${existingToUpdate.length - failed}/${existingToUpdate.length} existing violations with latest OATH/status data`
+        );
       }
 
       // Update property last_synced_at
