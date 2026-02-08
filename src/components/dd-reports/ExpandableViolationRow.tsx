@@ -1,0 +1,145 @@
+import { useState } from 'react';
+import { TableRow, TableCell } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { getAgencyLookupUrl, getAgencyColor } from '@/lib/violation-utils';
+
+interface ExpandableViolationRowProps {
+  violation: any;
+  index: number;
+  note: string;
+  onNoteChange: (note: string) => void;
+  bbl?: string | null;
+}
+
+const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: ExpandableViolationRowProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const getSeverityVariant = (severity: string) => {
+    switch (severity?.toLowerCase()) {
+      case 'critical':
+      case 'immediately hazardous':
+      case 'class c':
+        return 'destructive';
+      case 'major':
+      case 'hazardous':
+      case 'class b':
+        return 'secondary';
+      default:
+        return 'outline';
+    }
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <TableRow 
+        className="cursor-pointer hover:bg-muted/50"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <TableCell className="w-8">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-6 w-6">
+              {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </Button>
+          </CollapsibleTrigger>
+        </TableCell>
+        <TableCell className="font-mono text-sm">{violation.violation_number}</TableCell>
+        <TableCell>
+          <Badge variant="outline" className={getAgencyColor(violation.agency)}>
+            {violation.agency}
+          </Badge>
+        </TableCell>
+        <TableCell className="max-w-[200px] truncate">
+          {violation.violation_type || violation.description_raw?.slice(0, 50) || '—'}
+        </TableCell>
+        <TableCell>
+          <Badge variant={getSeverityVariant(violation.severity)}>
+            {violation.severity || 'Unknown'}
+          </Badge>
+        </TableCell>
+        <TableCell>{violation.issued_date || '—'}</TableCell>
+        <TableCell>
+          <Badge variant={violation.status === 'open' ? 'destructive' : 'default'}>
+            {violation.status}
+          </Badge>
+        </TableCell>
+      </TableRow>
+      <CollapsibleContent asChild>
+        <TableRow className="bg-muted/30 hover:bg-muted/30">
+          <TableCell colSpan={7} className="p-4">
+            <div className="space-y-4">
+              {/* Full Description */}
+              {violation.description_raw && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Description</p>
+                  <p className="text-sm">{violation.description_raw}</p>
+                </div>
+              )}
+              
+              {/* Details Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                {violation.hearing_date && (
+                  <div>
+                    <p className="text-muted-foreground">Hearing Date</p>
+                    <p className="font-medium">{violation.hearing_date}</p>
+                  </div>
+                )}
+                {violation.penalty_amount && (
+                  <div>
+                    <p className="text-muted-foreground">Penalty Amount</p>
+                    <p className="font-medium">${Number(violation.penalty_amount).toLocaleString()}</p>
+                  </div>
+                )}
+                {violation.disposition && (
+                  <div>
+                    <p className="text-muted-foreground">Disposition</p>
+                    <p className="font-medium">{violation.disposition}</p>
+                  </div>
+                )}
+                {violation.apartment && (
+                  <div>
+                    <p className="text-muted-foreground">Apartment</p>
+                    <p className="font-medium">{violation.apartment}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Note Input */}
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-2">Notes</p>
+                <Textarea
+                  placeholder="Add notes about this violation..."
+                  value={note}
+                  onChange={(e) => onNoteChange(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+
+              {/* Agency Link */}
+              <div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(getAgencyLookupUrl(violation.agency, violation.violation_number, bbl), '_blank');
+                  }}
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  View on {violation.agency} Portal
+                </Button>
+              </div>
+            </div>
+          </TableCell>
+        </TableRow>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
+export default ExpandableViolationRow;
