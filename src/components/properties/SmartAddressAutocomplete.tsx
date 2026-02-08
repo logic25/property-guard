@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Loader2, MapPin, Building2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getBoroughCode, getBoroughName } from '@/lib/property-utils';
 
 // Google Maps API key - set in .env as VITE_GOOGLE_MAPS_API_KEY
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -34,6 +35,8 @@ interface AutocompleteResult {
   address: string;
   borough: string;
   bbl: string;
+  block: string;
+  lot: string;
   stories: number | null;
   heightFt: number | null;
   grossSqft: number | null;
@@ -139,19 +142,28 @@ export const SmartAddressAutocomplete = ({
         return true;
       });
 
-      return uniqueBuildings.slice(0, 10).map(building => ({
-        bin: building.bin__ || '',
-        address: `${building.house__} ${building.street_name}`.trim(),
-        borough: building.borough || '',
-        bbl: building.block && building.lot 
-          ? `${building.borough || ''}${building.block.padStart(5, '0')}${building.lot.padStart(4, '0')}` 
-          : '',
-        stories: building.existingno_of_stories ? parseInt(building.existingno_of_stories) : null,
-        heightFt: building.existing_height ? parseFloat(building.existing_height) : null,
-        grossSqft: building.existing_zoning_sqft ? parseFloat(building.existing_zoning_sqft) : null,
-        primaryUseGroup: building.existing_occupancy || null,
-        dwellingUnits: building.existing_dwelling_units ? parseInt(building.existing_dwelling_units) : null,
-      }));
+      return uniqueBuildings.slice(0, 10).map(building => {
+        const boroughCode = getBoroughCode(building.borough || '');
+        const block = building.block || '';
+        const lot = building.lot || '';
+        const bbl = block && lot 
+          ? `${boroughCode}${block.padStart(5, '0')}${lot.padStart(4, '0')}` 
+          : '';
+        
+        return {
+          bin: building.bin__ || '',
+          address: `${building.house__} ${building.street_name}`.trim(),
+          borough: boroughCode,
+          bbl,
+          block,
+          lot,
+          stories: building.existingno_of_stories ? parseInt(building.existingno_of_stories) : null,
+          heightFt: building.existing_height ? parseFloat(building.existing_height) : null,
+          grossSqft: building.existing_zoning_sqft ? parseFloat(building.existing_zoning_sqft) : null,
+          primaryUseGroup: building.existing_occupancy || null,
+          dwellingUnits: building.existing_dwelling_units ? parseInt(building.existing_dwelling_units) : null,
+        };
+      });
     } catch (error) {
       console.error('Error searching NYC buildings:', error);
       return [];
@@ -285,6 +297,8 @@ export const SmartAddressAutocomplete = ({
           address,
           borough,
           bbl: '',
+          block: '',
+          lot: '',
           stories: null,
           heightFt: null,
           grossSqft: null,
@@ -331,17 +345,6 @@ export const SmartAddressAutocomplete = ({
         setShowDropdown(false);
         break;
     }
-  };
-
-  const getBoroughName = (code: string) => {
-    const boroughs: Record<string, string> = {
-      '1': 'Manhattan', '2': 'Bronx', '3': 'Brooklyn', 
-      '4': 'Queens', '5': 'Staten Island',
-      'MANHATTAN': 'Manhattan', 'BRONX': 'Bronx', 
-      'BROOKLYN': 'Brooklyn', 'QUEENS': 'Queens', 
-      'STATEN ISLAND': 'Staten Island'
-    };
-    return boroughs[code?.toUpperCase()] || code;
   };
 
   return (
