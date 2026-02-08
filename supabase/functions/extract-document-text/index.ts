@@ -221,6 +221,13 @@ Deno.serve(async (req) => {
       throw new Error("Could not extract text from document");
     }
 
+    // Sanitize text: remove null bytes and other problematic characters that PostgreSQL can't store
+    extractedText = extractedText
+      .replace(/\u0000/g, '') // Remove null bytes
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' '); // Replace other control chars with space
+    
+    console.log("Sanitized text length:", extractedText.length);
+
     // Save extracted text
     const { error: updateError } = await supabaseClient
       .from('property_documents')
