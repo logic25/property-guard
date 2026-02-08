@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -87,21 +87,11 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [autoPopulated, setAutoPopulated] = useState(false);
 
-  // Suggested agencies based on property type
+  // Suggested agencies based on property type (for showing "Recommended" labels)
   const suggestedAgencies = determineApplicableAgencies(
     formData.primary_use_group,
     formData.dwelling_units ? parseInt(formData.dwelling_units) : null
   );
-
-  // Update selected agencies when suggested agencies change
-  useEffect(() => {
-    if (formData.primary_use_group || formData.dwelling_units) {
-      setFormData(prev => ({
-        ...prev,
-        selected_agencies: suggestedAgencies,
-      }));
-    }
-  }, [formData.primary_use_group, formData.dwelling_units]);
 
   const toggleAgency = (agency: Agency) => {
     setFormData(prev => ({
@@ -124,7 +114,6 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
     dwellingUnits: number | null;
   }) => {
     // BBL format: BBBBBLLLL (1 digit borough, 5 digits block, 4 digits lot)
-    // If bbl is valid 10-char string, parse it. Otherwise try to construct from borough data.
     const bbl = result.bbl || '';
     let block = '';
     let lot = '';
@@ -132,13 +121,19 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
 
     if (bbl.length === 10 && /^\d+$/.test(bbl)) {
       boroughCode = bbl.substring(0, 1);
-      block = bbl.substring(1, 6).replace(/^0+/, '') || '0'; // Remove leading zeros
+      block = bbl.substring(1, 6).replace(/^0+/, '') || '0';
       lot = bbl.substring(6, 10).replace(/^0+/, '') || '0';
     }
 
     // Get proper borough code from borough name if needed
     const boroughFromResult = result.borough || '';
     const finalBoroughCode = boroughCode || getBoroughCode(boroughFromResult);
+
+    // Calculate agencies based on the building data
+    const agencies = determineApplicableAgencies(
+      result.primaryUseGroup,
+      result.dwellingUnits
+    );
 
     setFormData(prev => ({
       ...prev,
@@ -153,6 +148,7 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
       gross_sqft: result.grossSqft?.toString() || '',
       primary_use_group: result.primaryUseGroup || '',
       dwelling_units: result.dwellingUnits?.toString() || '',
+      selected_agencies: agencies, // Set agencies based on building type
     }));
     setAutoPopulated(true);
     toast.success('Building data loaded from NYC DOB', {
