@@ -324,11 +324,10 @@ async function fetchApplications(bin: string): Promise<any[]> {
     signoff_date: j.signoff_date || null,
   })));
   
-  // DOB NOW Applications
+  // DOB NOW Applications - note: filing_date column doesn't exist, use job_filing_number order
   const dobNowApps = await fetchNYCData(NYC_ENDPOINTS.DOB_NOW, {
     "bin": bin,
     "$limit": "100",
-    "$order": "filing_date DESC",
   });
   
   applications.push(...dobNowApps.map((a: any) => ({
@@ -584,9 +583,10 @@ serve(async (req) => {
         success: true, 
         bin, 
         bbl,
-        violationsCount: openViolations.length,
+        violationsCount: violations.length,
         applicationsCount: applications.length,
         stopWorkOrders: orders.stop_work.length,
+        partialStopWorkOrders: orders.partial_stop_work.length,
         vacateOrders: orders.vacate.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
