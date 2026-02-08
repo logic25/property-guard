@@ -20,7 +20,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Loader2, Check, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { NYCAddressAutocomplete } from './NYCAddressAutocomplete';
+import { SmartAddressAutocomplete } from './SmartAddressAutocomplete';
 import { determineApplicableAgencies, getBoroughName } from '@/lib/property-utils';
 import { Badge } from '@/components/ui/badge';
 
@@ -214,7 +214,7 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
           <div className="space-y-2">
             <Label htmlFor="address">Address *</Label>
             {formData.jurisdiction === 'NYC' ? (
-              <NYCAddressAutocomplete
+              <SmartAddressAutocomplete
                 value={formData.address}
                 onChange={(v) => setFormData({ ...formData, address: v })}
                 onSelect={handleAddressSelect}
