@@ -83,13 +83,15 @@ Deno.serve(async (req) => {
     }
 
     // Parse BBL into components for FDNY lookup
+    // BBL is 10 digits: 1 borough + 5 block + 4 lot
     let borough = "";
     let block = "";
     let lot = "";
     if (bbl && bbl.length >= 10) {
       borough = bbl.charAt(0);
-      block = bbl.substring(1, 6).replace(/^0+/, ""); // Remove leading zeros
-      lot = bbl.substring(6, 10).replace(/^0+/, ""); // Remove leading zeros
+      // Keep padded for FDNY OATH dataset which expects padded values
+      block = bbl.substring(1, 6);  // Keep 5-digit block
+      lot = bbl.substring(6, 10);   // Keep 4-digit lot
     }
 
     console.log(`Fetching violations for BIN: ${bin}, BBL: ${bbl} (Borough: ${borough}, Block: ${block}, Lot: ${lot}), Agencies: ${(applicable_agencies || []).join(', ')}`);
