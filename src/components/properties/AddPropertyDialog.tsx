@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -21,14 +21,17 @@ import { Switch } from '@/components/ui/switch';
 import { Loader2, Check, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SmartAddressAutocomplete } from './SmartAddressAutocomplete';
-import { determineApplicableAgencies, getBoroughName } from '@/lib/property-utils';
-import { Badge } from '@/components/ui/badge';
+import { determineApplicableAgencies, getBoroughName, getBoroughCode, type Agency } from '@/lib/property-utils';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface AddPropertyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
+
+// All agencies that can be tracked
+const ALL_AGENCIES: Agency[] = ['DOB', 'ECB', 'HPD', 'FDNY', 'DOT', 'DSNY'];
 
 interface FormData {
   address: string;
@@ -51,6 +54,7 @@ interface FormData {
   owner_name: string;
   owner_phone: string;
   sms_enabled: boolean;
+  selected_agencies: Agency[];
 }
 
 const initialFormData: FormData = {
@@ -74,6 +78,7 @@ const initialFormData: FormData = {
   owner_name: '',
   owner_phone: '',
   sms_enabled: false,
+  selected_agencies: ['DOB', 'ECB'], // Default agencies
 };
 
 export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddPropertyDialogProps) => {
@@ -82,10 +87,30 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [autoPopulated, setAutoPopulated] = useState(false);
 
-  const applicableAgencies = determineApplicableAgencies(
+  // Suggested agencies based on property type
+  const suggestedAgencies = determineApplicableAgencies(
     formData.primary_use_group,
     formData.dwelling_units ? parseInt(formData.dwelling_units) : null
   );
+
+  // Update selected agencies when suggested agencies change
+  useEffect(() => {
+    if (formData.primary_use_group || formData.dwelling_units) {
+      setFormData(prev => ({
+        ...prev,
+        selected_agencies: suggestedAgencies,
+      }));
+    }
+  }, [formData.primary_use_group, formData.dwelling_units]);
+
+  const toggleAgency = (agency: Agency) => {
+    setFormData(prev => ({
+      ...prev,
+      selected_agencies: prev.selected_agencies.includes(agency)
+        ? prev.selected_agencies.filter(a => a !== agency)
+        : [...prev.selected_agencies, agency],
+    }));
+  };
 
   const handleAddressSelect = (result: {
     bin: string;
@@ -98,17 +123,29 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
     primaryUseGroup: string | null;
     dwellingUnits: number | null;
   }) => {
-    // Parse BBL into block and lot (format: BBBBBLLLL - 5 digits block, 4 digits lot)
+    // BBL format: BBBBBLLLL (1 digit borough, 5 digits block, 4 digits lot)
+    // If bbl is valid 10-char string, parse it. Otherwise try to construct from borough data.
     const bbl = result.bbl || '';
-    const block = bbl.length >= 6 ? bbl.substring(1, 6) : '';
-    const lot = bbl.length >= 10 ? bbl.substring(6, 10) : '';
+    let block = '';
+    let lot = '';
+    let boroughCode = '';
+
+    if (bbl.length === 10 && /^\d+$/.test(bbl)) {
+      boroughCode = bbl.substring(0, 1);
+      block = bbl.substring(1, 6).replace(/^0+/, '') || '0'; // Remove leading zeros
+      lot = bbl.substring(6, 10).replace(/^0+/, '') || '0';
+    }
+
+    // Get proper borough code from borough name if needed
+    const boroughFromResult = result.borough || '';
+    const finalBoroughCode = boroughCode || getBoroughCode(boroughFromResult);
 
     setFormData(prev => ({
       ...prev,
       address: result.address,
       bin: result.bin || '',
       bbl: result.bbl || '',
-      borough: result.borough || '',
+      borough: finalBoroughCode,
       block: block,
       lot: lot,
       stories: result.stories?.toString() || '',
@@ -147,7 +184,7 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
         has_boiler: formData.has_boiler,
         has_elevator: formData.has_elevator,
         has_sprinkler: formData.has_sprinkler,
-        applicable_agencies: applicableAgencies,
+        applicable_agencies: formData.selected_agencies,
         owner_name: formData.owner_name || null,
         owner_phone: formData.owner_phone || null,
         sms_enabled: formData.sms_enabled,
@@ -389,20 +426,43 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
             </div>
           </div>
 
-          {/* Applicable Agencies */}
-          {formData.jurisdiction === 'NYC' && (formData.primary_use_group || formData.dwelling_units) && (
-            <div className="space-y-2">
-              <Label>Agencies to Track</Label>
-              <div className="flex flex-wrap gap-2">
-                {applicableAgencies.map((agency) => (
-                  <Badge key={agency} variant="secondary" className="text-xs">
-                    {agency}
-                  </Badge>
-                ))}
+          {/* Agencies to Track - Always show for NYC */}
+          {formData.jurisdiction === 'NYC' && (
+            <div className="space-y-3">
+              <div>
+                <Label>Agencies to Track</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Select which agencies to monitor for violations
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Based on property type. Violations from these agencies will be synced automatically.
-              </p>
+              <div className="grid grid-cols-3 gap-3">
+                {ALL_AGENCIES.map((agency) => {
+                  const isChecked = formData.selected_agencies.includes(agency);
+                  const isSuggested = suggestedAgencies.includes(agency);
+                  return (
+                    <div
+                      key={agency}
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        isChecked 
+                          ? 'border-primary bg-primary/5' 
+                          : 'border-border hover:border-muted-foreground/50'
+                      }`}
+                      onClick={() => toggleAgency(agency)}
+                    >
+                      <Checkbox
+                        checked={isChecked}
+                        onCheckedChange={() => toggleAgency(agency)}
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{agency}</span>
+                        {isSuggested && (
+                          <span className="text-xs text-muted-foreground">Recommended</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
