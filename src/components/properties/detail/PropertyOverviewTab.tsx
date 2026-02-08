@@ -26,6 +26,7 @@ import {
   Ban
 } from 'lucide-react';
 import { getBoroughName } from '@/lib/property-utils';
+import { LeaseQAWidget } from '@/components/lease/LeaseQAWidget';
 
 interface Property {
   id: string;
@@ -550,6 +551,9 @@ export const PropertyOverviewTab = ({
           </div>
         </CardContent>
       </Card>
+
+      {/* Lease Q&A Widget */}
+      <LeaseQAWidget propertyId={property.id} />
     </div>
   );
 };
