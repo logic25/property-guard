@@ -23,7 +23,8 @@ import {
   Landmark,
   Scale,
   ChevronDown,
-  Ban
+  Ban,
+  RefreshCw
 } from 'lucide-react';
 import { getBoroughName } from '@/lib/property-utils';
 import { isActiveViolation } from '@/lib/violation-utils';
@@ -270,7 +271,15 @@ export const PropertyOverviewTab = ({
         </Card>
       </div>
 
-      {/* Building Details Card */}
+      {/* Last Synced Indicator */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <RefreshCw className="w-3 h-3" />
+        <span>
+          Last synced: {property.last_synced_at 
+            ? new Date(property.last_synced_at).toLocaleString()
+            : 'Never'}
+        </span>
+      </div>
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">

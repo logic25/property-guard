@@ -57,7 +57,8 @@ import {
   FileText,
   MessageSquare,
   Save,
-  Loader2
+  Loader2,
+  Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -245,7 +246,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
 
   return (
     <div className="space-y-4">
-      {/* Active / All Toggle + Summary */}
+      {/* Active / All Toggle + Summary + Export */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span><strong>{activeViolations.length}</strong> active</span>
@@ -254,30 +255,65 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
           <span className="text-muted-foreground/60"><strong>{violations.length - activeViolations.length}</strong> resolved</span>
         </div>
 
-        {/* Toggle: Active / All */}
-        <div className="flex items-center rounded-full border border-border p-0.5 text-xs font-medium">
-          <button
-            type="button"
-            onClick={() => setShowActiveOnly(true)}
-            className={`px-3 py-1.5 rounded-full transition-colors ${
-              showActiveOnly
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
+        <div className="flex items-center gap-2">
+          {/* Export CSV Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const headers = ['Violation #', 'Agency', 'Issued Date', 'Deadline', 'Status', 'Description', 'OATH Status', 'Penalty', 'Notes'];
+              const rows = filteredAndSortedViolations.map(v => [
+                v.violation_number,
+                v.agency,
+                new Date(v.issued_date).toLocaleDateString(),
+                v.cure_due_date ? new Date(v.cure_due_date).toLocaleDateString() : '',
+                v.status,
+                (v.description_raw || '').replace(/"/g, '""'),
+                v.oath_status || '',
+                v.penalty_amount ? `$${v.penalty_amount}` : '',
+                (v.notes || '').replace(/"/g, '""'),
+              ]);
+              const csv = [headers.join(','), ...rows.map(r => r.map(cell => `"${cell}"`).join(','))].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `violations-${new Date().toISOString().split('T')[0]}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast.success(`Exported ${filteredAndSortedViolations.length} violations`);
+            }}
+            className="text-xs"
           >
-            Active
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowActiveOnly(false)}
-            className={`px-3 py-1.5 rounded-full transition-colors ${
-              !showActiveOnly
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            All ({violations.length})
-          </button>
+            <Download className="w-3 h-3 mr-1" />
+            Export CSV
+          </Button>
+
+          {/* Toggle: Active / All */}
+          <div className="flex items-center rounded-full border border-border p-0.5 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setShowActiveOnly(true)}
+              className={`px-3 py-1.5 rounded-full transition-colors ${
+                showActiveOnly
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowActiveOnly(false)}
+              className={`px-3 py-1.5 rounded-full transition-colors ${
+                !showActiveOnly
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              All ({violations.length})
+            </button>
+          </div>
         </div>
       </div>
 
