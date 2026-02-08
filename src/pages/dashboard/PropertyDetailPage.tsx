@@ -366,6 +366,7 @@ const PropertyDetailPage = () => {
             violations={violations} 
             onRefresh={fetchPropertyData}
             bbl={property.bbl}
+            propertyId={property.id}
           />
         </TabsContent>
 
