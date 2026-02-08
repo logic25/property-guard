@@ -32,8 +32,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   getAgencyLookupUrl, 
   getAgencyColor, 
-  getStatusColor, 
-  getOATHLookupUrl 
+  getStatusColor
 } from '@/lib/violation-utils';
 
 interface Violation {
@@ -247,7 +246,6 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
                     Status {getSortIcon('status')}
                   </div>
                 </TableHead>
-                <TableHead className="font-semibold">Lookup</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -302,17 +300,6 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
                     <Badge className={`text-xs ${getStatusColor(violation.status)}`}>
                       {violation.status}
                     </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => window.open(getOATHLookupUrl(violation.violation_number), '_blank')}
-                    >
-                      <ExternalLink className="w-3 h-3 mr-1" />
-                      OATH
-                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

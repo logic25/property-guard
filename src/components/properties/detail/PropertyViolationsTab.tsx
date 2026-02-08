@@ -33,8 +33,7 @@ import { toast } from 'sonner';
 import { 
   getAgencyLookupUrl, 
   getAgencyColor, 
-  getStatusColor, 
-  getOATHLookupUrl 
+  getStatusColor
 } from '@/lib/violation-utils';
 
 interface Violation {
@@ -213,7 +212,6 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl }: PropertyVi
                     Status {getSortIcon('status')}
                   </div>
                 </TableHead>
-                <TableHead className="font-semibold">Lookup</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -273,17 +271,6 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl }: PropertyVi
                         <SelectItem value="closed">Closed</SelectItem>
                       </SelectContent>
                     </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => window.open(getOATHLookupUrl(violation.violation_number), '_blank')}
-                    >
-                      <ExternalLink className="w-3 h-3 mr-1" />
-                      OATH
-                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
