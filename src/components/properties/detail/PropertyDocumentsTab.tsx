@@ -18,6 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { 
   FileText, 
   Upload, 
@@ -27,8 +35,18 @@ import {
   Loader2,
   File,
   Image,
-  FileCode
+  FileCode,
+  Pencil,
+  LayoutGrid,
+  List,
+  MoreVertical
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 
 interface Document {
@@ -63,10 +81,16 @@ const DOCUMENT_TYPES = [
 export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: PropertyDocumentsTabProps) => {
   const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState('other');
   const [documentName, setDocumentName] = useState('');
+  const [editingDoc, setEditingDoc] = useState<Document | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState('');
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,6 +153,41 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
     }
   };
 
+  const handleEdit = (doc: Document) => {
+    setEditingDoc(doc);
+    setEditName(doc.document_name);
+    setEditType(doc.document_type);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingDoc) return;
+
+    setIsSaving(true);
+
+    try {
+      const { error } = await supabase
+        .from('property_documents')
+        .update({
+          document_name: editName,
+          document_type: editType,
+        })
+        .eq('id', editingDoc.id);
+
+      if (error) throw error;
+
+      toast.success('Document updated');
+      setIsEditDialogOpen(false);
+      setEditingDoc(null);
+      onRefresh();
+    } catch (error) {
+      console.error('Error updating document:', error);
+      toast.error('Failed to update document');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleDelete = async (doc: Document) => {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
@@ -165,24 +224,24 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
   };
 
   const getFileIcon = (fileType: string | null) => {
-    if (!fileType) return <File className="w-6 h-6" />;
+    if (!fileType) return <File className="w-4 h-4" />;
     if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileType.toLowerCase())) {
-      return <Image className="w-6 h-6" />;
+      return <Image className="w-4 h-4" />;
     }
     if (['pdf'].includes(fileType.toLowerCase())) {
-      return <FileText className="w-6 h-6" />;
+      return <FileText className="w-4 h-4" />;
     }
     if (['dwg', 'dxf'].includes(fileType.toLowerCase())) {
-      return <FileCode className="w-6 h-6" />;
+      return <FileCode className="w-4 h-4" />;
     }
-    return <File className="w-6 h-6" />;
+    return <File className="w-4 h-4" />;
   };
 
   const getTypeLabel = (type: string) => {
     return DOCUMENT_TYPES.find(t => t.value === type)?.label || type;
   };
 
-  // Group documents by type
+  // Group documents by type for grid view
   const documentsByType = documents.reduce((acc, doc) => {
     const type = doc.document_type;
     if (!acc[type]) acc[type] = [];
@@ -192,8 +251,24 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
 
   return (
     <div className="space-y-6">
-      {/* Upload Button */}
-      <div className="flex justify-end">
+      {/* Header with Upload and View Toggle */}
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Button
+            variant={viewMode === 'table' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('table')}
+          >
+            <List className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'grid' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('grid')}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </Button>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="hero">
@@ -287,69 +362,143 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
         </Dialog>
       </div>
 
-      {/* Documents Grid */}
+      {/* Documents Display */}
       {documents.length > 0 ? (
-        <div className="space-y-6">
-          {Object.entries(documentsByType).map(([type, docs]) => (
-            <div key={type}>
-              <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-                {getTypeLabel(type)}
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {docs.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+        viewMode === 'table' ? (
+          /* Table View */
+          <div className="rounded-lg border border-border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40px]"></TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {documents.map((doc) => (
+                  <TableRow key={doc.id}>
+                    <TableCell>
+                      <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-primary">
                         {getFileIcon(doc.file_type)}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-foreground truncate">
-                          {doc.document_name}
-                        </h4>
-                        <p className="text-xs text-muted-foreground">
-                          {formatFileSize(doc.file_size_bytes)} • {new Date(doc.uploaded_at).toLocaleDateString()}
-                        </p>
+                    </TableCell>
+                    <TableCell className="font-medium">{doc.document_name}</TableCell>
+                    <TableCell>
+                      <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-secondary text-muted-foreground">
+                        {getTypeLabel(doc.document_type)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatFileSize(doc.file_size_bytes)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(doc.uploaded_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => window.open(doc.file_url, '_blank')}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <a href={doc.file_url} download>
+                              <Download className="w-4 h-4 mr-2" />
+                              Download
+                            </a>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEdit(doc)}>
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={() => handleDelete(doc)}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          /* Grid View */
+          <div className="space-y-6">
+            {Object.entries(documentsByType).map(([type, docs]) => (
+              <div key={type}>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                  {getTypeLabel(type)}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {docs.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                          {getFileIcon(doc.file_type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-foreground truncate">
+                            {doc.document_name}
+                          </h4>
+                          <p className="text-xs text-muted-foreground">
+                            {formatFileSize(doc.file_size_bytes)} • {new Date(doc.uploaded_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => window.open(doc.file_url, '_blank')}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <a href={doc.file_url} download>
+                                <Download className="w-4 h-4 mr-2" />
+                                Download
+                              </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEdit(doc)}>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => handleDelete(doc)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => window.open(doc.file_url, '_blank')}
-                      >
-                        <Eye className="w-3 h-3" />
-                        View
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        asChild
-                      >
-                        <a href={doc.file_url} download>
-                          <Download className="w-3 h-3" />
-                          Download
-                        </a>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(doc)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )
       ) : (
         <div className="text-center py-12 bg-card rounded-xl border border-border">
           <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -363,6 +512,61 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
           </Button>
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open);
+        if (!open) setEditingDoc(null);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Document</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>Document Name</Label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Enter document name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Document Type</Label>
+              <Select value={editType} onValueChange={setEditType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.map(type => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="hero" 
+                onClick={handleSaveEdit}
+                disabled={isSaving || !editName.trim()}
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Save Changes'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
