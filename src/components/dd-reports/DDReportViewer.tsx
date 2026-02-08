@@ -39,7 +39,8 @@ import {
   Loader2,
   ExternalLink,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
 import DDReportPrintView from './DDReportPrintView';
@@ -88,14 +89,16 @@ interface DDReportViewerProps {
   };
   onBack: () => void;
   onDelete: () => void;
+  onRegenerate?: (reportId: string, address: string) => void;
   userProfile?: UserProfile;
 }
 
-const DDReportViewer = ({ report, onBack, onDelete, userProfile }: DDReportViewerProps) => {
+const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, userProfile }: DDReportViewerProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const printRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [generalNotes, setGeneralNotes] = useState(report.general_notes || '');
   const [lineItemNotes, setLineItemNotes] = useState<Record<string, string>>(
     (report.line_item_notes || []).reduce((acc: Record<string, string>, item: any) => {
@@ -106,6 +109,7 @@ const DDReportViewer = ({ report, onBack, onDelete, userProfile }: DDReportViewe
   const [violationsOpen, setViolationsOpen] = useState(true);
   const [applicationsOpen, setApplicationsOpen] = useState(true);
   const [applicationFilter, setApplicationFilter] = useState<string>('all');
+  const [violationFilter, setViolationFilter] = useState<string>('all');
 
   const handleExportPDF = async () => {
     if (!printRef.current) return;
@@ -223,6 +227,18 @@ const DDReportViewer = ({ report, onBack, onDelete, userProfile }: DDReportViewe
           <Button variant="outline" onClick={() => saveNotes.mutate()} disabled={saveNotes.isPending}>
             <Save className="w-4 h-4 mr-2" />
             Save Notes
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => onRegenerate?.(report.id, report.address)} 
+            disabled={isRegenerating || !onRegenerate}
+          >
+            {isRegenerating ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Regenerate
           </Button>
           <Button variant="outline" onClick={handleExportPDF} disabled={isExporting}>
             {isExporting ? (
@@ -471,6 +487,41 @@ const DDReportViewer = ({ report, onBack, onDelete, userProfile }: DDReportViewe
               </CardHeader>
               <CollapsibleContent>
                 <CardContent>
+                  {/* Agency Filter Buttons */}
+                  <div className="flex flex-wrap gap-2 mb-4" onClick={(e) => e.stopPropagation()}>
+                    <Button 
+                      variant={violationFilter === 'all' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setViolationFilter('all')}
+                    >
+                      All ({violations.length})
+                    </Button>
+                    <Button 
+                      variant={violationFilter === 'DOB' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setViolationFilter('DOB')}
+                      className={violationFilter !== 'DOB' ? 'border-orange-300 text-orange-600 hover:bg-orange-50' : ''}
+                    >
+                      DOB ({dobViolations.length})
+                    </Button>
+                    <Button 
+                      variant={violationFilter === 'ECB' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setViolationFilter('ECB')}
+                      className={violationFilter !== 'ECB' ? 'border-blue-300 text-blue-600 hover:bg-blue-50' : ''}
+                    >
+                      ECB ({ecbViolations.length})
+                    </Button>
+                    <Button 
+                      variant={violationFilter === 'HPD' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setViolationFilter('HPD')}
+                      className={violationFilter !== 'HPD' ? 'border-purple-300 text-purple-600 hover:bg-purple-50' : ''}
+                    >
+                      HPD ({hpdViolations.length})
+                    </Button>
+                  </div>
+                  
                   {violations.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       No open violations found for this property.
@@ -490,16 +541,18 @@ const DDReportViewer = ({ report, onBack, onDelete, userProfile }: DDReportViewe
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {violations.map((v: any, idx: number) => (
-                            <ExpandableViolationRow
-                              key={v.id || idx}
-                              violation={v}
-                              index={idx}
-                              note={lineItemNotes[`violation-${v.id || idx}`] || ''}
-                              onNoteChange={(note) => updateLineItemNote('violation', v.id || String(idx), note)}
-                              bbl={report.bbl || building.bbl}
-                            />
-                          ))}
+                          {violations
+                            .filter((v: any) => violationFilter === 'all' || v.agency === violationFilter)
+                            .map((v: any, idx: number) => (
+                              <ExpandableViolationRow
+                                key={v.id || idx}
+                                violation={v}
+                                index={idx}
+                                note={lineItemNotes[`violation-${v.id || idx}`] || ''}
+                                onNoteChange={(note) => updateLineItemNote('violation', v.id || String(idx), note)}
+                                bbl={report.bbl || building.bbl}
+                              />
+                            ))}
                         </TableBody>
                       </Table>
                     </ScrollArea>
