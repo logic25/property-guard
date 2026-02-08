@@ -85,7 +85,17 @@ Deno.serve(async (req) => {
     }
 
     const fileBuffer = await fileData.arrayBuffer();
-    const base64File = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
+    
+    // Convert to base64 in chunks to avoid stack overflow
+    const uint8Array = new Uint8Array(fileBuffer);
+    const chunkSize = 8192;
+    let binaryString = '';
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const base64File = btoa(binaryString);
+    
     console.log("File size:", fileBuffer.byteLength, "bytes, base64 length:", base64File.length);
 
     // Use Gemini to extract text from the PDF
