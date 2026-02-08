@@ -282,24 +282,25 @@ export const EditPropertyDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle>Edit Property</DialogTitle>
-            <Button 
-              type="button" 
-              variant="outline" 
-              size="sm"
-              onClick={handleSyncBuildingData}
-              disabled={isSyncing}
-            >
-              {isSyncing ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4 mr-2" />
-              )}
-              Sync NYC BIS Data
-            </Button>
-          </div>
+          <DialogTitle>Edit Property</DialogTitle>
         </DialogHeader>
+
+        <div className="flex justify-end -mt-2 mb-2">
+          <Button 
+            type="button" 
+            variant="outline" 
+            size="sm"
+            onClick={handleSyncBuildingData}
+            disabled={isSyncing}
+          >
+            {isSyncing ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Refresh NYC Data
+          </Button>
+        </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

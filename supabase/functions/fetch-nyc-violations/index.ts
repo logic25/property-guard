@@ -12,7 +12,8 @@ const NYC_OPEN_DATA_ENDPOINTS = {
   DOB_NEW: "https://data.cityofnewyork.us/resource/855j-jady.json",
   ECB: "https://data.cityofnewyork.us/resource/6bgk-3dad.json",
   HPD: "https://data.cityofnewyork.us/resource/wvxf-dwi5.json",
-  FDNY: "https://data.cityofnewyork.us/resource/ktas-47y7.json",
+  // FDNY Violations via OATH Hearings - uses borough/block/lot
+  FDNY: "https://data.cityofnewyork.us/resource/avgm-ztsb.json",
   CO: "https://data.cityofnewyork.us/resource/bs8b-p36w.json",
 };
 
@@ -207,9 +208,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch FDNY Violations - Uses BBL (Borough/Block/Lot) not BIN
+    // Fetch FDNY Violations via OATH Hearings - Uses borough/block/lot
     if (agenciesToSync.includes("FDNY") && borough && block && lot) {
-      // FDNY uses borough name, not code
+      // FDNY OATH dataset uses borough name
       const boroughNames: Record<string, string> = {
         "1": "MANHATTAN",
         "2": "BRONX", 
@@ -220,32 +221,45 @@ Deno.serve(async (req) => {
       const boroughName = boroughNames[borough] || "";
 
       if (boroughName) {
+        // Query FDNY violations from OATH dataset using borough/block/lot
         const fdnyData = await safeFetch(
-          `${NYC_OPEN_DATA_ENDPOINTS.FDNY}?violation_location_borough=${encodeURIComponent(boroughName)}&violation_location_block_no=${block}&violation_location_lot_no=${lot}&$limit=100`,
+          `${NYC_OPEN_DATA_ENDPOINTS.FDNY}?violation_location_borough=${encodeURIComponent(boroughName)}&violation_location_block_no=${block}&violation_location_lot_no=${lot}&$limit=100&$order=violation_date DESC`,
           "FDNY"
         );
 
-        console.log(`Found ${fdnyData.length} FDNY violations`);
+        console.log(`Found ${fdnyData.length} FDNY violations from OATH dataset`);
 
         for (const v of fdnyData as Record<string, unknown>[]) {
           const violationNum = v.ticket_number as string;
           const issueDate = v.violation_date as string;
           
           if (violationNum && issueDate) {
+            // Get violation description from OATH data
+            const description = [
+              v.charge_1_code_description,
+              v.charge_2_code_description,
+              v.charge_3_code_description,
+            ].filter(Boolean).join("; ") || "FDNY Violation";
+
+            const hearingDate = v.hearing_date as string || v.scheduled_hearing_date as string;
+            
             violations.push({
               agency: "FDNY",
               violation_number: String(violationNum),
               issued_date: issueDate.split("T")[0],
-              hearing_date: null,
+              hearing_date: hearingDate ? hearingDate.split("T")[0] : null,
               cure_due_date: null,
-              description_raw: `FDNY Violation - ${v.issuing_agency || "Fire Department"}`,
+              description_raw: description,
               property_id,
               severity: "critical",
-              violation_class: null,
+              violation_class: (v.charge_1_code || v.infraction_code) as string || null,
               is_stop_work_order: false,
               is_vacate_order: false,
-              penalty_amount: v.penalty_imposed ? parseFloat(v.penalty_imposed as string) : null,
-              respondent_name: v.respondent_first_name ? `${v.respondent_first_name} ${v.respondent_last_name || ""}`.trim() : null,
+              penalty_amount: v.penalty_imposed ? parseFloat(v.penalty_imposed as string) : 
+                             v.total_violation_amount ? parseFloat(v.total_violation_amount as string) : null,
+              respondent_name: v.respondent_first_name ? 
+                `${v.respondent_first_name} ${v.respondent_last_name || ""}`.trim() : 
+                v.respondent_name as string || null,
               synced_at: now,
             });
           }
