@@ -16,6 +16,7 @@ import PortfolioDetailPage from "@/pages/dashboard/PortfolioDetailPage";
 import ViolationsPage from "@/pages/dashboard/ViolationsPage";
 import VendorsPage from "@/pages/dashboard/VendorsPage";
 import WorkOrdersPage from "@/pages/dashboard/WorkOrdersPage";
+import SettingsPage from "@/pages/dashboard/SettingsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ const App = () => (
               <Route path="violations" element={<ViolationsPage />} />
               <Route path="vendors" element={<VendorsPage />} />
               <Route path="work-orders" element={<WorkOrdersPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

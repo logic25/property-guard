@@ -21,7 +21,7 @@ import { Switch } from '@/components/ui/switch';
 import { Loader2, Check, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SmartAddressAutocomplete } from './SmartAddressAutocomplete';
-import { determineApplicableAgencies, getBoroughName, getBoroughCode, type Agency } from '@/lib/property-utils';
+import { determineApplicableAgencies, getBoroughName, type Agency } from '@/lib/property-utils';
 import { Checkbox } from '@/components/ui/checkbox';
 
 interface AddPropertyDialogProps {
@@ -107,28 +107,14 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
     address: string;
     borough: string;
     bbl: string;
+    block: string;
+    lot: string;
     stories: number | null;
     heightFt: number | null;
     grossSqft: number | null;
     primaryUseGroup: string | null;
     dwellingUnits: number | null;
   }) => {
-    // BBL format: BBBBBLLLL (1 digit borough, 5 digits block, 4 digits lot)
-    const bbl = result.bbl || '';
-    let block = '';
-    let lot = '';
-    let boroughCode = '';
-
-    if (bbl.length === 10 && /^\d+$/.test(bbl)) {
-      boroughCode = bbl.substring(0, 1);
-      block = bbl.substring(1, 6).replace(/^0+/, '') || '0';
-      lot = bbl.substring(6, 10).replace(/^0+/, '') || '0';
-    }
-
-    // Get proper borough code from borough name if needed
-    const boroughFromResult = result.borough || '';
-    const finalBoroughCode = boroughCode || getBoroughCode(boroughFromResult);
-
     // Calculate agencies based on the building data
     const agencies = determineApplicableAgencies(
       result.primaryUseGroup,
@@ -140,15 +126,15 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
       address: result.address,
       bin: result.bin || '',
       bbl: result.bbl || '',
-      borough: finalBoroughCode,
-      block: block,
-      lot: lot,
+      borough: result.borough || '',
+      block: result.block || '',
+      lot: result.lot || '',
       stories: result.stories?.toString() || '',
       height_ft: result.heightFt?.toString() || '',
       gross_sqft: result.grossSqft?.toString() || '',
       primary_use_group: result.primaryUseGroup || '',
       dwelling_units: result.dwellingUnits?.toString() || '',
-      selected_agencies: agencies, // Set agencies based on building type
+      selected_agencies: agencies,
     }));
     setAutoPopulated(true);
     toast.success('Building data loaded from NYC DOB', {
