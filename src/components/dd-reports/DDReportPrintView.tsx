@@ -52,17 +52,12 @@ const DDReportPrintView = ({ report }: DDReportPrintViewProps) => {
         <h3 className="text-lg font-bold border-b border-gray-300 pb-1 mb-3">Building Information</h3>
         <div className="grid grid-cols-4 gap-4 text-sm">
           <div><strong>Year Built:</strong> {building.year_built || '—'}</div>
-          <div><strong>Stories:</strong> {building.stories || '—'}</div>
           <div><strong>Dwelling Units:</strong> {building.dwelling_units || '—'}</div>
-          <div><strong>Building Class:</strong> {building.building_class || '—'}</div>
           <div><strong>Zoning:</strong> {building.zoning_district || '—'}</div>
-          <div><strong>Lot Area:</strong> {building.lot_area_sqft ? `${building.lot_area_sqft.toLocaleString()} sqft` : '—'}</div>
           <div><strong>Building Area:</strong> {building.building_area_sqft ? `${building.building_area_sqft.toLocaleString()} sqft` : '—'}</div>
-          <div><strong>Landmark:</strong> {building.is_landmark ? 'Yes' : 'No'}</div>
+          <div><strong>Landmark Status:</strong> {building.is_landmark ? 'Yes - Landmarked' : building.historic_district ? `Historic: ${building.historic_district}` : 'No'}</div>
+          <div><strong>Owner:</strong> {building.owner_name || '—'}</div>
         </div>
-        {building.owner_name && (
-          <p className="mt-2 text-sm"><strong>Owner:</strong> {building.owner_name}</p>
-        )}
       </section>
 
       {/* Summary Stats */}

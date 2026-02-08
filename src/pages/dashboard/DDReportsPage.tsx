@@ -56,7 +56,7 @@ const DDReportsPage = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedReport, setSelectedReport] = useState<DDReport | null>(null);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -65,13 +65,29 @@ const DDReportsPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('dd_reports')
-        .select('*')
+        .select('id, address, prepared_for, report_date, status, created_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as DDReport[];
+      return data;
     },
     enabled: !!user?.id,
+  });
+
+  // Fetch full report when one is selected
+  const { data: selectedReport, isLoading: isLoadingReport } = useQuery({
+    queryKey: ['dd-report', selectedReportId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dd_reports')
+        .select('*')
+        .eq('id', selectedReportId)
+        .single();
+
+      if (error) throw error;
+      return data as DDReport;
+    },
+    enabled: !!selectedReportId,
   });
 
   const deleteReport = useMutation({
@@ -85,7 +101,7 @@ const DDReportsPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dd-reports'] });
       toast({ title: "Report deleted successfully" });
-      if (selectedReport) setSelectedReport(null);
+      if (selectedReportId) setSelectedReportId(null);
     },
     onError: () => {
       toast({ title: "Failed to delete report", variant: "destructive" });
@@ -118,11 +134,19 @@ const DDReportsPage = () => {
     }
   };
 
-  if (selectedReport) {
+  if (isLoadingReport && selectedReportId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (selectedReport && selectedReportId) {
     return (
       <DDReportViewer 
         report={selectedReport} 
-        onBack={() => setSelectedReport(null)}
+        onBack={() => setSelectedReportId(null)}
         onDelete={() => deleteReport.mutate(selectedReport.id)}
       />
     );
@@ -195,7 +219,7 @@ const DDReportsPage = () => {
                 <div
                   key={report.id}
                   className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-secondary/50 transition-colors cursor-pointer"
-                  onClick={() => setSelectedReport(report)}
+                  onClick={() => setSelectedReportId(report.id)}
                 >
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -219,11 +243,6 @@ const DDReportsPage = () => {
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                       <Eye className="w-4 h-4" />
                     </Button>
-                    {report.pdf_url && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    )}
                     <Button 
                       variant="ghost" 
                       size="icon" 
@@ -247,7 +266,7 @@ const DDReportsPage = () => {
         open={createDialogOpen} 
         onOpenChange={setCreateDialogOpen}
         onSuccess={(report) => {
-          setSelectedReport(report);
+          setSelectedReportId(report.id);
           setCreateDialogOpen(false);
         }}
       />
