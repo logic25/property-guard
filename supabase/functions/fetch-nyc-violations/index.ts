@@ -45,6 +45,7 @@ interface ViolationRecord {
   property_id: string;
   severity: string | null;
   violation_class: string | null;
+  violation_type: string | null;
   is_stop_work_order: boolean;
   is_vacate_order: boolean;
   penalty_amount: number | null;
@@ -53,6 +54,81 @@ interface ViolationRecord {
   source?: string;
   oath_status?: string | null;
   status: 'open' | 'in_progress' | 'closed';
+}
+
+// Extract violation type from description or category
+function extractViolationType(description: string | null, category: string | null, agency: string): string | null {
+  const text = `${description || ''} ${category || ''}`.toLowerCase();
+  
+  // Elevator-related
+  if (text.includes('elevator') || text.includes('ftc') || text.includes('ftf') || 
+      text.includes('escalator') || text.includes('convey') || text.includes('lift')) {
+    return 'elevator';
+  }
+  // Plumbing
+  if (text.includes('plumb') || text.includes('water') || text.includes('sewer') || 
+      text.includes('drain') || text.includes('pipe') || text.includes('backflow')) {
+    return 'plumbing';
+  }
+  // Electrical
+  if (text.includes('electric') || text.includes('wiring') || text.includes('outlet') || 
+      text.includes('circuit') || text.includes('panel') || text.includes('volt')) {
+    return 'electrical';
+  }
+  // Fire safety
+  if (text.includes('fire') || text.includes('sprinkler') || text.includes('smoke') || 
+      text.includes('alarm') || text.includes('extinguish') || text.includes('egress') ||
+      agency === 'FDNY') {
+    return 'fire_safety';
+  }
+  // Structural
+  if (text.includes('structur') || text.includes('foundation') || text.includes('beam') || 
+      text.includes('column') || text.includes('load') || text.includes('crack') ||
+      text.includes('facade') || text.includes('parapet') || text.includes('ll11')) {
+    return 'structural';
+  }
+  // Construction/permits
+  if (text.includes('permit') || text.includes('work without') || text.includes('construction') ||
+      text.includes('alteration') || text.includes('demolition')) {
+    return 'construction';
+  }
+  // HVAC/Boiler
+  if (text.includes('boiler') || text.includes('hvac') || text.includes('heating') || 
+      text.includes('ventilat') || text.includes('air condition') || text.includes('gas')) {
+    return 'hvac';
+  }
+  // Housing/maintenance (HPD)
+  if (text.includes('maint') || text.includes('repair') || text.includes('paint') ||
+      text.includes('lead') || text.includes('mold') || text.includes('pest') ||
+      text.includes('rodent') || text.includes('vermin') || agency === 'HPD') {
+    return 'housing';
+  }
+  // Sanitation
+  if (text.includes('sanit') || text.includes('garbage') || text.includes('trash') ||
+      text.includes('refuse') || text.includes('recycl') || agency === 'DSNY') {
+    return 'sanitation';
+  }
+  // Landmarks
+  if (text.includes('landmark') || text.includes('historic') || text.includes('preserv') ||
+      agency === 'LPC') {
+    return 'landmarks';
+  }
+  // Environmental
+  if (text.includes('environ') || text.includes('asbestos') || text.includes('hazard') ||
+      text.includes('pollut') || agency === 'DEP') {
+    return 'environmental';
+  }
+  // Signage
+  if (text.includes('sign') || text.includes('billboard') || text.includes('awning')) {
+    return 'signage';
+  }
+  // Zoning
+  if (text.includes('zoning') || text.includes('certificate of occupancy') || text.includes('c of o') ||
+      text.includes('use group') || text.includes('occupancy')) {
+    return 'zoning';
+  }
+  
+  return 'other';
 }
 
 // Statuses that indicate a violation is resolved/closed
@@ -215,6 +291,7 @@ Deno.serve(async (req) => {
             v.charge_3_code_description,
           ].filter(Boolean).join("; ") || `${agency} Violation`;
 
+          const violationClass = (v.charge_1_code || v.charge_1_code_section) as string || null;
           violations.push({
             agency,
             violation_number: String(violationNum),
@@ -224,7 +301,8 @@ Deno.serve(async (req) => {
             description_raw: description,
             property_id,
             severity: agency === "FDNY" || agency === "LPC" ? "critical" : "medium",
-            violation_class: (v.charge_1_code || v.charge_1_code_section) as string || null,
+            violation_class: violationClass,
+            violation_type: extractViolationType(description, violationClass, agency),
             is_stop_work_order: false,
             is_vacate_order: false,
             penalty_amount: v.penalty_imposed ? parseFloat(v.penalty_imposed as string) :
@@ -259,16 +337,19 @@ Deno.serve(async (req) => {
             dobStatus.toUpperCase().includes(s)
           ) || dobStatus.toUpperCase().includes('CURED') || dobStatus.toUpperCase().includes('COMPLIED');
 
+          const descRaw = (v.description || v.violation_category || v.violation_type) as string || null;
+          const violClass = (v.violation_category || v.class) as string || null;
           violations.push({
             agency: "DOB",
             violation_number: violationNum,
             issued_date: issueDate.split("T")[0],
             hearing_date: null,
             cure_due_date: null,
-            description_raw: (v.description || v.violation_category || v.violation_type) as string || null,
+            description_raw: descRaw,
             property_id,
             severity: (v.violation_type || v.severity) as string || null,
-            violation_class: (v.violation_category || v.class) as string || null,
+            violation_class: violClass,
+            violation_type: extractViolationType(descRaw, violClass, "DOB"),
             is_stop_work_order: String(v.disposition_comments || "").toLowerCase().includes("stop work"),
             is_vacate_order: String(v.disposition_comments || "").toLowerCase().includes("vacate"),
             penalty_amount: v.penality_imposed ? parseFloat(v.penality_imposed as string) : null,
@@ -291,16 +372,19 @@ Deno.serve(async (req) => {
             dobStatus.toUpperCase().includes(s)
           ) || dobStatus.toUpperCase().includes('CURED') || dobStatus.toUpperCase().includes('COMPLIED');
 
+          const descRawNew = (v.violation_description || v.violation_type) as string || null;
+          const violClassNew = v.violation_category as string || null;
           violations.push({
             agency: "DOB",
             violation_number: violationNum,
             issued_date: issueDate.split("T")[0],
             hearing_date: null,
             cure_due_date: v.cure_date ? (v.cure_date as string).split("T")[0] : null,
-            description_raw: (v.violation_description || v.violation_type) as string || null,
+            description_raw: descRawNew,
             property_id,
             severity: v.violation_type as string || null,
-            violation_class: v.violation_category as string || null,
+            violation_class: violClassNew,
+            violation_type: extractViolationType(descRawNew, violClassNew, "DOB"),
             is_stop_work_order: String(v.violation_description || "").toLowerCase().includes("stop work"),
             is_vacate_order: String(v.violation_description || "").toLowerCase().includes("vacate"),
             penalty_amount: v.penalty_amount ? parseFloat(v.penalty_amount as string) : null,
@@ -333,16 +417,18 @@ Deno.serve(async (req) => {
             ecbStatus.toUpperCase().includes(s)
           ) || ecbStatus.toUpperCase().includes('RESOLVE') || ecbStatus.toUpperCase().includes('CERTIF');
 
+          const ecbDescRaw = (v.violation_description || v.infraction_code1) as string || null;
           violations.push({
             agency: "ECB",
             violation_number: violationNum,
             issued_date: issueDate.split("T")[0],
             hearing_date: v.scheduled_hearing_date ? (v.scheduled_hearing_date as string).split("T")[0] : null,
             cure_due_date: null,
-            description_raw: (v.violation_description || v.infraction_code1) as string || null,
+            description_raw: ecbDescRaw,
             property_id,
             severity: (v.severity || v.aggravated_level) as string || null,
             violation_class: null,
+            violation_type: extractViolationType(ecbDescRaw, null, "ECB"),
             is_stop_work_order: false,
             is_vacate_order: false,
             penalty_amount: v.penality_imposed ? parseFloat(v.penality_imposed as string) : null,
@@ -376,16 +462,19 @@ Deno.serve(async (req) => {
                             hpdStatus.toUpperCase().includes('CLOSED') ||
                             hpdStatus.toUpperCase().includes('DISMISS');
 
+          const hpdDescRaw = (v.novdescription || v.novissueddate) as string || null;
+          const hpdClass = v.class as string || null;
           violations.push({
             agency: "HPD",
             violation_number: String(violationNum),
             issued_date: issueDate.split("T")[0],
             hearing_date: null,
             cure_due_date: v.certifieddate ? (v.certifieddate as string).split("T")[0] : null,
-            description_raw: (v.novdescription || v.novissueddate) as string || null,
+            description_raw: hpdDescRaw,
             property_id,
-            severity: v.class as string || null,
-            violation_class: v.class as string || null,
+            severity: hpdClass,
+            violation_class: hpdClass,
+            violation_type: extractViolationType(hpdDescRaw, hpdClass, "HPD"),
             is_stop_work_order: false,
             is_vacate_order: String(v.novdescription || "").toLowerCase().includes("vacate"),
             penalty_amount: null,
@@ -499,6 +588,7 @@ Deno.serve(async (req) => {
                 description_raw: v.description_raw,
                 severity: v.severity,
                 violation_class: v.violation_class,
+                violation_type: v.violation_type,
                 is_stop_work_order: v.is_stop_work_order,
                 is_vacate_order: v.is_vacate_order,
                 penalty_amount: v.penalty_amount,
