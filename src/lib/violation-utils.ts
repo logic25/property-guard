@@ -105,6 +105,7 @@ export const RESOLVED_VIOLATION_STATUSES = [
   'closed',
   'dismissed',
   'paid',
+  'paid in full',
   'resolved',
   'complied',
   'withdrawn',
@@ -118,19 +119,21 @@ export const RESOLVED_VIOLATION_STATUSES = [
 export const isResolvedViolationStatus = (status: string | null | undefined): boolean => {
   if (!status) return false;
   const normalizedStatus = status.toLowerCase().trim();
-  return RESOLVED_VIOLATION_STATUSES.some(resolved => 
+  return RESOLVED_VIOLATION_STATUSES.some((resolved) =>
     normalizedStatus.includes(resolved) || resolved.includes(normalizedStatus)
   );
 };
 
 // Check if a violation should be counted as active
-export const isActiveViolation = (violation: { 
-  status?: string | null; 
+export const isActiveViolation = (violation: {
+  status?: string | null;
   oath_status?: string | null;
 }): boolean => {
-  // Check both internal status and OATH status
+  // Exclude anything explicitly resolved first
   if (violation.status === 'closed') return false;
   if (isResolvedViolationStatus(violation.status)) return false;
   if (isResolvedViolationStatus(violation.oath_status)) return false;
+
+  // Otherwise it's active (even if the OATH status is "Docketed", "Rescheduled", etc.)
   return true;
 };
