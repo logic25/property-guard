@@ -7,14 +7,16 @@ import {
   ArrowLeft, 
   Loader2, 
   RefreshCw,
-  Building2
+  Building2,
+  Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PropertyOverviewTab } from '@/components/properties/detail/PropertyOverviewTab';
 import { PropertyViolationsTab } from '@/components/properties/detail/PropertyViolationsTab';
 import { PropertyDocumentsTab } from '@/components/properties/detail/PropertyDocumentsTab';
 import { PropertyWorkOrdersTab } from '@/components/properties/detail/PropertyWorkOrdersTab';
-import { getBoroughName, determineCOStatus } from '@/lib/property-utils';
+import { EditPropertyDialog } from '@/components/properties/EditPropertyDialog';
+import { getBoroughName } from '@/lib/property-utils';
 import { Badge } from '@/components/ui/badge';
 
 interface Property {
@@ -40,6 +42,7 @@ interface Property {
   compliance_status: string | null;
   last_synced_at: string | null;
   created_at: string;
+  owner_name?: string | null;
 }
 
 interface Violation {
@@ -86,6 +89,7 @@ const PropertyDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const fetchPropertyData = async () => {
     if (!id) return;
@@ -262,18 +266,27 @@ const PropertyDetailPage = () => {
           </div>
         </div>
 
-        <Button 
-          variant="outline" 
-          onClick={syncViolations}
-          disabled={isSyncing || !property.bin}
-        >
-          {isSyncing ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          {isSyncing ? 'Syncing...' : 'Sync Violations'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={() => setEditDialogOpen(true)}
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={syncViolations}
+            disabled={isSyncing || !property.bin}
+          >
+            {isSyncing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {isSyncing ? 'Syncing...' : 'Sync Violations'}
+          </Button>
+        </div>
       </div>
 
       {/* Critical Alerts */}
@@ -340,6 +353,14 @@ const PropertyDetailPage = () => {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Edit Property Dialog */}
+      <EditPropertyDialog
+        property={property}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSave={fetchPropertyData}
+      />
     </div>
   );
 };
