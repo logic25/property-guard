@@ -20,7 +20,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, Mail, MessageSquare } from 'lucide-react';
+import { Loader2, Mail, MessageSquare, Plus } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Vendor {
   id: string;
@@ -44,6 +45,21 @@ interface CreateWorkOrderDialogProps {
   onSuccess: () => void;
 }
 
+const TRADE_TYPES = [
+  'General Contractor',
+  'Electrician',
+  'Plumber',
+  'HVAC',
+  'Roofer',
+  'Mason',
+  'Carpenter',
+  'Painter',
+  'Fire Safety',
+  'Elevator',
+  'Expeditor',
+  'Other',
+];
+
 export const CreateWorkOrderDialog = ({
   open,
   onOpenChange,
@@ -51,6 +67,7 @@ export const CreateWorkOrderDialog = ({
   violation,
   onSuccess,
 }: CreateWorkOrderDialogProps) => {
+  const { user } = useAuth();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -59,6 +76,13 @@ export const CreateWorkOrderDialog = ({
   const [scope, setScope] = useState('');
   const [sendSms, setSendSms] = useState(false);
   const [sendEmail, setSendEmail] = useState(false);
+
+  // New vendor form
+  const [showNewVendorForm, setShowNewVendorForm] = useState(false);
+  const [newVendorName, setNewVendorName] = useState('');
+  const [newVendorPhone, setNewVendorPhone] = useState('');
+  const [newVendorTrade, setNewVendorTrade] = useState('');
+  const [creatingVendor, setCreatingVendor] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -87,6 +111,43 @@ export const CreateWorkOrderDialog = ({
       console.error('Error fetching vendors:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateVendor = async () => {
+    if (!newVendorName.trim() || !user) {
+      toast.error('Vendor name is required');
+      return;
+    }
+
+    setCreatingVendor(true);
+    try {
+      const { data, error } = await supabase
+        .from('vendors')
+        .insert({
+          name: newVendorName.trim(),
+          phone_number: newVendorPhone.trim() || null,
+          trade_type: newVendorTrade || null,
+          user_id: user.id,
+          status: 'active',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success('Vendor created');
+      setVendors(prev => [...prev, data]);
+      setSelectedVendorId(data.id);
+      setShowNewVendorForm(false);
+      setNewVendorName('');
+      setNewVendorPhone('');
+      setNewVendorTrade('');
+    } catch (error) {
+      console.error('Error creating vendor:', error);
+      toast.error('Failed to create vendor');
+    } finally {
+      setCreatingVendor(false);
     }
   };
 
@@ -123,7 +184,7 @@ export const CreateWorkOrderDialog = ({
 
       // Send SMS if selected and vendor has phone
       if (sendSms && selectedVendorId && selectedVendorId !== 'none') {
-  const selectedVendor = selectedVendorId !== 'none' ? vendors.find(v => v.id === selectedVendorId) : null;
+        const selectedVendor = vendors.find(v => v.id === selectedVendorId);
         if (selectedVendor?.phone_number) {
           try {
             const { error: smsError } = await supabase.functions.invoke('send-sms', {
@@ -166,7 +227,7 @@ export const CreateWorkOrderDialog = ({
     }
   };
 
-  const selectedVendor = vendors.find(v => v.id === selectedVendorId);
+  const selectedVendor = selectedVendorId !== 'none' ? vendors.find(v => v.id === selectedVendorId) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -191,19 +252,77 @@ export const CreateWorkOrderDialog = ({
           {/* Vendor Selection */}
           <div className="space-y-2">
             <Label>Assign Vendor (Optional)</Label>
-            <Select value={selectedVendorId} onValueChange={setSelectedVendorId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a vendor..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No vendor</SelectItem>
-                {vendors.map((vendor) => (
-                  <SelectItem key={vendor.id} value={vendor.id}>
-                    {vendor.name} {vendor.trade_type && `(${vendor.trade_type})`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!showNewVendorForm ? (
+              <div className="flex gap-2">
+                <Select value={selectedVendorId} onValueChange={setSelectedVendorId}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select a vendor..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No vendor</SelectItem>
+                    {vendors.map((vendor) => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        {vendor.name} {vendor.trade_type && `(${vendor.trade_type})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowNewVendorForm(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3 p-3 border rounded-lg bg-secondary/30">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">New Vendor</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowNewVendorForm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                <Input
+                  placeholder="Vendor name *"
+                  value={newVendorName}
+                  onChange={(e) => setNewVendorName(e.target.value)}
+                />
+                <Input
+                  placeholder="Phone number"
+                  type="tel"
+                  value={newVendorPhone}
+                  onChange={(e) => setNewVendorPhone(e.target.value)}
+                />
+                <Select value={newVendorTrade} onValueChange={setNewVendorTrade}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Trade type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRADE_TYPES.map((trade) => (
+                      <SelectItem key={trade} value={trade}>
+                        {trade}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  onClick={handleCreateVendor}
+                  disabled={creatingVendor || !newVendorName.trim()}
+                  className="w-full"
+                >
+                  {creatingVendor && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Create Vendor
+                </Button>
+              </div>
+            )}
             {loading && <p className="text-xs text-muted-foreground">Loading vendors...</p>}
           </div>
 
@@ -220,7 +339,7 @@ export const CreateWorkOrderDialog = ({
           </div>
 
           {/* Notification Options */}
-          {selectedVendorId && selectedVendor && (
+          {selectedVendorId !== 'none' && selectedVendor && (
             <div className="space-y-3 pt-2 border-t">
               <Label className="text-sm font-medium">Notify Vendor</Label>
               
