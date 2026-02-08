@@ -75,13 +75,23 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { bin, property_id, applicable_agencies, send_sms_alert } = await req.json();
+    const { bin, bbl, property_id, applicable_agencies, send_sms_alert } = await req.json();
 
-    if (!bin) {
-      throw new Error("BIN is required");
+    if (!bin && !bbl) {
+      throw new Error("BIN or BBL is required");
     }
 
-    console.log(`Fetching violations for BIN: ${bin}, Agencies: ${(applicable_agencies || []).join(', ')}`);
+    // Parse BBL into components for FDNY lookup
+    let borough = "";
+    let block = "";
+    let lot = "";
+    if (bbl && bbl.length >= 10) {
+      borough = bbl.charAt(0);
+      block = bbl.substring(1, 6).replace(/^0+/, ""); // Remove leading zeros
+      lot = bbl.substring(6, 10).replace(/^0+/, ""); // Remove leading zeros
+    }
+
+    console.log(`Fetching violations for BIN: ${bin}, BBL: ${bbl} (Borough: ${borough}, Block: ${block}, Lot: ${lot}), Agencies: ${(applicable_agencies || []).join(', ')}`);
 
     const violations: ViolationRecord[] = [];
     const agenciesToSync: string[] = applicable_agencies || ["DOB", "ECB"];
@@ -170,38 +180,54 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch FDNY Violations
-    if (agenciesToSync.includes("FDNY")) {
-      const fdnyData = await safeFetch(
-        `${NYC_OPEN_DATA_ENDPOINTS.FDNY}?bin=${bin}&$limit=100`,
-        "FDNY"
-      );
+    // Fetch FDNY Violations - Uses BBL (Borough/Block/Lot) not BIN
+    if (agenciesToSync.includes("FDNY") && borough && block && lot) {
+      // FDNY uses borough name, not code
+      const boroughNames: Record<string, string> = {
+        "1": "MANHATTAN",
+        "2": "BRONX", 
+        "3": "BROOKLYN",
+        "4": "QUEENS",
+        "5": "STATEN ISLAND",
+      };
+      const boroughName = boroughNames[borough] || "";
 
-      console.log(`Found ${fdnyData.length} FDNY violations`);
+      if (boroughName) {
+        const fdnyData = await safeFetch(
+          `${NYC_OPEN_DATA_ENDPOINTS.FDNY}?violation_location_borough=${encodeURIComponent(boroughName)}&violation_location_block_no=${block}&violation_location_lot_no=${lot}&$limit=100`,
+          "FDNY"
+        );
 
-      for (const v of fdnyData as Record<string, unknown>[]) {
-        const violationNum = (v.violation_number || v.summons_number) as string;
-        const issueDate = (v.issue_date || v.inspection_date) as string;
-        
-        if (violationNum && issueDate) {
-          violations.push({
-            agency: "FDNY",
-            violation_number: String(violationNum),
-            issued_date: issueDate.split("T")[0],
-            hearing_date: null,
-            cure_due_date: null,
-            description_raw: (v.violation_type || v.description) as string || null,
-            property_id,
-            severity: "critical",
-            violation_class: null,
-            is_stop_work_order: false,
-            is_vacate_order: String(v.violation_type || "").toLowerCase().includes("vacate"),
-            penalty_amount: v.penalty_amount ? parseFloat(v.penalty_amount as string) : null,
-            respondent_name: null,
-            synced_at: now,
-          });
+        console.log(`Found ${fdnyData.length} FDNY violations`);
+
+        for (const v of fdnyData as Record<string, unknown>[]) {
+          const violationNum = v.ticket_number as string;
+          const issueDate = v.violation_date as string;
+          
+          if (violationNum && issueDate) {
+            violations.push({
+              agency: "FDNY",
+              violation_number: String(violationNum),
+              issued_date: issueDate.split("T")[0],
+              hearing_date: null,
+              cure_due_date: null,
+              description_raw: `FDNY Violation - ${v.issuing_agency || "Fire Department"}`,
+              property_id,
+              severity: "critical",
+              violation_class: null,
+              is_stop_work_order: false,
+              is_vacate_order: false,
+              penalty_amount: v.penalty_imposed ? parseFloat(v.penalty_imposed as string) : null,
+              respondent_name: v.respondent_first_name ? `${v.respondent_first_name} ${v.respondent_last_name || ""}`.trim() : null,
+              synced_at: now,
+            });
+          }
         }
+      } else {
+        console.log("FDNY: Cannot query without valid borough from BBL");
       }
+    } else if (agenciesToSync.includes("FDNY")) {
+      console.log("FDNY: Skipped - requires BBL (Borough/Block/Lot) for lookup");
     }
 
     // Deduplicate by violation number
