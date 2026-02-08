@@ -4,13 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import { Send, BookOpen, User, Bot, Loader2, Quote } from 'lucide-react';
+import { Send, BookOpen, User, Bot, Loader2, Quote, Pencil, Check, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  created_at: string;
 }
 
 interface LeaseQAChatProps {
@@ -18,14 +19,54 @@ interface LeaseQAChatProps {
   documentId: string;
   documentName: string;
   leaseContent?: string;
+  conversationId?: string;
+  initialTitle?: string;
+  onTitleChange?: (title: string) => void;
 }
 
-export const LeaseQAChat = ({ propertyId, documentId, documentName, leaseContent }: LeaseQAChatProps) => {
+export const LeaseQAChat = ({ 
+  propertyId, 
+  documentId, 
+  documentName, 
+  leaseContent,
+  conversationId: existingConversationId,
+  initialTitle,
+  onTitleChange,
+}: LeaseQAChatProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(existingConversationId || null);
+  const [title, setTitle] = useState(initialTitle || 'New conversation');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(title);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Load existing messages if we have a conversation ID
+  useEffect(() => {
+    if (existingConversationId) {
+      loadMessages(existingConversationId);
+    }
+  }, [existingConversationId]);
+
+  const loadMessages = async (convId: string) => {
+    const { data, error } = await supabase
+      .from('lease_messages')
+      .select('*')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      setMessages(data.map(m => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        created_at: m.created_at,
+      })));
+    }
+  };
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -34,13 +75,108 @@ export const LeaseQAChat = ({ propertyId, documentId, documentName, leaseContent
     }
   }, [messages]);
 
+  // Focus title input when editing
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
+  const formatTimestamp = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const createConversation = async (): Promise<string> => {
+    const { data, error } = await supabase
+      .from('lease_conversations')
+      .insert({
+        property_id: propertyId,
+        document_id: documentId,
+        title: 'New conversation',
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data.id;
+  };
+
+  const saveMessage = async (convId: string, role: 'user' | 'assistant', content: string) => {
+    const { data, error } = await supabase
+      .from('lease_messages')
+      .insert({
+        conversation_id: convId,
+        role,
+        content,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error saving message:', error);
+      return null;
+    }
+
+    // Update conversation's last_message_at
+    await supabase
+      .from('lease_conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', convId);
+
+    return data;
+  };
+
+  const updateConversationTitle = async (newTitle: string) => {
+    if (!conversationId) return;
+
+    const { error } = await supabase
+      .from('lease_conversations')
+      .update({ title: newTitle })
+      .eq('id', conversationId);
+
+    if (!error) {
+      setTitle(newTitle);
+      onTitleChange?.(newTitle);
+    }
+  };
+
+  const handleSaveTitle = () => {
+    if (editedTitle.trim()) {
+      updateConversationTitle(editedTitle.trim());
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditedTitle(title);
+    setIsEditingTitle(false);
+  };
+
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
+    const now = new Date().toISOString();
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
       content: inputValue.trim(),
+      created_at: now,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -48,6 +184,23 @@ export const LeaseQAChat = ({ propertyId, documentId, documentName, leaseContent
     setIsLoading(true);
 
     try {
+      // Create conversation if it doesn't exist
+      let convId = conversationId;
+      if (!convId) {
+        convId = await createConversation();
+        setConversationId(convId);
+      }
+
+      // Save user message
+      await saveMessage(convId, 'user', userMessage.content);
+
+      // Generate title from first message
+      if (messages.length === 0) {
+        const autoTitle = userMessage.content.slice(0, 50) + (userMessage.content.length > 50 ? '...' : '');
+        await updateConversationTitle(autoTitle);
+        setEditedTitle(autoTitle);
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lease-qa`,
         {
@@ -80,9 +233,10 @@ export const LeaseQAChat = ({ propertyId, documentId, documentName, leaseContent
       const decoder = new TextDecoder();
       let assistantMessage = '';
       const assistantId = crypto.randomUUID();
+      const assistantTime = new Date().toISOString();
 
       // Add empty assistant message
-      setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
+      setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', created_at: assistantTime }]);
 
       let buffer = '';
       while (true) {
@@ -122,6 +276,11 @@ export const LeaseQAChat = ({ propertyId, documentId, documentName, leaseContent
           }
         }
       }
+
+      // Save assistant message after streaming completes
+      if (assistantMessage) {
+        await saveMessage(convId, 'assistant', assistantMessage);
+      }
     } catch (error) {
       console.error('Chat error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to send message');
@@ -140,6 +299,14 @@ export const LeaseQAChat = ({ propertyId, documentId, documentName, leaseContent
     }
   };
 
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveTitle();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
+
   const suggestedQuestions = [
     "Who is responsible for repairs?",
     "What's the rent escalation clause?",
@@ -150,10 +317,45 @@ export const LeaseQAChat = ({ propertyId, documentId, documentName, leaseContent
   return (
     <div className="flex flex-col h-full bg-card rounded-xl border border-border overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border bg-secondary/50 flex items-center gap-2">
-        <BookOpen className="w-4 h-4 text-primary" />
-        <span className="text-sm font-medium">Lease Q&A</span>
-        <span className="text-xs text-muted-foreground">• {documentName}</span>
+      <div className="px-4 py-3 border-b border-border bg-secondary/50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <BookOpen className="w-4 h-4 text-primary shrink-0" />
+            {isEditingTitle ? (
+              <div className="flex items-center gap-1 flex-1">
+                <Input
+                  ref={titleInputRef}
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  onKeyDown={handleTitleKeyDown}
+                  onBlur={handleSaveTitle}
+                  className="h-7 text-sm font-medium"
+                />
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSaveTitle}>
+                  <Check className="w-3 h-3" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancelEdit}>
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  if (conversationId) {
+                    setIsEditingTitle(true);
+                  }
+                }}
+                className="flex items-center gap-1.5 group text-left min-w-0"
+              >
+                <span className="text-sm font-medium truncate">{title}</span>
+                {conversationId && (
+                  <Pencil className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                )}
+              </button>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground shrink-0 ml-2">• {documentName}</span>
+        </div>
       </div>
 
       {/* Messages */}
@@ -194,20 +396,25 @@ export const LeaseQAChat = ({ propertyId, documentId, documentName, leaseContent
                     <Bot className="w-4 h-4 text-primary" />
                   </div>
                 )}
-                <div
-                  className={`max-w-[80%] px-4 py-3 rounded-2xl ${
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground rounded-tr-none'
-                      : 'bg-secondary text-secondary-foreground rounded-tl-none'
-                  }`}
-                >
-                  {message.role === 'assistant' ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                      <ReactMarkdown>{message.content || '...'}</ReactMarkdown>
-                    </div>
-                  ) : (
-                    <p className="text-sm">{message.content}</p>
-                  )}
+                <div className={`max-w-[80%] ${message.role === 'user' ? 'text-right' : 'text-left'}`}>
+                  <div
+                    className={`px-4 py-3 rounded-2xl ${
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground rounded-tr-none'
+                        : 'bg-secondary text-secondary-foreground rounded-tl-none'
+                    }`}
+                  >
+                    {message.role === 'assistant' ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown>{message.content || '...'}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm">{message.content}</p>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground mt-1 block px-1">
+                    {formatTimestamp(message.created_at)}
+                  </span>
                 </div>
                 {message.role === 'user' && (
                   <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { BookOpen, MessageCircle, FileText, ArrowRight } from 'lucide-react';
+import { BookOpen, MessageCircle, FileText, ArrowRight, Plus, Clock } from 'lucide-react';
 import { LeaseQAChat } from './LeaseQAChat';
 
 interface LeaseQAWidgetProps {
@@ -18,10 +18,15 @@ interface LeaseQAWidgetProps {
 }
 
 export const LeaseQAWidget = ({ propertyId }: LeaseQAWidgetProps) => {
+  const queryClient = useQueryClient();
   const [selectedDocument, setSelectedDocument] = useState<{
     id: string;
     name: string;
     content?: string;
+  } | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<{
+    id: string;
+    title: string;
   } | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -50,12 +55,11 @@ export const LeaseQAWidget = ({ propertyId }: LeaseQAWidgetProps) => {
         .from('lease_conversations')
         .select(`
           *,
-          property_documents!inner(document_name),
-          lease_messages(content, role, created_at)
+          property_documents!inner(document_name, extracted_text)
         `)
         .eq('property_id', propertyId)
-        .order('last_message_at', { ascending: false })
-        .limit(3);
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+        .limit(5);
 
       if (error) throw error;
       return data || [];
@@ -64,44 +68,51 @@ export const LeaseQAWidget = ({ propertyId }: LeaseQAWidgetProps) => {
 
   const hasLeases = leaseDocuments && leaseDocuments.length > 0;
 
-  // Mock lease content for demo purposes
-  const mockLeaseContent = `
-COMMERCIAL LEASE AGREEMENT
+  const formatConversationTime = (dateString: string | null) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-ARTICLE 1 - PARTIES AND PREMISES
-Section 1.1 - This lease is entered between Landlord ("Owner") and Tenant ("Lessee").
-Section 1.2 - The demised premises is located at the property address.
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
 
-ARTICLE 2 - TERM
-Section 2.1 - The initial term shall be five (5) years commencing on January 1, 2024.
-Section 2.2 - Tenant has two (2) renewal options of five (5) years each.
+  const startNewConversation = () => {
+    if (leaseDocuments?.[0]) {
+      setSelectedDocument({
+        id: leaseDocuments[0].id,
+        name: leaseDocuments[0].document_name,
+        content: leaseDocuments[0].extracted_text || undefined,
+      });
+      setSelectedConversation(null);
+      setIsDialogOpen(true);
+    }
+  };
 
-ARTICLE 3 - RENT
-Section 3.1 - Base rent: $45.00 per square foot annually.
-Section 3.2 - Rent Escalation: 3% annual increase on each anniversary date.
-Section 3.3 - Additional rent includes proportionate share of CAM, taxes, and insurance.
+  const openExistingConversation = (conv: any) => {
+    setSelectedDocument({
+      id: conv.document_id,
+      name: conv.property_documents?.document_name || 'Lease',
+      content: conv.property_documents?.extracted_text || undefined,
+    });
+    setSelectedConversation({
+      id: conv.id,
+      title: conv.title || 'Lease Q&A',
+    });
+    setIsDialogOpen(true);
+  };
 
-ARTICLE 4 - MAINTENANCE AND REPAIRS
-Section 4.1 - Tenant Responsibilities: All interior repairs, HVAC maintenance, plumbing fixtures.
-Section 4.2 - Landlord Responsibilities: Structural repairs, roof, exterior walls, common areas.
-Section 4.3 - Sprinkler System: Tenant shall maintain and inspect all fire suppression equipment within the demised premises on an annual basis.
-
-ARTICLE 5 - INSURANCE
-Section 5.1 - Tenant shall maintain general liability insurance of $2,000,000 minimum.
-Section 5.2 - Tenant shall name Landlord as additional insured.
-
-ARTICLE 6 - SUBLETTING AND ASSIGNMENT
-Section 6.1 - Tenant may not sublet or assign without prior written consent of Landlord.
-Section 6.2 - Landlord's consent shall not be unreasonably withheld.
-
-ARTICLE 7 - DEFAULT AND REMEDIES
-Section 7.1 - Events of Default: Non-payment of rent within 10 days of due date.
-Section 7.2 - Cure Period: Tenant has 30 days to cure non-monetary defaults after notice.
-
-ARTICLE 8 - TERMINATION
-Section 8.1 - Either party may terminate with 180 days written notice for material breach.
-Section 8.2 - Early Termination Fee: 6 months base rent if terminated before natural expiration.
-`;
+  const handleTitleChange = (newTitle: string) => {
+    // Invalidate the conversations query to refresh the list
+    queryClient.invalidateQueries({ queryKey: ['lease-conversations', propertyId] });
+  };
 
   return (
     <Card>
@@ -114,74 +125,45 @@ Section 8.2 - Early Termination Fee: 6 months base rent if terminated before nat
       <CardContent>
         {hasLeases ? (
           <div className="space-y-3">
-            {/* Quick Q&A Button */}
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  className="w-full justify-between"
-                  variant="outline"
-                  onClick={() => {
-                    if (leaseDocuments?.[0]) {
-                      setSelectedDocument({
-                        id: leaseDocuments[0].id,
-                        name: leaseDocuments[0].document_name,
-                        content: mockLeaseContent, // In production, fetch actual content
-                      });
-                    }
-                  }}
-                >
-                  <span className="flex items-center gap-2">
-                    <MessageCircle className="w-4 h-4" />
-                    Ask your lease
-                  </span>
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl h-[80vh] p-0">
-                <DialogHeader className="sr-only">
-                  <DialogTitle>Lease Q&A</DialogTitle>
-                </DialogHeader>
-                {selectedDocument && (
-                  <LeaseQAChat
-                    propertyId={propertyId}
-                    documentId={selectedDocument.id}
-                    documentName={selectedDocument.name}
-                    leaseContent={selectedDocument.content}
-                  />
-                )}
-              </DialogContent>
-            </Dialog>
+            {/* New Chat Button */}
+            <Button
+              className="w-full justify-between"
+              variant="outline"
+              onClick={startNewConversation}
+            >
+              <span className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                New conversation
+              </span>
+              <ArrowRight className="w-4 h-4" />
+            </Button>
 
             {/* Recent Conversations */}
             {recentConversations && recentConversations.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Recent conversations</p>
-                {recentConversations.slice(0, 2).map((conv: any) => {
-                  const lastMessage = conv.lease_messages?.[conv.lease_messages.length - 1];
-                  return (
-                    <button
-                      key={conv.id}
-                      className="w-full text-left p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
-                      onClick={() => {
-                        setSelectedDocument({
-                          id: conv.document_id,
-                          name: conv.property_documents?.document_name || 'Lease',
-                          content: mockLeaseContent,
-                        });
-                        setIsDialogOpen(true);
-                      }}
-                    >
-                      <p className="text-sm font-medium line-clamp-1">
-                        {conv.title || 'Lease Q&A'}
-                      </p>
-                      {lastMessage && (
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {lastMessage.content}
+                {recentConversations.map((conv: any) => (
+                  <button
+                    key={conv.id}
+                    className="w-full text-left p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                    onClick={() => openExistingConversation(conv)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium line-clamp-1">
+                          {conv.title || 'Untitled conversation'}
                         </p>
-                      )}
-                    </button>
-                  );
-                })}
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {conv.property_documents?.document_name}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1 shrink-0">
+                        <Clock className="w-3 h-3" />
+                        {formatConversationTime(conv.last_message_at || conv.created_at)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
 
@@ -195,6 +177,26 @@ Section 8.2 - Early Termination Fee: 6 months base rent if terminated before nat
                 </div>
               ))}
             </div>
+
+            {/* Dialog */}
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogContent className="max-w-2xl h-[80vh] p-0">
+                <DialogHeader className="sr-only">
+                  <DialogTitle>Lease Q&A</DialogTitle>
+                </DialogHeader>
+                {selectedDocument && (
+                  <LeaseQAChat
+                    propertyId={propertyId}
+                    documentId={selectedDocument.id}
+                    documentName={selectedDocument.name}
+                    leaseContent={selectedDocument.content}
+                    conversationId={selectedConversation?.id}
+                    initialTitle={selectedConversation?.title}
+                    onTitleChange={handleTitleChange}
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
           </div>
         ) : (
           <div className="text-center py-4">
