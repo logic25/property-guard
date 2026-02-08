@@ -13,8 +13,8 @@ export const getAgencyLookupUrl = (agency: string, violationNumber: string, bbl?
       return `https://a810-bisweb.nyc.gov/bisweb/bispi00.jsp`;
     
     case 'ECB':
-      // ECB goes to DOB NOW or OATH
-      return `https://a820-summonsfinder.nyc.gov/DARP/OATHViewer/ticket?ticket_number=${violationNumber}`;
+      // ECB goes to OATH Summons Finder
+      return `http://a820-ecbticketfinder.nyc.gov/searchHome.action`;
     
     case 'HPD':
       // HPD Online
@@ -51,7 +51,7 @@ export const getAgencyLookupUrl = (agency: string, violationNumber: string, bbl?
       return `https://www1.nyc.gov/site/finance/taxes/property.page`;
     
     default:
-      return `https://a820-summonsfinder.nyc.gov/DARP/OATHViewer/ticket?ticket_number=${violationNumber}`;
+      return `http://a820-ecbticketfinder.nyc.gov/searchHome.action`;
   }
 };
 
@@ -95,5 +95,6 @@ export const getStatusColor = (status: string) => {
 };
 
 export const getOATHLookupUrl = (ticketNumber: string) => {
-  return `https://a820-summonsfinder.nyc.gov/DARP/OATHViewer/ticket?ticket_number=${ticketNumber}`;
+  // Correct URL: a820-ecbticketfinder.nyc.gov/searchHome.action
+  return `http://a820-ecbticketfinder.nyc.gov/searchHome.action`;
 };
