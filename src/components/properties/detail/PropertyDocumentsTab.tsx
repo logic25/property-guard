@@ -39,7 +39,10 @@ import {
   Pencil,
   LayoutGrid,
   List,
-  MoreVertical
+  MoreVertical,
+  Brain,
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -58,6 +61,7 @@ interface Document {
   file_size_bytes: number | null;
   uploaded_at: string;
   metadata: Record<string, unknown> | null;
+  extracted_text?: string | null;
 }
 
 interface PropertyDocumentsTabProps {
@@ -84,6 +88,7 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [extractingDocId, setExtractingDocId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState('other');
   const [documentName, setDocumentName] = useState('');
@@ -92,6 +97,36 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
   const [editType, setEditType] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExtractText = async (doc: Document) => {
+    if (doc.file_type !== 'pdf') {
+      toast.error('Text extraction only works for PDF files');
+      return;
+    }
+
+    setExtractingDocId(doc.id);
+    toast.info('Extracting text for AI analysis...');
+
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-document-text', {
+        body: { documentId: doc.id, fileUrl: doc.file_url }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success(`Extracted ${data.charactersExtracted.toLocaleString()} characters for AI`);
+        onRefresh();
+      } else {
+        throw new Error(data?.error || 'Extraction failed');
+      }
+    } catch (err) {
+      console.error('Text extraction error:', err);
+      toast.error('Could not extract text for AI analysis');
+    } finally {
+      setExtractingDocId(null);
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -394,6 +429,7 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Size</TableHead>
+                  <TableHead>AI Status</TableHead>
                   <TableHead>Uploaded</TableHead>
                   <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
@@ -414,6 +450,29 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatFileSize(doc.file_size_bytes)}
+                    </TableCell>
+                    <TableCell>
+                      {extractingDocId === doc.id ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Extracting...
+                        </span>
+                      ) : doc.extracted_text ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          <Sparkles className="w-3 h-3" />
+                          AI Ready
+                        </span>
+                      ) : doc.file_type === 'pdf' ? (
+                        <button
+                          onClick={() => handleExtractText(doc)}
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
+                        >
+                          <Brain className="w-3 h-3" />
+                          Extract
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(doc.uploaded_at).toLocaleDateString()}
@@ -436,6 +495,21 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
                               Download
                             </a>
                           </DropdownMenuItem>
+                          {doc.file_type === 'pdf' && (
+                            <DropdownMenuItem 
+                              onClick={() => handleExtractText(doc)}
+                              disabled={extractingDocId === doc.id}
+                            >
+                              {extractingDocId === doc.id ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : doc.extracted_text ? (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                              ) : (
+                                <Brain className="w-4 h-4 mr-2" />
+                              )}
+                              {doc.extracted_text ? 'Re-extract for AI' : 'Extract for AI'}
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => handleEdit(doc)}>
                             <Pencil className="w-4 h-4 mr-2" />
                             Edit
