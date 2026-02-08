@@ -24,13 +24,15 @@ import {
   Search,
   Loader2,
   Calendar,
-  Building2
+  Building2,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Property {
   id: string;
   address: string;
+  bin: string | null;
 }
 
 interface Violation {
@@ -54,6 +56,7 @@ const ViolationsPage = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const [formData, setFormData] = useState({
     property_id: '',
@@ -79,7 +82,7 @@ const ViolationsPage = () => {
           .order('created_at', { ascending: false }),
         supabase
           .from('properties')
-          .select('id, address')
+          .select('id, address, bin')
           .order('address'),
       ]);
 
@@ -93,6 +96,57 @@ const ViolationsPage = () => {
       toast.error('Failed to load violations');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const syncViolations = async () => {
+    const propertiesWithBin = properties.filter(p => p.bin);
+    
+    if (propertiesWithBin.length === 0) {
+      toast.error('No properties have a BIN (Building Identification Number). Add BIN to your properties to sync violations from NYC Open Data.');
+      return;
+    }
+
+    setIsSyncing(true);
+    let totalNew = 0;
+    let errors = 0;
+
+    try {
+      for (const property of propertiesWithBin) {
+        try {
+          console.log(`Syncing violations for ${property.address} (BIN: ${property.bin})`);
+          
+          const { data, error } = await supabase.functions.invoke('fetch-nyc-violations', {
+            body: { bin: property.bin, property_id: property.id }
+          });
+
+          if (error) {
+            console.error(`Error syncing ${property.address}:`, error);
+            errors++;
+          } else if (data?.total_found) {
+            totalNew += data.total_found;
+          }
+        } catch (err) {
+          console.error(`Failed to sync ${property.address}:`, err);
+          errors++;
+        }
+      }
+
+      if (errors > 0) {
+        toast.warning(`Sync completed with ${errors} error(s). Found ${totalNew} violations.`);
+      } else if (totalNew > 0) {
+        toast.success(`Sync complete! Found ${totalNew} violations from NYC Open Data.`);
+      } else {
+        toast.info('No new violations found from NYC Open Data.');
+      }
+
+      // Refresh data after sync
+      await fetchData();
+    } catch (error) {
+      console.error('Error during sync:', error);
+      toast.error('Failed to sync violations');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -184,13 +238,26 @@ const ViolationsPage = () => {
             Track and manage NYC violations across your properties
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="hero" disabled={properties.length === 0}>
-              <Plus className="w-4 h-4" />
-              Log Violation
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            onClick={syncViolations}
+            disabled={isSyncing || properties.length === 0}
+          >
+            {isSyncing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {isSyncing ? 'Syncing...' : 'Sync from NYC'}
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="hero" disabled={properties.length === 0}>
+                <Plus className="w-4 h-4" />
+                Log Violation
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="font-display text-xl">Log New Violation</DialogTitle>
@@ -298,6 +365,7 @@ const ViolationsPage = () => {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Filters */}
