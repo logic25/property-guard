@@ -4,6 +4,15 @@ import {
   getAgencyColor,
   getAgencyDisplayName,
 } from '@/lib/violation-utils';
+import ReactMarkdown from 'react-markdown';
+
+interface UserProfile {
+  email: string | null;
+  display_name: string | null;
+  company_name: string | null;
+  phone: string | null;
+  license_id: string | null;
+}
 
 interface DDReportPrintViewProps {
   report: {
@@ -21,27 +30,99 @@ interface DDReportPrintViewProps {
     ai_analysis: string | null;
     general_notes: string | null;
   };
+  userProfile?: UserProfile;
 }
 
-const DDReportPrintView = ({ report }: DDReportPrintViewProps) => {
+// Generate a report ID based on date
+const generateReportId = (date: string): string => {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const seq = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
+  return `pg-${year}-${month}-${day}-${seq}`;
+};
+
+const DDReportPrintView = ({ report, userProfile }: DDReportPrintViewProps) => {
   const violations = report.violations_data || [];
   const applications = report.applications_data || [];
   const orders = report.orders_data || { stop_work: [], vacate: [] };
   const building = report.building_data || {};
+  const reportId = generateReportId(report.report_date);
+
+  // Build prepared by line with all available info
+  const buildPreparedByLine = () => {
+    const parts: string[] = [];
+    
+    if (report.prepared_by) {
+      parts.push(report.prepared_by);
+    } else if (userProfile?.display_name) {
+      parts.push(userProfile.display_name);
+    }
+    
+    if (userProfile?.company_name) {
+      parts.push(userProfile.company_name);
+    }
+    
+    return parts.join(', ');
+  };
+
+  const buildCredentialsLine = () => {
+    const parts: string[] = [];
+    
+    if (userProfile?.license_id) {
+      parts.push(userProfile.license_id);
+    }
+    
+    if (userProfile?.email) {
+      parts.push(userProfile.email);
+    }
+    
+    if (userProfile?.phone) {
+      parts.push(userProfile.phone);
+    }
+    
+    return parts.join(' | ');
+  };
+
+  const preparedByLine = buildPreparedByLine();
+  const credentialsLine = buildCredentialsLine();
 
   return (
     <div className="print-container bg-white text-black p-8 max-w-4xl mx-auto" style={{ fontFamily: 'Arial, sans-serif' }}>
-      {/* Header */}
+      {/* Professional Header */}
       <div className="border-b-2 border-black pb-4 mb-6">
-        <h1 className="text-2xl font-bold">Due Diligence Report</h1>
-        <h2 className="text-xl mt-2">{report.address}</h2>
-        <div className="flex justify-between mt-4 text-sm">
+        <div className="text-center mb-4">
+          <h1 className="text-sm font-normal tracking-widest text-gray-500 mb-1">─────────────────────────────────────────────────────────</h1>
+          <h1 className="text-2xl font-bold">PropertyGuard™ Due Diligence Report</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Generated: {format(new Date(report.report_date), 'MMMM d, yyyy')} | Report ID: {reportId}
+          </p>
+        </div>
+        
+        <div className="mt-4 pt-3 border-t border-gray-200">
+          {preparedByLine && (
+            <p className="text-sm"><strong>Prepared By:</strong> {preparedByLine}</p>
+          )}
+          {credentialsLine && (
+            <p className="text-sm text-gray-600">{credentialsLine}</p>
+          )}
+        </div>
+        
+        <p className="text-xs text-gray-500 mt-2">
+          Data Sources: NYC Department of Buildings, NYC Open Data
+        </p>
+        <h1 className="text-sm font-normal tracking-widest text-gray-500 mt-2">─────────────────────────────────────────────────────────</h1>
+      </div>
+
+      {/* Property Header */}
+      <div className="mb-6">
+        <h2 className="text-xl font-bold">{report.address}</h2>
+        <div className="flex justify-between mt-2 text-sm">
           <div>
             <p><strong>Prepared For:</strong> {report.prepared_for}</p>
-            {report.prepared_by && <p><strong>Prepared By:</strong> {report.prepared_by}</p>}
           </div>
           <div className="text-right">
-            <p><strong>Report Date:</strong> {format(new Date(report.report_date), 'MMMM d, yyyy')}</p>
             <p><strong>BIN:</strong> {report.bin || '—'} | <strong>BBL:</strong> {report.bbl || '—'}</p>
           </div>
         </div>
@@ -102,11 +183,26 @@ const DDReportPrintView = ({ report }: DDReportPrintViewProps) => {
         </section>
       )}
 
-      {/* AI Analysis */}
+      {/* AI Analysis with Markdown rendering */}
       {report.ai_analysis && (
         <section className="mb-6">
           <h3 className="text-lg font-bold border-b border-gray-300 pb-1 mb-3">Risk Assessment</h3>
-          <div className="text-sm whitespace-pre-wrap">{report.ai_analysis}</div>
+          <div className="text-sm prose prose-sm max-w-none">
+            <ReactMarkdown
+              components={{
+                h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-2">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>,
+                p: ({ children }) => <p className="mb-2">{children}</p>,
+                ul: ({ children }) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+              }}
+            >
+              {report.ai_analysis}
+            </ReactMarkdown>
+          </div>
         </section>
       )}
 
@@ -190,10 +286,23 @@ const DDReportPrintView = ({ report }: DDReportPrintViewProps) => {
         </section>
       )}
 
-      {/* Footer */}
-      <footer className="mt-8 pt-4 border-t border-gray-300 text-xs text-gray-500 text-center">
-        <p>Generated by BuildingIQ • Report ID: {report.id}</p>
-        <p>Data sourced from NYC Open Data. This report is for informational purposes only.</p>
+      {/* Professional Footer with Disclaimer */}
+      <footer className="mt-8 pt-4 border-t-2 border-black">
+        <div className="text-center mb-4">
+          <p className="font-bold text-sm">DISCLAIMER</p>
+        </div>
+        <p className="text-xs text-gray-600 mb-4 text-justify leading-relaxed">
+          This report is provided for informational purposes only and does not constitute legal, financial, 
+          or investment advice. Data is sourced from NYC Open Data and public records, which may contain 
+          errors, omissions, or be out of date. PropertyGuard AI{userProfile?.company_name ? ` and ${userProfile.company_name}` : ''} make no 
+          warranties regarding accuracy or completeness. Users should independently verify all information 
+          and consult with licensed professionals before making decisions. By using this report, you agree 
+          that PropertyGuard AI{userProfile?.company_name ? ` and ${userProfile.company_name}` : ''} shall not be liable for any decisions made based on this information.
+        </p>
+        
+        <div className="text-center text-xs text-gray-500 pt-3 border-t border-gray-200">
+          <p className="font-medium">© {new Date().getFullYear()} PropertyGuard AI{userProfile?.company_name ? ` | Powered by ${userProfile.company_name}` : ''}</p>
+        </div>
       </footer>
     </div>
   );

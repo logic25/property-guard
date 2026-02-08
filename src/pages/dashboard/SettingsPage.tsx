@@ -18,6 +18,7 @@ const SettingsPage = () => {
     display_name: '',
     company_name: '',
     phone: '',
+    license_id: '',
   });
 
   useEffect(() => {
@@ -38,6 +39,7 @@ const SettingsPage = () => {
             display_name: data.display_name || '',
             company_name: data.company_name || '',
             phone: data.phone || '',
+            license_id: (data as any).license_id || '',
           });
         }
       } catch (error) {
@@ -62,7 +64,8 @@ const SettingsPage = () => {
           display_name: profile.display_name || null,
           company_name: profile.company_name || null,
           phone: profile.phone || null,
-        }, { onConflict: 'user_id' });
+          license_id: profile.license_id || null,
+        } as any, { onConflict: 'user_id' });
 
       if (error) throw error;
       toast.success('Profile updated successfully');
@@ -158,6 +161,18 @@ const SettingsPage = () => {
                     value={profile.phone}
                     onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
                   />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="license_id">License / Expediter ID</Label>
+                  <Input
+                    id="license_id"
+                    placeholder="e.g., NYC Expediter #12345"
+                    value={profile.license_id}
+                    onChange={(e) => setProfile({ ...profile, license_id: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your professional license or expediter ID number (appears on DD reports)
+                  </p>
                 </div>
               </div>
 

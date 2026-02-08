@@ -71,6 +71,22 @@ const DDReportsPage = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Fetch user's profile for report footer
+  const { data: userProfile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
   const { data: reports, isLoading } = useQuery({
     queryKey: ['dd-reports', user?.id],
     queryFn: async () => {
@@ -159,6 +175,13 @@ const DDReportsPage = () => {
         report={selectedReport} 
         onBack={() => setSelectedReportId(null)}
         onDelete={() => deleteReport.mutate(selectedReport.id)}
+        userProfile={{
+          email: user?.email || null,
+          display_name: userProfile?.display_name || null,
+          company_name: userProfile?.company_name || null,
+          phone: userProfile?.phone || null,
+          license_id: (userProfile as any)?.license_id || null,
+        }}
       />
     );
   }
