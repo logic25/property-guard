@@ -7,18 +7,17 @@ const corsHeaders = {
 };
 
 // NYC Open Data API endpoints (Socrata) - No API key needed, 1000 req/hr limit
-// IMPORTANT: Using correct dataset IDs per Phase 1 spec
 const NYC_OPEN_DATA_ENDPOINTS = {
-  DOB_OLD: "https://data.cityofnewyork.us/resource/3h2n-5cm9.json", // DOB Violations (legacy)
-  DOB_NEW: "https://data.cityofnewyork.us/resource/855j-jady.json", // DOB Violations (new)
-  ECB: "https://data.cityofnewyork.us/resource/6bgk-3dad.json", // ECB Violations
-  HPD: "https://data.cityofnewyork.us/resource/wvxf-dwi5.json", // HPD Violations
-  FDNY: "https://data.cityofnewyork.us/resource/ktas-47y7.json", // FDNY Violations (CORRECT ID)
-  CO: "https://data.cityofnewyork.us/resource/bs8b-p36w.json", // Certificate of Occupancy
+  DOB_OLD: "https://data.cityofnewyork.us/resource/3h2n-5cm9.json",
+  DOB_NEW: "https://data.cityofnewyork.us/resource/855j-jady.json",
+  ECB: "https://data.cityofnewyork.us/resource/6bgk-3dad.json",
+  HPD: "https://data.cityofnewyork.us/resource/wvxf-dwi5.json",
+  FDNY: "https://data.cityofnewyork.us/resource/ktas-47y7.json",
+  CO: "https://data.cityofnewyork.us/resource/bs8b-p36w.json",
 };
 
 interface ViolationRecord {
-  agency: "DOB" | "ECB" | "HPD" | "FDNY";
+  agency: "DOB" | "ECB" | "FDNY";
   violation_number: string;
   issued_date: string;
   hearing_date: string | null;
@@ -35,7 +34,6 @@ interface ViolationRecord {
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -62,7 +60,6 @@ Deno.serve(async (req) => {
     const agenciesToSync: string[] = applicable_agencies || ["DOB", "ECB"];
     const now = new Date().toISOString();
 
-    // Helper to safely fetch
     const safeFetch = async (url: string, agency: string): Promise<unknown[]> => {
       try {
         console.log(`Fetching ${agency}: ${url}`);
@@ -97,7 +94,7 @@ Deno.serve(async (req) => {
             violation_number: violationNum,
             issued_date: issueDate.split("T")[0],
             hearing_date: null,
-            cure_due_date: (v.certification_status as string)?.includes("REQUIRED") ? null : null,
+            cure_due_date: null,
             description_raw: (v.description || v.violation_category || v.violation_type) as string || null,
             property_id,
             severity: (v.violation_type || v.severity) as string || null,
@@ -146,40 +143,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch HPD Violations (only for multi-family)
-    if (agenciesToSync.includes("HPD")) {
-      const hpdData = await safeFetch(
-        `${NYC_OPEN_DATA_ENDPOINTS.HPD}?bin=${bin}&$limit=100&$order=inspectiondate DESC`,
-        "HPD"
-      );
-
-      console.log(`Found ${hpdData.length} HPD violations`);
-
-      for (const v of hpdData as Record<string, unknown>[]) {
-        const violationNum = v.violationid as string;
-        const issueDate = (v.inspectiondate || v.novissueddate) as string;
-        
-        if (violationNum && issueDate) {
-          violations.push({
-            agency: "HPD",
-            violation_number: String(violationNum),
-            issued_date: issueDate.split("T")[0],
-            hearing_date: null,
-            cure_due_date: v.certifieddate ? (v.certifieddate as string).split("T")[0] : null,
-            description_raw: (v.novdescription || v.violationstatus) as string || null,
-            property_id,
-            severity: (v.class || v.violationstatus) as string || null,
-            violation_class: v.class as string || null,
-            is_stop_work_order: false,
-            is_vacate_order: String(v.class || "").toUpperCase() === "I",
-            penalty_amount: null,
-            respondent_name: null,
-            synced_at: now,
-          });
-        }
-      }
-    }
-
     // Fetch FDNY Violations
     if (agenciesToSync.includes("FDNY")) {
       const fdnyData = await safeFetch(
@@ -221,7 +184,9 @@ Deno.serve(async (req) => {
 
     console.log(`Total unique violations: ${uniqueViolations.length}`);
 
-    // Insert new violations (upsert to avoid duplicates)
+    let newViolationsCount = 0;
+
+    // Insert new violations
     if (uniqueViolations.length > 0 && property_id) {
       const { data: existingViolations } = await supabase
         .from("violations")
@@ -235,6 +200,8 @@ Deno.serve(async (req) => {
       const newViolations = uniqueViolations.filter(
         (v) => !existingNumbers.has(v.violation_number)
       );
+
+      newViolationsCount = newViolations.length;
 
       if (newViolations.length > 0) {
         const { error: insertError } = await supabase
@@ -253,14 +220,48 @@ Deno.serve(async (req) => {
         .from("properties")
         .update({ last_synced_at: now })
         .eq("id", property_id);
+
+      // Log activity
+      const activityDescription = newViolationsCount > 0 
+        ? `Found ${newViolationsCount} new violation${newViolationsCount > 1 ? 's' : ''} from NYC Open Data`
+        : 'No new violations found';
+
+      await supabase.from("property_activity_log").insert({
+        property_id,
+        activity_type: "sync",
+        title: `Violation Sync Completed`,
+        description: activityDescription,
+        metadata: {
+          agencies_synced: agenciesToSync.join(", "),
+          total_found: uniqueViolations.length,
+          new_violations: newViolationsCount,
+        },
+      });
+
+      // Log individual new violations
+      if (newViolationsCount > 0) {
+        const violationLogs = newViolations.slice(0, 5).map(v => ({
+          property_id,
+          activity_type: "violation_added",
+          title: `New ${v.agency} Violation`,
+          description: v.description_raw?.substring(0, 200) || `Violation #${v.violation_number}`,
+          metadata: {
+            violation_number: v.violation_number,
+            agency: v.agency,
+            issued_date: v.issued_date,
+          },
+        }));
+
+        await supabase.from("property_activity_log").insert(violationLogs);
+      }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
         total_found: uniqueViolations.length,
+        new_violations: newViolationsCount,
         agencies_synced: agenciesToSync,
-        violations: uniqueViolations,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
