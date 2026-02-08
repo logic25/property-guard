@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,9 +12,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Sparkles, MessageCircle, Send, Bot, User, Loader2, FileText } from 'lucide-react';
+import { Sparkles, MessageCircle, Send, Bot, User, Loader2, FileText, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Message {
   id: string;
@@ -71,12 +72,71 @@ export const PropertyAIWidget = ({
   documents, 
   workOrders 
 }: PropertyAIWidgetProps) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch existing conversation and messages
+  const { data: existingConversation, isLoading: isLoadingConversation } = useQuery({
+    queryKey: ['property-ai-conversation', propertyId],
+    queryFn: async () => {
+      if (!user) return null;
+      
+      const { data: conversation, error } = await supabase
+        .from('property_ai_conversations')
+        .select('id')
+        .eq('property_id', propertyId)
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return conversation;
+    },
+    enabled: !!user,
+  });
+
+  // Fetch messages for the conversation
+  const { data: existingMessages } = useQuery({
+    queryKey: ['property-ai-messages', existingConversation?.id],
+    queryFn: async () => {
+      if (!existingConversation?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('property_ai_messages')
+        .select('id, role, content, created_at')
+        .eq('conversation_id', existingConversation.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      return data?.map(m => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })) || [];
+    },
+    enabled: !!existingConversation?.id,
+  });
+
+  // Load messages when conversation is fetched
+  useEffect(() => {
+    if (existingConversation?.id) {
+      setConversationId(existingConversation.id);
+    }
+  }, [existingConversation?.id]);
+
+  useEffect(() => {
+    if (existingMessages && existingMessages.length > 0) {
+      setMessages(existingMessages);
+    }
+  }, [existingMessages]);
 
   // Fetch all documents with extracted text for context
   const { data: allDocuments } = useQuery({
@@ -93,9 +153,66 @@ export const PropertyAIWidget = ({
     },
   });
 
+  // Create conversation mutation
+  const createConversation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('Not authenticated');
+      
+      const { data, error } = await supabase
+        .from('property_ai_conversations')
+        .insert({
+          property_id: propertyId,
+          user_id: user.id,
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      setConversationId(data.id);
+      queryClient.invalidateQueries({ queryKey: ['property-ai-conversation', propertyId] });
+    },
+  });
+
+  // Save message mutation
+  const saveMessage = useMutation({
+    mutationFn: async ({ conversationId, role, content }: { conversationId: string; role: 'user' | 'assistant'; content: string }) => {
+      const { error } = await supabase
+        .from('property_ai_messages')
+        .insert({
+          conversation_id: conversationId,
+          role,
+          content,
+        });
+
+      if (error) throw error;
+    },
+  });
+
+  // Clear conversation mutation
+  const clearConversation = useMutation({
+    mutationFn: async () => {
+      if (!conversationId) return;
+      
+      const { error } = await supabase
+        .from('property_ai_conversations')
+        .delete()
+        .eq('id', conversationId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setMessages([]);
+      setConversationId(null);
+      queryClient.invalidateQueries({ queryKey: ['property-ai-conversation', propertyId] });
+      toast.success('Conversation cleared');
+    },
+  });
+
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    // Use a small delay to ensure the DOM has updated
     const timer = setTimeout(() => {
       if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -104,7 +221,7 @@ export const PropertyAIWidget = ({
     return () => clearTimeout(timer);
   }, [messages]);
 
-  const sendMessage = async () => {
+  const sendMessage = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return;
 
     const userMessage: Message = {
@@ -118,7 +235,6 @@ export const PropertyAIWidget = ({
     setIsLoading(true);
 
     try {
-      // Get the user's session token for authentication
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         toast.error('Please log in to use Property AI');
@@ -126,6 +242,20 @@ export const PropertyAIWidget = ({
         setIsLoading(false);
         return;
       }
+
+      // Ensure we have a conversation
+      let currentConversationId = conversationId;
+      if (!currentConversationId) {
+        const newConversation = await createConversation.mutateAsync();
+        currentConversationId = newConversation.id;
+      }
+
+      // Save user message to database
+      await saveMessage.mutateAsync({
+        conversationId: currentConversationId,
+        role: 'user',
+        content: userMessage.content,
+      });
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/property-ai`,
@@ -148,7 +278,6 @@ export const PropertyAIWidget = ({
               inProgress: violations.filter(v => v.status === 'in_progress').length,
               hasCritical: violations.some(v => v.is_stop_work_order || v.is_vacate_order),
             },
-            // Include document types and extracted text for AI context
             documentContents: (allDocuments || []).map(d => ({
               type: d.document_type,
               name: d.document_name,
@@ -185,7 +314,6 @@ export const PropertyAIWidget = ({
       let assistantMessage = '';
       const assistantId = crypto.randomUUID();
 
-      // Add empty assistant message
       setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
 
       let buffer = '';
@@ -195,7 +323,6 @@ export const PropertyAIWidget = ({
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process line-by-line
         let newlineIndex: number;
         while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
           let line = buffer.slice(0, newlineIndex);
@@ -220,11 +347,25 @@ export const PropertyAIWidget = ({
               );
             }
           } catch {
-            // Incomplete JSON, wait for more data
             buffer = line + '\n' + buffer;
             break;
           }
         }
+      }
+
+      // Save assistant message to database
+      if (assistantMessage && currentConversationId) {
+        await saveMessage.mutateAsync({
+          conversationId: currentConversationId,
+          role: 'assistant',
+          content: assistantMessage,
+        });
+
+        // Update conversation timestamp
+        await supabase
+          .from('property_ai_conversations')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', currentConversationId);
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -234,7 +375,7 @@ export const PropertyAIWidget = ({
       setIsLoading(false);
       inputRef.current?.focus();
     }
-  };
+  }, [inputValue, isLoading, messages, conversationId, createConversation, saveMessage, propertyId, propertyData, violations, allDocuments, workOrders]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -263,7 +404,11 @@ export const PropertyAIWidget = ({
       <CardContent className="p-0">
         {/* Chat preview - shows recent messages or empty state */}
         <div className="px-4 pb-3">
-          {messages.length > 0 ? (
+          {isLoadingConversation ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : messages.length > 0 ? (
             <div className="space-y-2 mb-3">
               {/* Show last 2 messages as preview */}
               {messages.slice(-2).map((msg) => (
@@ -307,10 +452,23 @@ export const PropertyAIWidget = ({
               </DialogHeader>
               <div className="flex flex-col h-full bg-card rounded-xl overflow-hidden">
                 {/* Header */}
-                <div className="px-4 py-3 border-b border-border bg-secondary/50 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-medium">Property AI</span>
-                  <span className="text-xs text-muted-foreground">• {propertyData.address}</span>
+                <div className="px-4 py-3 border-b border-border bg-secondary/50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-medium">Property AI</span>
+                    <span className="text-xs text-muted-foreground">• {propertyData.address}</span>
+                  </div>
+                  {messages.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => clearConversation.mutate()}
+                      disabled={clearConversation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
 
                 {/* Messages */}
