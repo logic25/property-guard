@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { getBoroughName } from '@/lib/property-utils';
 import { isActiveViolation } from '@/lib/violation-utils';
-import { LeaseQAWidget } from '@/components/lease/LeaseQAWidget';
+import { PropertyAIWidget } from '@/components/properties/PropertyAIWidget';
 
 interface Property {
   id: string;
@@ -181,61 +181,89 @@ export const PropertyOverviewTab = ({
 
   return (
     <div className="space-y-6">
-      {/* Quick Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Quick Stats Row - Merged with Activity */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-destructive" />
+              <div className="w-9 h-9 rounded-lg bg-destructive/10 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-destructive" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{openViolations}</p>
-                <p className="text-sm text-muted-foreground">Open Violations</p>
+                <p className="text-xl font-bold">{openViolations}</p>
+                <p className="text-xs text-muted-foreground">Open</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-warning" />
+              <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-orange-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
+                <p className="text-xl font-bold">{inProgressViolations}</p>
+                <p className="text-xs text-muted-foreground">In Progress</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-warning/10 flex items-center justify-center">
+                <Calendar className="w-4 h-4 text-warning" />
+              </div>
+              <div>
+                <p className="text-xl font-bold">
                   {daysUntilDeadline !== null ? `${daysUntilDeadline}d` : '-'}
                 </p>
-                <p className="text-sm text-muted-foreground">Next Deadline</p>
+                <p className="text-xs text-muted-foreground">Next Deadline</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <FileText className="w-5 h-5 text-primary" />
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Wrench className="w-4 h-4 text-blue-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{documents.length}</p>
-                <p className="text-sm text-muted-foreground">Documents</p>
+                <p className="text-xl font-bold">{activeWorkOrders}</p>
+                <p className="text-xs text-muted-foreground">Work Orders</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-success" />
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <FileText className="w-4 h-4 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{complianceScore}</p>
-                <p className="text-sm text-muted-foreground">Compliance Score</p>
+                <p className="text-xl font-bold">{documents.length}</p>
+                <p className="text-xs text-muted-foreground">Documents</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-success/10 flex items-center justify-center">
+                <Shield className="w-4 h-4 text-success" />
+              </div>
+              <div>
+                <p className="text-xl font-bold">{complianceScore}</p>
+                <p className="text-xs text-muted-foreground">Compliance</p>
               </div>
             </div>
           </CardContent>
@@ -523,42 +551,25 @@ export const PropertyOverviewTab = ({
         </CardContent>
       </Card>
 
-      {/* Activity Summary */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Wrench className="w-5 h-5" />
-            Activity Summary
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div className="p-3 rounded-lg bg-muted/50">
-              <p className="text-muted-foreground">Total Violations</p>
-              <p className="text-xl font-bold">{violations.length}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-muted/50">
-              <p className="text-muted-foreground">In Progress</p>
-              <p className="text-xl font-bold">{inProgressViolations}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-muted/50">
-              <p className="text-muted-foreground">Active Work Orders</p>
-              <p className="text-xl font-bold">{activeWorkOrders}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-muted/50">
-              <p className="text-muted-foreground">Last Synced</p>
-              <p className="text-sm font-medium">
-                {property.last_synced_at 
-                  ? new Date(property.last_synced_at).toLocaleDateString()
-                  : 'Never'}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lease Q&A Widget */}
-      <LeaseQAWidget propertyId={property.id} />
+      {/* Property AI Widget */}
+      <PropertyAIWidget 
+        propertyId={property.id}
+        propertyData={{
+          address: property.address,
+          borough: property.borough,
+          bin: property.bin,
+          bbl: property.bbl,
+          stories: property.stories,
+          dwelling_units: property.dwelling_units,
+          year_built: property.year_built,
+          zoning_district: property.zoning_district,
+          building_class: property.building_class,
+          co_status: property.co_status,
+        }}
+        violations={violations}
+        documents={documents}
+        workOrders={workOrders}
+      />
     </div>
   );
 };
