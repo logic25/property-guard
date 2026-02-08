@@ -1,8 +1,7 @@
-import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useMemo } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -19,14 +18,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { 
-  AlertTriangle, 
-  Search,
-  Calendar,
+  Search, 
+  Calendar, 
+  ExternalLink,
   AlertOctagon,
   Ban,
-  ExternalLink
+  Building2
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface Violation {
   id: string;
@@ -37,49 +36,49 @@ interface Violation {
   description_raw: string | null;
   cure_due_date: string | null;
   hearing_date: string | null;
-  severity: string | null;
   is_stop_work_order: boolean;
   is_vacate_order: boolean;
+  property_id: string;
+  property_address?: string;
 }
 
-interface PropertyViolationsTabProps {
+interface PortfolioViolationsViewProps {
   violations: Violation[];
-  onRefresh: () => void;
+  portfolioName: string;
 }
 
-export const PropertyViolationsTab = ({ violations, onRefresh }: PropertyViolationsTabProps) => {
+export const PortfolioViolationsView = ({ violations, portfolioName }: PortfolioViolationsViewProps) => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [agencyFilter, setAgencyFilter] = useState<string>('all');
+  const [propertyFilter, setPropertyFilter] = useState<string>('all');
 
-  const updateStatus = async (id: string, status: 'open' | 'in_progress' | 'closed') => {
-    try {
-      const { error } = await supabase
-        .from('violations')
-        .update({ status })
-        .eq('id', id);
+  const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))], [violations]);
+  const properties = useMemo(() => {
+    const map = new Map<string, string>();
+    violations.forEach(v => {
+      if (v.property_id && v.property_address) {
+        map.set(v.property_id, v.property_address);
+      }
+    });
+    return Array.from(map.entries());
+  }, [violations]);
 
-      if (error) throw error;
-      toast.success('Status updated');
-      onRefresh();
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast.error('Failed to update status');
-    }
-  };
-
-  const filteredViolations = violations.filter(v => {
-    const matchesSearch = 
-      v.violation_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.description_raw?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
-    const matchesAgency = agencyFilter === 'all' || v.agency === agencyFilter;
-    
-    return matchesSearch && matchesStatus && matchesAgency;
-  });
-
-  const agencies = [...new Set(violations.map(v => v.agency))];
+  const filteredViolations = useMemo(() => {
+    return violations.filter(v => {
+      const matchesSearch = 
+        v.violation_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.description_raw?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.property_address?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
+      const matchesAgency = agencyFilter === 'all' || v.agency === agencyFilter;
+      const matchesProperty = propertyFilter === 'all' || v.property_id === propertyFilter;
+      
+      return matchesSearch && matchesStatus && matchesAgency && matchesProperty;
+    });
+  }, [violations, searchQuery, statusFilter, agencyFilter, propertyFilter]);
 
   const getAgencyColor = (agency: string) => {
     const colors: Record<string, string> = {
@@ -105,12 +104,38 @@ export const PropertyViolationsTab = ({ violations, onRefresh }: PropertyViolati
     }
   };
 
-  const getOATHLookupUrl = (ticketNumber: string) => {
-    return `https://a820-summonsfinder.nyc.gov/DARP/OATHViewer/ticket?ticket_number=${ticketNumber}`;
+  const getOATHLookupUrl = (agency: string, ticketNumber: string) => {
+    return `https://a]820-summonsfinder.nyc.gov/DARP/OATHViewer/ticket?ticket_number=${ticketNumber}`;
   };
 
   return (
     <div className="space-y-4">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-card rounded-lg border p-4">
+          <div className="text-2xl font-bold">{violations.length}</div>
+          <div className="text-sm text-muted-foreground">Total Violations</div>
+        </div>
+        <div className="bg-card rounded-lg border p-4">
+          <div className="text-2xl font-bold text-destructive">
+            {violations.filter(v => v.status === 'open').length}
+          </div>
+          <div className="text-sm text-muted-foreground">Open</div>
+        </div>
+        <div className="bg-card rounded-lg border p-4">
+          <div className="text-2xl font-bold text-warning">
+            {violations.filter(v => v.status === 'in_progress').length}
+          </div>
+          <div className="text-sm text-muted-foreground">In Progress</div>
+        </div>
+        <div className="bg-card rounded-lg border p-4">
+          <div className="text-2xl font-bold text-orange-600">
+            {violations.filter(v => v.is_stop_work_order || v.is_vacate_order).length}
+          </div>
+          <div className="text-sm text-muted-foreground">Critical</div>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -144,6 +169,17 @@ export const PropertyViolationsTab = ({ violations, onRefresh }: PropertyViolati
             ))}
           </SelectContent>
         </Select>
+        <Select value={propertyFilter} onValueChange={setPropertyFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Property" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Properties</SelectItem>
+            {properties.map(([id, address]) => (
+              <SelectItem key={id} value={id}>{address}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Table */}
@@ -152,11 +188,11 @@ export const PropertyViolationsTab = ({ violations, onRefresh }: PropertyViolati
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                <TableHead className="font-semibold">Property</TableHead>
                 <TableHead className="font-semibold">Violation</TableHead>
                 <TableHead className="font-semibold">Agency</TableHead>
                 <TableHead className="font-semibold">Issued</TableHead>
                 <TableHead className="font-semibold">Deadline</TableHead>
-                <TableHead className="font-semibold">Description</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="font-semibold">Lookup</TableHead>
               </TableRow>
@@ -165,6 +201,16 @@ export const PropertyViolationsTab = ({ violations, onRefresh }: PropertyViolati
               {filteredViolations.map((violation) => (
                 <TableRow key={violation.id} className="hover:bg-muted/30">
                   <TableCell>
+                    <Button
+                      variant="link"
+                      className="p-0 h-auto text-left justify-start"
+                      onClick={() => navigate(`/dashboard/properties/${violation.property_id}`)}
+                    >
+                      <Building2 className="w-3 h-3 mr-1" />
+                      <span className="text-sm line-clamp-1">{violation.property_address}</span>
+                    </Button>
+                  </TableCell>
+                  <TableCell>
                     <div className="flex items-center gap-2">
                       {(violation.is_stop_work_order || violation.is_vacate_order) && (
                         <span className="text-destructive">
@@ -172,7 +218,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh }: PropertyViolati
                           {violation.is_vacate_order && <Ban className="w-4 h-4" />}
                         </span>
                       )}
-                      <span className="font-medium">#{violation.violation_number}</span>
+                      <span className="font-medium text-sm">#{violation.violation_number}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -184,41 +230,26 @@ export const PropertyViolationsTab = ({ violations, onRefresh }: PropertyViolati
                     {new Date(violation.issued_date).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    {violation.cure_due_date ? (
+                    {violation.cure_due_date || violation.hearing_date ? (
                       <div className="flex items-center gap-1 text-sm">
                         <Calendar className="w-3 h-3" />
-                        {new Date(violation.cure_due_date).toLocaleDateString()}
+                        {new Date(violation.cure_due_date || violation.hearing_date!).toLocaleDateString()}
                       </div>
                     ) : (
                       <span className="text-muted-foreground text-sm">-</span>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-[300px]">
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {violation.description_raw || 'No description'}
-                    </p>
-                  </TableCell>
                   <TableCell>
-                    <Select
-                      value={violation.status}
-                      onValueChange={(v) => updateStatus(violation.id, v as 'open' | 'in_progress' | 'closed')}
-                    >
-                      <SelectTrigger className={`w-28 h-8 text-xs ${getStatusColor(violation.status)}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Badge className={`text-xs ${getStatusColor(violation.status)}`}>
+                      {violation.status}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2"
-                      onClick={() => window.open(getOATHLookupUrl(violation.violation_number), '_blank')}
+                      onClick={() => window.open(getOATHLookupUrl(violation.agency, violation.violation_number), '_blank')}
                     >
                       <ExternalLink className="w-3 h-3 mr-1" />
                       OATH
@@ -231,11 +262,10 @@ export const PropertyViolationsTab = ({ violations, onRefresh }: PropertyViolati
         </div>
       ) : (
         <div className="text-center py-12 bg-card rounded-xl border border-border">
-          <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
           <h3 className="font-semibold text-foreground mb-2">No violations found</h3>
           <p className="text-muted-foreground text-sm">
             {violations.length === 0 
-              ? 'This property has no violations on record.'
+              ? 'Properties in this portfolio have no violations.'
               : 'No violations match your filters.'}
           </p>
         </div>

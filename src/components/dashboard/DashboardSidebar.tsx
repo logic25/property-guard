@@ -7,7 +7,8 @@ import {
   Users, 
   ClipboardList,
   Settings,
-  LogOut
+  LogOut,
+  FolderOpen
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -15,6 +16,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { icon: LayoutDashboard, label: 'Overview', href: '/dashboard' },
   { icon: Home, label: 'Properties', href: '/dashboard/properties' },
+  { icon: FolderOpen, label: 'Portfolios', href: '/dashboard/portfolios' },
   { icon: AlertTriangle, label: 'Violations', href: '/dashboard/violations' },
   { icon: Users, label: 'Vendors', href: '/dashboard/vendors' },
   { icon: ClipboardList, label: 'Work Orders', href: '/dashboard/work-orders' },
