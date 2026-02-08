@@ -36,6 +36,8 @@ interface FormData {
   bin: string;
   bbl: string;
   borough: string;
+  block: string;
+  lot: string;
   stories: string;
   height_ft: string;
   gross_sqft: string;
@@ -46,6 +48,9 @@ interface FormData {
   has_boiler: boolean;
   has_elevator: boolean;
   has_sprinkler: boolean;
+  owner_name: string;
+  owner_phone: string;
+  sms_enabled: boolean;
 }
 
 const initialFormData: FormData = {
@@ -54,6 +59,8 @@ const initialFormData: FormData = {
   bin: '',
   bbl: '',
   borough: '',
+  block: '',
+  lot: '',
   stories: '',
   height_ft: '',
   gross_sqft: '',
@@ -64,6 +71,9 @@ const initialFormData: FormData = {
   has_boiler: false,
   has_elevator: false,
   has_sprinkler: false,
+  owner_name: '',
+  owner_phone: '',
+  sms_enabled: false,
 };
 
 export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddPropertyDialogProps) => {
@@ -88,12 +98,19 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
     primaryUseGroup: string | null;
     dwellingUnits: number | null;
   }) => {
+    // Parse BBL into block and lot (format: BBBBBLLLL - 5 digits block, 4 digits lot)
+    const bbl = result.bbl || '';
+    const block = bbl.length >= 6 ? bbl.substring(1, 6) : '';
+    const lot = bbl.length >= 10 ? bbl.substring(6, 10) : '';
+
     setFormData(prev => ({
       ...prev,
       address: result.address,
       bin: result.bin || '',
       bbl: result.bbl || '',
       borough: result.borough || '',
+      block: block,
+      lot: lot,
       stories: result.stories?.toString() || '',
       height_ft: result.heightFt?.toString() || '',
       gross_sqft: result.grossSqft?.toString() || '',
@@ -131,6 +148,9 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
         has_elevator: formData.has_elevator,
         has_sprinkler: formData.has_sprinkler,
         applicable_agencies: applicableAgencies,
+        owner_name: formData.owner_name || null,
+        owner_phone: formData.owner_phone || null,
+        sms_enabled: formData.sms_enabled,
       });
 
       if (error) throw error;
@@ -221,7 +241,7 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
 
           {/* Building Identifiers */}
           {formData.jurisdiction === 'NYC' && (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="bin">BIN</Label>
                 <Input
@@ -232,21 +252,30 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="bbl">BBL</Label>
-                <Input
-                  id="bbl"
-                  placeholder="Block/Lot"
-                  value={formData.bbl}
-                  onChange={(e) => setFormData({ ...formData, bbl: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="borough">Borough</Label>
                 <Input
                   id="borough"
                   placeholder="Borough"
                   value={formData.borough ? getBoroughName(formData.borough) : ''}
                   onChange={(e) => setFormData({ ...formData, borough: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="block">Block</Label>
+                <Input
+                  id="block"
+                  placeholder="Block #"
+                  value={formData.block}
+                  onChange={(e) => setFormData({ ...formData, block: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lot">Lot</Label>
+                <Input
+                  id="lot"
+                  placeholder="Lot #"
+                  value={formData.lot}
+                  onChange={(e) => setFormData({ ...formData, lot: e.target.value })}
                 />
               </div>
             </div>
@@ -292,6 +321,48 @@ export const AddPropertyDialog = ({ open, onOpenChange, onSuccess }: AddProperty
                 placeholder="8"
                 value={formData.dwelling_units}
                 onChange={(e) => setFormData({ ...formData, dwelling_units: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Owner Information */}
+          <div className="space-y-4 p-4 rounded-lg border border-border bg-muted/30">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Owner & Contact</span>
+              <span className="text-xs text-muted-foreground">(receives SMS alerts)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="owner_name">Owner Name</Label>
+                <Input
+                  id="owner_name"
+                  placeholder="ABC Realty LLC"
+                  value={formData.owner_name}
+                  onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="owner_phone">Owner Phone</Label>
+                <Input
+                  id="owner_phone"
+                  type="tel"
+                  placeholder="+1 (555) 123-4567"
+                  value={formData.owner_phone}
+                  onChange={(e) => setFormData({ ...formData, owner_phone: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium">Enable SMS Alerts</span>
+                <p className="text-xs text-muted-foreground">
+                  Get text messages when new violations are detected
+                </p>
+              </div>
+              <Switch
+                checked={formData.sms_enabled}
+                onCheckedChange={(checked) => setFormData({ ...formData, sms_enabled: checked })}
+                disabled={!formData.owner_phone}
               />
             </div>
           </div>
