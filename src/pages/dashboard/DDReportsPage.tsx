@@ -135,6 +135,33 @@ const DDReportsPage = () => {
     },
   });
 
+  const regenerateReport = useMutation({
+    mutationFn: async ({ reportId, address }: { reportId: string; address: string }) => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      
+      const response = await supabase.functions.invoke('generate-dd-report', {
+        body: { 
+          reportId,
+          address, 
+        },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      });
+      
+      if (response.error) throw new Error(response.error.message);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dd-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['dd-report', selectedReportId] });
+      toast({ title: "Report regenerated with fresh data" });
+    },
+    onError: (error) => {
+      console.error('Regenerate error:', error);
+      toast({ title: "Failed to regenerate report", variant: "destructive" });
+    },
+  });
+
   const filteredReports = reports?.filter(report => 
     searchQuery === '' || 
     report.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -175,6 +202,7 @@ const DDReportsPage = () => {
         report={selectedReport} 
         onBack={() => setSelectedReportId(null)}
         onDelete={() => deleteReport.mutate(selectedReport.id)}
+        onRegenerate={(reportId, address) => regenerateReport.mutate({ reportId, address })}
         userProfile={{
           email: user?.email || null,
           display_name: userProfile?.display_name || null,
