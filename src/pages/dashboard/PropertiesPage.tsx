@@ -67,19 +67,37 @@ const PropertiesPage = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
+      // First fetch properties
+      const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
-        .select(`
-          *,
-          violations:violations(count)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (propertiesError) throw propertiesError;
 
-      const propertiesWithCount = data?.map(p => ({
+      // Then fetch open violation counts for each property
+      const propertyIds = propertiesData?.map(p => p.id) || [];
+      
+      let violationCounts: Record<string, number> = {};
+      
+      if (propertyIds.length > 0) {
+        const { data: violationsData, error: violationsError } = await supabase
+          .from('violations')
+          .select('property_id')
+          .in('property_id', propertyIds)
+          .neq('status', 'closed'); // Only count non-closed violations
+        
+        if (!violationsError && violationsData) {
+          // Count violations per property
+          violationsData.forEach(v => {
+            violationCounts[v.property_id] = (violationCounts[v.property_id] || 0) + 1;
+          });
+        }
+      }
+
+      const propertiesWithCount = propertiesData?.map(p => ({
         ...p,
-        violations_count: p.violations?.[0]?.count || 0,
+        violations_count: violationCounts[p.id] || 0,
       })) || [];
 
       setProperties(propertiesWithCount as unknown as Property[]);
