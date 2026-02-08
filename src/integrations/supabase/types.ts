@@ -14,7 +14,237 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      properties: {
+        Row: {
+          address: string
+          assigned_phone_number: string | null
+          created_at: string
+          gross_sqft: number | null
+          has_boiler: boolean | null
+          has_elevator: boolean | null
+          has_gas: boolean | null
+          has_sprinkler: boolean | null
+          height_ft: number | null
+          id: string
+          jurisdiction: Database["public"]["Enums"]["jurisdiction_type"]
+          stories: number | null
+          updated_at: string
+          use_type: string | null
+          user_id: string
+        }
+        Insert: {
+          address: string
+          assigned_phone_number?: string | null
+          created_at?: string
+          gross_sqft?: number | null
+          has_boiler?: boolean | null
+          has_elevator?: boolean | null
+          has_gas?: boolean | null
+          has_sprinkler?: boolean | null
+          height_ft?: number | null
+          id?: string
+          jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
+          stories?: number | null
+          updated_at?: string
+          use_type?: string | null
+          user_id: string
+        }
+        Update: {
+          address?: string
+          assigned_phone_number?: string | null
+          created_at?: string
+          gross_sqft?: number | null
+          has_boiler?: boolean | null
+          has_elevator?: boolean | null
+          has_gas?: boolean | null
+          has_sprinkler?: boolean | null
+          height_ft?: number | null
+          id?: string
+          jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
+          stories?: number | null
+          updated_at?: string
+          use_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vendors: {
+        Row: {
+          coi_expiration_date: string | null
+          created_at: string
+          id: string
+          name: string
+          phone_number: string | null
+          status: string | null
+          trade_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          coi_expiration_date?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          phone_number?: string | null
+          status?: string | null
+          trade_type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          coi_expiration_date?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          phone_number?: string | null
+          status?: string | null
+          trade_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      violations: {
+        Row: {
+          agency: Database["public"]["Enums"]["agency_type"]
+          created_at: string
+          cure_due_date: string | null
+          description_raw: string | null
+          hearing_date: string | null
+          id: string
+          issued_date: string
+          penalty_text: string | null
+          property_id: string
+          source: string | null
+          status: Database["public"]["Enums"]["violation_status"]
+          updated_at: string
+          violation_number: string
+        }
+        Insert: {
+          agency: Database["public"]["Enums"]["agency_type"]
+          created_at?: string
+          cure_due_date?: string | null
+          description_raw?: string | null
+          hearing_date?: string | null
+          id?: string
+          issued_date: string
+          penalty_text?: string | null
+          property_id: string
+          source?: string | null
+          status?: Database["public"]["Enums"]["violation_status"]
+          updated_at?: string
+          violation_number: string
+        }
+        Update: {
+          agency?: Database["public"]["Enums"]["agency_type"]
+          created_at?: string
+          cure_due_date?: string | null
+          description_raw?: string | null
+          hearing_date?: string | null
+          id?: string
+          issued_date?: string
+          penalty_text?: string | null
+          property_id?: string
+          source?: string | null
+          status?: Database["public"]["Enums"]["violation_status"]
+          updated_at?: string
+          violation_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "violations_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_orders: {
+        Row: {
+          created_at: string
+          id: string
+          linked_violation_id: string | null
+          property_id: string
+          scope: string
+          status: Database["public"]["Enums"]["work_order_status"]
+          updated_at: string
+          vendor_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          linked_violation_id?: string | null
+          property_id: string
+          scope: string
+          status?: Database["public"]["Enums"]["work_order_status"]
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          linked_violation_id?: string | null
+          property_id?: string
+          scope?: string
+          status?: Database["public"]["Enums"]["work_order_status"]
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_orders_linked_violation_id_fkey"
+            columns: ["linked_violation_id"]
+            isOneToOne: false
+            referencedRelation: "violations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +253,10 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      agency_type: "DOB" | "ECB" | "FDNY"
+      jurisdiction_type: "NYC" | "NON_NYC"
+      violation_status: "open" | "in_progress" | "closed"
+      work_order_status: "open" | "in_progress" | "awaiting_docs" | "completed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +383,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      agency_type: ["DOB", "ECB", "FDNY"],
+      jurisdiction_type: ["NYC", "NON_NYC"],
+      violation_status: ["open", "in_progress", "closed"],
+      work_order_status: ["open", "in_progress", "awaiting_docs", "completed"],
+    },
   },
 } as const
