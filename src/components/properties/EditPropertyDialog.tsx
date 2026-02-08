@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, RefreshCw } from 'lucide-react';
+import { syncNYCBuildingData, toPropertyUpdate } from '@/lib/nyc-building-sync';
 
 const propertySchema = z.object({
   address: z.string().min(1, 'Address is required').max(500),
@@ -159,7 +160,7 @@ export const EditPropertyDialog = ({
     });
   }, [property, form]);
 
-  // Sync building data from NYC BIS
+  // Sync building data from NYC PLUTO + BIS
   const handleSyncBuildingData = async () => {
     const address = form.getValues('address');
     if (!address) {
@@ -169,53 +170,40 @@ export const EditPropertyDialog = ({
 
     setIsSyncing(true);
     try {
-      // Parse address into house number and street
-      const parts = address.split(',')[0].trim().split(/\s+/);
-      const houseNumber = parts[0];
-      const streetQuery = parts.slice(1).join(' ').toUpperCase();
+      const data = await syncNYCBuildingData(address);
 
-      // NYC DOB BIS-style dataset uses house__ / bin__ / existingno_of_stories, etc.
-      const url = new URL('https://data.cityofnewyork.us/resource/ic3t-wcy2.json');
-
-      if (streetQuery) {
-        url.searchParams.set(
-          '$where',
-          `house__ LIKE '%${houseNumber}%' AND upper(street_name) LIKE '%${streetQuery}%'`
-        );
-      } else {
-        url.searchParams.set('$where', `house__ LIKE '%${houseNumber}%'`);
-      }
-      url.searchParams.set('$limit', '5');
-
-      const response = await fetch(url.toString());
-      if (!response.ok) {
-        throw new Error(`Failed to fetch building data (${response.status})`);
-      }
-
-      const results = await response.json();
-
-      if (!Array.isArray(results) || results.length === 0) {
-        toast.error('No building found for this address in NYC BIS');
+      if (!data) {
+        toast.error('No building found for this address in NYC datasets');
         return;
       }
 
-      const building = results[0] as Record<string, any>;
-
       // Update form with fetched data
-      form.setValue('bin', building.bin__ || '');
-      form.setValue('borough', building.borough || '');
-      form.setValue('block', (building.block || '').toString().replace(/^0+/, '') || '0');
-      form.setValue('lot', (building.lot || '').toString().replace(/^0+/, '') || '0');
-      form.setValue('stories', building.existingno_of_stories ? parseInt(building.existingno_of_stories) : undefined);
-      form.setValue('height_ft', building.existing_height ? parseFloat(building.existing_height) : undefined);
-      form.setValue('gross_sqft', building.existing_zoning_sqft ? parseFloat(building.existing_zoning_sqft) : undefined);
-      form.setValue('dwelling_units', building.existing_dwelling_units ? parseInt(building.existing_dwelling_units) : undefined);
-      form.setValue('primary_use_group', building.existing_occupancy || '');
+      form.setValue('bin', data.bin || '');
+      form.setValue('borough', data.borough || '');
+      form.setValue('block', data.block || '');
+      form.setValue('lot', data.lot || '');
+      form.setValue('stories', data.stories ?? undefined);
+      form.setValue('height_ft', data.heightFt ?? undefined);
+      form.setValue('gross_sqft', data.grossSqft ?? undefined);
+      form.setValue('dwelling_units', data.dwellingUnits ?? undefined);
+      form.setValue('primary_use_group', data.occupancyGroup || '');
 
-      toast.success(`Synced data for BIN ${building.bin__ || ''}`);
+      // Save comprehensive data directly to database
+      const updateData = toPropertyUpdate(data);
+      const { error } = await supabase
+        .from('properties')
+        .update(updateData)
+        .eq('id', property.id);
+
+      if (error) {
+        console.error('Error saving synced data:', error);
+        toast.error('Data fetched but failed to save to database');
+      } else {
+        toast.success(`Synced comprehensive data for BIN ${data.bin}`);
+      }
     } catch (error) {
       console.error('Error syncing building data:', error);
-      toast.error('Failed to sync building data from NYC BIS');
+      toast.error('Failed to sync building data from NYC');
     } finally {
       setIsSyncing(false);
     }
