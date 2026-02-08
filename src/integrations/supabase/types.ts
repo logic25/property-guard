@@ -643,6 +643,7 @@ export type Database = {
           updated_at: string
           violation_class: string | null
           violation_number: string
+          violation_type: string | null
         }
         Insert: {
           agency: Database["public"]["Enums"]["agency_type"]
@@ -671,6 +672,7 @@ export type Database = {
           updated_at?: string
           violation_class?: string | null
           violation_number: string
+          violation_type?: string | null
         }
         Update: {
           agency?: Database["public"]["Enums"]["agency_type"]
@@ -699,6 +701,7 @@ export type Database = {
           updated_at?: string
           violation_class?: string | null
           violation_number?: string
+          violation_type?: string | null
         }
         Relationships: [
           {
