@@ -249,25 +249,50 @@ export const PropertyAIWidget = ({
   const hasDocuments = (allDocuments || documents).length > 0;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-primary" />
           Property AI
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
+      <CardContent className="p-0">
+        {/* Chat preview - shows recent messages or empty state */}
+        <div className="px-4 pb-3">
+          {messages.length > 0 ? (
+            <div className="space-y-2 mb-3">
+              {/* Show last 2 messages as preview */}
+              {messages.slice(-2).map((msg) => (
+                <div 
+                  key={msg.id} 
+                  className={`text-xs p-2 rounded-lg ${
+                    msg.role === 'user' 
+                      ? 'bg-primary/10 text-foreground ml-6' 
+                      : 'bg-muted text-muted-foreground mr-6'
+                  }`}
+                >
+                  <span className="font-medium">{msg.role === 'user' ? 'You: ' : 'AI: '}</span>
+                  <span className="line-clamp-2">{msg.content.replace(/\*\*/g, '')}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground mb-3">
+              Ask about violations, lease terms, deadlines, or zoning.
+            </p>
+          )}
+          
           {/* Quick Q&A Button */}
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button
                 className="w-full justify-between"
-                variant="outline"
+                variant={messages.length > 0 ? "default" : "outline"}
+                size="sm"
               >
                 <span className="flex items-center gap-2">
                   <MessageCircle className="w-4 h-4" />
-                  Ask about this property
+                  {messages.length > 0 ? 'Continue conversation' : 'Ask about this property'}
                 </span>
                 <Sparkles className="w-4 h-4" />
               </Button>
@@ -381,15 +406,15 @@ export const PropertyAIWidget = ({
               </div>
             </DialogContent>
           </Dialog>
-
-          {/* Document count */}
-          {hasDocuments && (
-            <div className="pt-2 border-t text-xs text-muted-foreground flex items-center gap-2">
-              <FileText className="w-3 h-3" />
-              {(allDocuments || documents).length} documents available for Q&A
-            </div>
-          )}
         </div>
+        
+        {/* Document count footer */}
+        {hasDocuments && (
+          <div className="px-4 pb-3 pt-2 border-t border-border text-xs text-muted-foreground flex items-center gap-2">
+            <FileText className="w-3 h-3" />
+            {(allDocuments || documents).length} documents available for Q&A
+          </div>
+        )}
       </CardContent>
     </Card>
   );
