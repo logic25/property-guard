@@ -85,6 +85,7 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
   );
   const [violationsOpen, setViolationsOpen] = useState(true);
   const [applicationsOpen, setApplicationsOpen] = useState(true);
+  const [applicationFilter, setApplicationFilter] = useState<string>('all');
 
   const handleExportPDF = async () => {
     if (!printRef.current) return;
@@ -404,7 +405,7 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
                         Permit Applications ({applications.length})
                       </CardTitle>
                       <CardDescription className="mt-1">
-                        DOB BIS, DOB NOW, and other agency applications
+                        DOB BIS and DOB NOW applications
                       </CardDescription>
                     </div>
                   </div>
@@ -412,6 +413,55 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
               </CardHeader>
               <CollapsibleContent>
                 <CardContent>
+                  {/* Filter Buttons */}
+                  <div className="flex flex-wrap gap-2 mb-4" onClick={(e) => e.stopPropagation()}>
+                    <Button 
+                      variant={applicationFilter === 'all' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setApplicationFilter('all')}
+                    >
+                      All ({applications.length})
+                    </Button>
+                    <Button 
+                      variant={applicationFilter === 'permit_entire' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setApplicationFilter('permit_entire')}
+                    >
+                      Permit Entire ({applications.filter((a: any) => a.status?.toLowerCase().includes('permit entire') || a.job_type?.toLowerCase() === 'nb').length})
+                    </Button>
+                    <Button 
+                      variant={applicationFilter === 'permit_partial' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setApplicationFilter('permit_partial')}
+                    >
+                      Permit Partial ({applications.filter((a: any) => a.status?.toLowerCase().includes('permit partial')).length})
+                    </Button>
+                    <Button 
+                      variant={applicationFilter === 'approved' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setApplicationFilter('approved')}
+                    >
+                      Approved ({applications.filter((a: any) => a.status?.toLowerCase().includes('approv') && !a.status?.toLowerCase().includes('disapprov')).length})
+                    </Button>
+                    <Button 
+                      variant={applicationFilter === 'disapproved' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setApplicationFilter('disapproved')}
+                    >
+                      Disapproved ({applications.filter((a: any) => a.status?.toLowerCase().includes('disapprov')).length})
+                    </Button>
+                    <Button 
+                      variant={applicationFilter === 'open' ? 'default' : 'outline'} 
+                      size="sm"
+                      onClick={() => setApplicationFilter('open')}
+                    >
+                      Open/Filed ({applications.filter((a: any) => {
+                        const s = (a.status || '').toLowerCase();
+                        return s.includes('file') || s.includes('plan') || s.includes('review') || s === 'p' || s === 'q';
+                      }).length})
+                    </Button>
+                  </div>
+                  
                   {applications.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       No applications found for this property.
@@ -422,24 +472,44 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-8"></TableHead>
-                            <TableHead>Application #</TableHead>
-                            <TableHead>Source</TableHead>
-                            <TableHead>Type</TableHead>
+                            <TableHead>Job #</TableHead>
+                            <TableHead>Job Type</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Filed</TableHead>
-                            <TableHead>Last Action</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Floor/Apt</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {applications.map((app: any, idx: number) => (
-                            <ExpandableApplicationRow
-                              key={app.id || idx}
-                              application={app}
-                              index={idx}
-                              note={lineItemNotes[`application-${app.id || idx}`] || ''}
-                              onNoteChange={(note) => updateLineItemNote('application', app.id || String(idx), note)}
-                            />
-                          ))}
+                          {applications
+                            .filter((app: any) => {
+                              if (applicationFilter === 'all') return true;
+                              const s = (app.status || '').toLowerCase();
+                              const jt = (app.job_type || '').toLowerCase();
+                              switch (applicationFilter) {
+                                case 'permit_entire':
+                                  return s.includes('permit entire') || jt === 'nb';
+                                case 'permit_partial':
+                                  return s.includes('permit partial');
+                                case 'approved':
+                                  return s.includes('approv') && !s.includes('disapprov');
+                                case 'disapproved':
+                                  return s.includes('disapprov');
+                                case 'open':
+                                  return s.includes('file') || s.includes('plan') || s.includes('review') || s === 'p' || s === 'q';
+                                default:
+                                  return true;
+                              }
+                            })
+                            .map((app: any, idx: number) => (
+                              <ExpandableApplicationRow
+                                key={app.id || idx}
+                                application={app}
+                                index={idx}
+                                note={lineItemNotes[`application-${app.id || idx}`] || ''}
+                                onNoteChange={(note) => updateLineItemNote('application', app.id || String(idx), note)}
+                              />
+                            ))}
                         </TableBody>
                       </Table>
                     </ScrollArea>
