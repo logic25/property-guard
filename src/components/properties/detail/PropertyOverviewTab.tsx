@@ -173,7 +173,7 @@ export const PropertyOverviewTab = ({
   const coStatus = getCOStatusBadge(property.co_status);
 
   const formatNumber = (num: number | null | undefined) => {
-    if (num === null || num === undefined) return '-';
+    if (num === null || num === undefined || num === 0) return '-';
     return num.toLocaleString();
   };
 
@@ -332,7 +332,7 @@ export const PropertyOverviewTab = ({
               <Building2 className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
                 <p className="text-xs text-muted-foreground">Stories</p>
-                <p className="font-medium text-sm">{property.stories || '-'}</p>
+                <p className="font-medium text-sm">{property.stories && property.stories > 0 ? property.stories : '-'}</p>
               </div>
             </div>
 
@@ -340,7 +340,7 @@ export const PropertyOverviewTab = ({
               <Ruler className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
                 <p className="text-xs text-muted-foreground">Height</p>
-                <p className="font-medium text-sm">{property.height_ft ? `${property.height_ft} ft` : '-'}</p>
+                <p className="font-medium text-sm">{property.height_ft && property.height_ft > 0 ? `${property.height_ft} ft` : '-'}</p>
               </div>
             </div>
 
@@ -349,7 +349,7 @@ export const PropertyOverviewTab = ({
               <div>
                 <p className="text-xs text-muted-foreground">Dwelling Units</p>
                 <p className="font-medium text-sm">
-                  {property.dwelling_units === 0 || property.dwelling_units === null ? 'N/A' : property.dwelling_units}
+                  {property.dwelling_units && property.dwelling_units > 0 ? property.dwelling_units : '-'}
                 </p>
               </div>
             </div>

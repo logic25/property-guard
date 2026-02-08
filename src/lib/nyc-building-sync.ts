@@ -95,6 +95,55 @@ const DOB_JOBS_API = 'https://data.cityofnewyork.us/resource/ic3t-wcy2.json';
 // NYC Geoclient API for cross streets (requires BBL)
 const GEOCLIENT_PLACE_API = 'https://data.cityofnewyork.us/resource/ahrc-nbvq.json';
 
+// Fetch building data from DOB Jobs by BIN
+async function fetchDOBJobsByBin(bin: string): Promise<Partial<NYCBuildingData> | null> {
+  try {
+    const url = new URL(DOB_JOBS_API);
+    url.searchParams.set('bin__', bin);
+    url.searchParams.set('$limit', '1');
+    url.searchParams.set('$order', 'latest_action_date DESC');
+
+    console.log('Fetching DOB Jobs data for BIN:', bin);
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      console.error('DOB Jobs API error:', response.status);
+      return null;
+    }
+
+    const results = await response.json();
+    if (!Array.isArray(results) || results.length === 0) {
+      console.log('No DOB Jobs found for BIN:', bin);
+      return null;
+    }
+
+    const d = results[0] as Record<string, any>;
+    console.log('DOB Jobs data found:', d);
+
+    return {
+      stories: parseInt_(d.existingno_of_stories) || parseInt_(d.proposed_no_of_stories),
+      heightFt: parseNumber(d.existing_height) || parseNumber(d.proposed_height),
+      dwellingUnits: parseInt_(d.existing_dwelling_units) || parseInt_(d.proposed_dwelling_units),
+      occupancyGroup: d.existing_occupancy || d.proposed_occupancy || null,
+      occupancyClassification: d.proposed_occupancy || null,
+      zoningDistrict: d.zoning_dist1 || null,
+      buildingClass: d.building_class || null,
+      latitude: parseNumber(d.gis_latitude),
+      longitude: parseNumber(d.gis_longitude),
+      councilDistrict: d.gis_council_district || null,
+      censusTract: d.gis_census_tract || null,
+      ntaName: d.gis_nta_name || null,
+      communityBoard: d.community___board || null,
+      isLandmark: parseYesNo(d.landmarked),
+      loftLaw: parseYesNo(d.loft_board),
+      isCityOwned: false,
+      legalAdultUse: parseYesNo(d.adult_estab),
+    };
+  } catch (error) {
+    console.error('Error fetching DOB Jobs data:', error);
+    return null;
+  }
+}
+
 // Helper to parse yes/no strings to boolean
 const parseYesNo = (value: string | undefined | null): boolean => {
   if (!value) return false;
@@ -307,17 +356,20 @@ export async function syncNYCBuildingDataByIdentifiers(
 ): Promise<NYCBuildingData | null> {
   console.log('Syncing by identifiers - BIN:', bin, 'BBL:', bbl);
   
-  // Fetch PLUTO data and cross streets in parallel
-  const [plutoData, crossStreets] = await Promise.all([
+  // Fetch PLUTO data, DOB Jobs data, and cross streets in parallel
+  const [plutoData, dobJobsData, crossStreets] = await Promise.all([
     bbl ? fetchPLUTOData(bbl) : Promise.resolve(null),
+    bin ? fetchDOBJobsByBin(bin) : Promise.resolve(null),
     bin ? fetchCrossStreets(bin) : Promise.resolve(null),
   ]);
   
   console.log('PLUTO data result:', plutoData);
+  console.log('DOB Jobs data result:', dobJobsData);
   console.log('Cross streets result:', crossStreets);
 
-  if (!plutoData) {
-    console.error('No PLUTO data found for BBL:', bbl);
+  // If neither PLUTO nor DOB Jobs returned data, we can't sync
+  if (!plutoData && !dobJobsData) {
+    console.error('No data found from PLUTO or DOB Jobs for BBL:', bbl, 'BIN:', bin);
     return null;
   }
 
@@ -327,7 +379,7 @@ export async function syncNYCBuildingDataByIdentifiers(
   const block = cleanBbl.length >= 6 ? cleanBbl.substring(1, 6).replace(/^0+/, '') || '0' : '';
   const lot = cleanBbl.length >= 10 ? cleanBbl.substring(6, 10).replace(/^0+/, '') || '0' : '';
 
-  // Build result from PLUTO data
+  // Build result, merging PLUTO (preferred) with DOB Jobs as fallback
   const result: NYCBuildingData = {
     // Identifiers
     bin: bin || '',
@@ -335,84 +387,84 @@ export async function syncNYCBuildingDataByIdentifiers(
     borough,
     block,
     lot,
-    address: (plutoData as any).address || '',
+    address: (plutoData as any)?.address || '',
 
-    // Dimensions from PLUTO
-    stories: plutoData.stories ?? null,
-    heightFt: plutoData.heightFt ?? null,
-    grossSqft: plutoData.grossSqft ?? null,
-    dwellingUnits: plutoData.dwellingUnits ?? null,
-    lotAreaSqft: plutoData.lotAreaSqft ?? null,
-    buildingAreaSqft: plutoData.buildingAreaSqft ?? null,
-    residentialAreaSqft: plutoData.residentialAreaSqft ?? null,
-    commercialAreaSqft: plutoData.commercialAreaSqft ?? null,
-    officeAreaSqft: plutoData.officeAreaSqft ?? null,
-    retailAreaSqft: plutoData.retailAreaSqft ?? null,
-    garageAreaSqft: plutoData.garageAreaSqft ?? null,
-    factoryAreaSqft: plutoData.factoryAreaSqft ?? null,
-    storageAreaSqft: plutoData.storageAreaSqft ?? null,
-    otherAreaSqft: plutoData.otherAreaSqft ?? null,
+    // Dimensions - prefer PLUTO, fallback to DOB Jobs
+    stories: plutoData?.stories ?? dobJobsData?.stories ?? null,
+    heightFt: plutoData?.heightFt ?? dobJobsData?.heightFt ?? null,
+    grossSqft: plutoData?.grossSqft ?? null,
+    dwellingUnits: plutoData?.dwellingUnits ?? dobJobsData?.dwellingUnits ?? null,
+    lotAreaSqft: plutoData?.lotAreaSqft ?? null,
+    buildingAreaSqft: plutoData?.buildingAreaSqft ?? null,
+    residentialAreaSqft: plutoData?.residentialAreaSqft ?? null,
+    commercialAreaSqft: plutoData?.commercialAreaSqft ?? null,
+    officeAreaSqft: plutoData?.officeAreaSqft ?? null,
+    retailAreaSqft: plutoData?.retailAreaSqft ?? null,
+    garageAreaSqft: plutoData?.garageAreaSqft ?? null,
+    factoryAreaSqft: plutoData?.factoryAreaSqft ?? null,
+    storageAreaSqft: plutoData?.storageAreaSqft ?? null,
+    otherAreaSqft: plutoData?.otherAreaSqft ?? null,
 
-    // Zoning from PLUTO
-    zoningDistrict: plutoData.zoningDistrict ?? null,
-    zoningMap: plutoData.zoningMap ?? null,
-    overlayDistrict: plutoData.overlayDistrict ?? null,
-    specialDistrict: plutoData.specialDistrict ?? null,
-    commercialOverlay: plutoData.commercialOverlay ?? null,
-    floorAreaRatio: plutoData.floorAreaRatio ?? null,
-    maxFloorAreaRatio: plutoData.maxFloorAreaRatio ?? null,
-    airRightsSqft: plutoData.unusedFar && plutoData.lotAreaSqft 
+    // Zoning - prefer PLUTO, fallback to DOB Jobs
+    zoningDistrict: plutoData?.zoningDistrict ?? dobJobsData?.zoningDistrict ?? null,
+    zoningMap: plutoData?.zoningMap ?? null,
+    overlayDistrict: plutoData?.overlayDistrict ?? null,
+    specialDistrict: plutoData?.specialDistrict ?? null,
+    commercialOverlay: plutoData?.commercialOverlay ?? null,
+    floorAreaRatio: plutoData?.floorAreaRatio ?? null,
+    maxFloorAreaRatio: plutoData?.maxFloorAreaRatio ?? null,
+    airRightsSqft: plutoData?.unusedFar && plutoData?.lotAreaSqft 
       ? Math.floor(plutoData.unusedFar * plutoData.lotAreaSqft) 
       : null,
-    unusedFar: plutoData.unusedFar ?? null,
+    unusedFar: plutoData?.unusedFar ?? null,
 
-    // Building classification
-    buildingClass: plutoData.buildingClass ?? null,
-    occupancyGroup: null,
-    occupancyClassification: null,
-    yearBuilt: plutoData.yearBuilt ?? null,
-    yearAltered1: plutoData.yearAltered1 ?? null,
-    yearAltered2: plutoData.yearAltered2 ?? null,
+    // Building classification - merge sources
+    buildingClass: plutoData?.buildingClass ?? dobJobsData?.buildingClass ?? null,
+    occupancyGroup: dobJobsData?.occupancyGroup ?? null,
+    occupancyClassification: dobJobsData?.occupancyClassification ?? null,
+    yearBuilt: plutoData?.yearBuilt ?? null,
+    yearAltered1: plutoData?.yearAltered1 ?? null,
+    yearAltered2: plutoData?.yearAltered2 ?? null,
 
-    // Location - use fetched cross streets
+    // Location - merge sources, preferring PLUTO
     crossStreets: crossStreets || null,
     specialPlaceName: null,
     buildingRemarks: null,
-    latitude: plutoData.latitude ?? null,
-    longitude: plutoData.longitude ?? null,
-    communityBoard: plutoData.communityBoard ?? null,
-    councilDistrict: plutoData.councilDistrict ?? null,
-    censusTract: plutoData.censusTract ?? null,
-    ntaName: null,
+    latitude: plutoData?.latitude ?? dobJobsData?.latitude ?? null,
+    longitude: plutoData?.longitude ?? dobJobsData?.longitude ?? null,
+    communityBoard: plutoData?.communityBoard ?? dobJobsData?.communityBoard ?? null,
+    councilDistrict: plutoData?.councilDistrict ?? dobJobsData?.councilDistrict ?? null,
+    censusTract: plutoData?.censusTract ?? dobJobsData?.censusTract ?? null,
+    ntaName: dobJobsData?.ntaName ?? null,
 
     // Landmark & special status
-    isLandmark: plutoData.isLandmark ?? false,
-    landmarkStatus: plutoData.isLandmark ? 'LANDMARK' : null,
+    isLandmark: plutoData?.isLandmark ?? dobJobsData?.isLandmark ?? false,
+    landmarkStatus: (plutoData?.isLandmark || dobJobsData?.isLandmark) ? 'LANDMARK' : null,
     specialStatus: null,
-    historicDistrict: plutoData.historicDistrict ?? null,
+    historicDistrict: plutoData?.historicDistrict ?? null,
 
-    // Regulatory restrictions (not available in PLUTO - would need BIS)
+    // Regulatory restrictions - use DOB Jobs data where available
     localLaw: null,
-    loftLaw: false,
+    loftLaw: dobJobsData?.loftLaw ?? false,
     sroRestricted: false,
     taRestricted: false,
     ubRestricted: false,
     environmentalRestrictions: null,
     grandfatheredSign: false,
-    legalAdultUse: false,
-    isCityOwned: false,
+    legalAdultUse: dobJobsData?.legalAdultUse ?? false,
+    isCityOwned: dobJobsData?.isCityOwned ?? false,
     professionalCertRestricted: false,
 
     // Additional info
     additionalBins: [],
     hpdMultipleDwelling: false,
-    numberOfBuildings: plutoData.numberOfBuildings ?? 1,
-    numberOfFloors: plutoData.stories ?? null,
+    numberOfBuildings: plutoData?.numberOfBuildings ?? 1,
+    numberOfFloors: plutoData?.stories ?? dobJobsData?.stories ?? null,
     basementCode: null,
-    assessedLandValue: plutoData.assessedLandValue ?? null,
-    assessedTotalValue: plutoData.assessedTotalValue ?? null,
-    exemptLandValue: plutoData.exemptLandValue ?? null,
-    exemptTotalValue: plutoData.exemptTotalValue ?? null,
+    assessedLandValue: plutoData?.assessedLandValue ?? null,
+    assessedTotalValue: plutoData?.assessedTotalValue ?? null,
+    exemptLandValue: plutoData?.exemptLandValue ?? null,
+    exemptTotalValue: plutoData?.exemptTotalValue ?? null,
   };
 
   return result;
