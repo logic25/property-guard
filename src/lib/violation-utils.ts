@@ -151,15 +151,24 @@ export const isResolvedViolationStatus = (status: string | null | undefined): bo
   );
 };
 
+// Check if violation_class contains a resolved indicator (e.g., "V*-DOB VIOLATION - DISMISSED")
+export const isResolvedViolationClass = (violationClass: string | null | undefined): boolean => {
+  if (!violationClass) return false;
+  const normalized = violationClass.toLowerCase().trim();
+  return RESOLVED_VIOLATION_STATUSES.some((resolved) => normalized.includes(resolved));
+};
+
 // Check if a violation should be counted as active
 export const isActiveViolation = (violation: {
   status?: string | null;
   oath_status?: string | null;
+  violation_class?: string | null;
 }): boolean => {
   // Exclude anything explicitly resolved first
   if (violation.status === 'closed') return false;
   if (isResolvedViolationStatus(violation.status)) return false;
   if (isResolvedOATHStatus(violation.oath_status)) return false;
+  if (isResolvedViolationClass(violation.violation_class)) return false;
 
   // Otherwise it's active (even if the OATH status is "Docketed", "Rescheduled", etc.)
   return true;
