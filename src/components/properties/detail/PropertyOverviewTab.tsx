@@ -258,10 +258,16 @@ export const PropertyOverviewTab = ({
               <p className="font-medium text-sm font-mono">{property.bin || '-'}</p>
             </div>
 
-            {/* BBL */}
+            {/* Borough / Block / Lot (parsed from BBL) */}
             <div>
-              <p className="text-xs text-muted-foreground">BBL</p>
-              <p className="font-medium text-sm font-mono">{property.bbl || '-'}</p>
+              <p className="text-xs text-muted-foreground">Borough / Block / Lot</p>
+              <p className="font-medium text-sm font-mono">
+                {property.bbl ? (
+                  <>
+                    {getBoroughName(property.bbl.charAt(0))} / {property.bbl.substring(1, 6).replace(/^0+/, '')} / {property.bbl.substring(6, 10).replace(/^0+/, '')}
+                  </>
+                ) : '-'}
+              </p>
             </div>
           </div>
 
