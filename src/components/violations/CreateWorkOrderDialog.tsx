@@ -55,7 +55,7 @@ export const CreateWorkOrderDialog = ({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   
-  const [selectedVendorId, setSelectedVendorId] = useState<string>('');
+  const [selectedVendorId, setSelectedVendorId] = useState<string>('none');
   const [scope, setScope] = useState('');
   const [sendSms, setSendSms] = useState(false);
   const [sendEmail, setSendEmail] = useState(false);
@@ -105,7 +105,7 @@ export const CreateWorkOrderDialog = ({
           property_id: propertyId,
           linked_violation_id: violation.id,
           scope: scope.trim(),
-          vendor_id: selectedVendorId || null,
+          vendor_id: selectedVendorId === 'none' ? null : selectedVendorId,
           status: 'open',
         })
         .select()
@@ -122,8 +122,8 @@ export const CreateWorkOrderDialog = ({
       if (violationError) throw violationError;
 
       // Send SMS if selected and vendor has phone
-      if (sendSms && selectedVendorId) {
-        const selectedVendor = vendors.find(v => v.id === selectedVendorId);
+      if (sendSms && selectedVendorId && selectedVendorId !== 'none') {
+  const selectedVendor = selectedVendorId !== 'none' ? vendors.find(v => v.id === selectedVendorId) : null;
         if (selectedVendor?.phone_number) {
           try {
             const { error: smsError } = await supabase.functions.invoke('send-sms', {
@@ -154,7 +154,7 @@ export const CreateWorkOrderDialog = ({
       onSuccess();
       
       // Reset form
-      setSelectedVendorId('');
+      setSelectedVendorId('none');
       setScope('');
       setSendSms(false);
       setSendEmail(false);
@@ -196,7 +196,7 @@ export const CreateWorkOrderDialog = ({
                 <SelectValue placeholder="Select a vendor..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No vendor</SelectItem>
+                <SelectItem value="none">No vendor</SelectItem>
                 {vendors.map((vendor) => (
                   <SelectItem key={vendor.id} value={vendor.id}>
                     {vendor.name} {vendor.trade_type && `(${vendor.trade_type})`}
