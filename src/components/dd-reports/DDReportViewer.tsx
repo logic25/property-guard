@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -23,9 +23,14 @@ import {
   StickyNote,
   Calendar,
   User,
-  MapPin
+  MapPin,
+  Loader2,
+  ExternalLink
 } from 'lucide-react';
 import { format } from 'date-fns';
+import DDReportPrintView from './DDReportPrintView';
+import html2pdf from 'html2pdf.js';
+import { getAgencyColor, getAgencyLookupUrl } from '@/lib/violation-utils';
 
 interface DDReportViewerProps {
   report: {
@@ -53,6 +58,8 @@ interface DDReportViewerProps {
 const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const printRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [generalNotes, setGeneralNotes] = useState(report.general_notes || '');
   const [lineItemNotes, setLineItemNotes] = useState<Record<string, string>>(
     (report.line_item_notes || []).reduce((acc: Record<string, string>, item: any) => {
@@ -60,7 +67,30 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
       return acc;
     }, {})
   );
-  const [editingNote, setEditingNote] = useState<string | null>(null);
+
+  const handleExportPDF = async () => {
+    if (!printRef.current) return;
+    
+    setIsExporting(true);
+    try {
+      const element = printRef.current;
+      const opt = {
+        margin: 0.5,
+        filename: `DD-Report-${report.address.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const }
+      };
+      
+      await html2pdf().set(opt).from(element).save();
+      toast({ title: "PDF exported successfully" });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast({ title: "Failed to export PDF", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const saveNotes = useMutation({
     mutationFn: async () => {
@@ -140,8 +170,12 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
             <Save className="w-4 h-4 mr-2" />
             Save Notes
           </Button>
-          <Button variant="outline">
-            <Download className="w-4 h-4 mr-2" />
+          <Button variant="outline" onClick={handleExportPDF} disabled={isExporting}>
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
             Export PDF
           </Button>
           <Button variant="destructive" size="icon" onClick={onDelete}>
@@ -427,6 +461,13 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
           />
         </CardContent>
       </Card>
+
+      {/* Hidden print view for PDF export */}
+      <div className="fixed -left-[9999px] -top-[9999px]">
+        <div ref={printRef}>
+          <DDReportPrintView report={report} />
+        </div>
+      </div>
     </div>
   );
 };
