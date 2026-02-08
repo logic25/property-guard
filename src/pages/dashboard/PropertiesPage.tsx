@@ -3,40 +3,29 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { 
   Building2, 
   Plus, 
   Search,
-  MapPin,
   Loader2,
   AlertTriangle,
-  MoreVertical,
-  Pencil,
-  Trash2
+  LayoutGrid,
+  TableIcon,
+  RefreshCw
 } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
+import { AddPropertyDialog } from '@/components/properties/AddPropertyDialog';
+import { PropertyCard } from '@/components/properties/PropertyCard';
+import { getBoroughName } from '@/lib/property-utils';
 
 interface Property {
   id: string;
@@ -44,12 +33,22 @@ interface Property {
   jurisdiction: 'NYC' | 'NON_NYC';
   stories: number | null;
   use_type: string | null;
+  bin: string | null;
+  bbl: string | null;
+  borough: string | null;
+  primary_use_group: string | null;
+  dwelling_units: number | null;
+  co_status: string | null;
+  applicable_agencies: string[] | null;
   has_gas: boolean;
   has_boiler: boolean;
   has_elevator: boolean;
   has_sprinkler: boolean;
   violations_count?: number;
+  last_synced_at?: string | null;
 }
+
+type ViewMode = 'table' | 'cards';
 
 const PropertiesPage = () => {
   const { user } = useAuth();
@@ -57,18 +56,9 @@ const PropertiesPage = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Form state
-  const [formData, setFormData] = useState({
-    address: '',
-    jurisdiction: 'NYC' as 'NYC' | 'NON_NYC',
-    stories: '',
-    use_type: '',
-    has_gas: false,
-    has_boiler: false,
-    has_elevator: false,
-    has_sprinkler: false,
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    return (localStorage.getItem('propertiesViewMode') as ViewMode) || 'table';
   });
 
   const fetchProperties = async () => {
@@ -90,7 +80,7 @@ const PropertiesPage = () => {
         violations_count: p.violations?.[0]?.count || 0,
       })) || [];
 
-      setProperties(propertiesWithCount);
+      setProperties(propertiesWithCount as unknown as Property[]);
     } catch (error) {
       console.error('Error fetching properties:', error);
       toast.error('Failed to load properties');
@@ -103,47 +93,9 @@ const PropertiesPage = () => {
     fetchProperties();
   }, [user]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-
-    setIsSubmitting(true);
-
-    try {
-      const { error } = await supabase.from('properties').insert({
-        user_id: user.id,
-        address: formData.address,
-        jurisdiction: formData.jurisdiction,
-        stories: formData.stories ? parseInt(formData.stories) : null,
-        use_type: formData.use_type || null,
-        has_gas: formData.has_gas,
-        has_boiler: formData.has_boiler,
-        has_elevator: formData.has_elevator,
-        has_sprinkler: formData.has_sprinkler,
-      });
-
-      if (error) throw error;
-
-      toast.success('Property added successfully');
-      setIsDialogOpen(false);
-      setFormData({
-        address: '',
-        jurisdiction: 'NYC',
-        stories: '',
-        use_type: '',
-        has_gas: false,
-        has_boiler: false,
-        has_elevator: false,
-        has_sprinkler: false,
-      });
-      fetchProperties();
-    } catch (error) {
-      console.error('Error adding property:', error);
-      toast.error('Failed to add property');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  useEffect(() => {
+    localStorage.setItem('propertiesViewMode', viewMode);
+  }, [viewMode]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this property?')) return;
@@ -160,9 +112,94 @@ const PropertiesPage = () => {
     }
   };
 
+  const syncAllViolations = async () => {
+    const propertiesWithBin = properties.filter(p => p.bin && p.jurisdiction === 'NYC');
+    
+    if (propertiesWithBin.length === 0) {
+      toast.error('No NYC properties have a BIN. Add BIN to properties to sync violations.');
+      return;
+    }
+
+    setIsSyncing(true);
+    let totalNew = 0;
+    let errors = 0;
+
+    try {
+      for (const property of propertiesWithBin) {
+        try {
+          const { data, error } = await supabase.functions.invoke('fetch-nyc-violations', {
+            body: { 
+              bin: property.bin, 
+              property_id: property.id,
+              applicable_agencies: property.applicable_agencies || ['DOB', 'ECB']
+            }
+          });
+
+          if (error) {
+            console.error(`Error syncing ${property.address}:`, error);
+            errors++;
+          } else if (data?.total_found) {
+            totalNew += data.total_found;
+          }
+        } catch (err) {
+          console.error(`Failed to sync ${property.address}:`, err);
+          errors++;
+        }
+      }
+
+      if (errors > 0) {
+        toast.warning(`Sync completed with ${errors} error(s). Found ${totalNew} violations.`);
+      } else if (totalNew > 0) {
+        toast.success(`Found ${totalNew} violations from NYC Open Data.`);
+      } else {
+        toast.info('No new violations found.');
+      }
+
+      await fetchProperties();
+    } catch (error) {
+      console.error('Error during sync:', error);
+      toast.error('Failed to sync violations');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const filteredProperties = properties.filter(p =>
-    p.address.toLowerCase().includes(searchQuery.toLowerCase())
+    p.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.borough?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.bin?.includes(searchQuery)
   );
+
+  const getCOStatusDisplay = (status: string | null | undefined) => {
+    switch (status) {
+      case 'valid':
+        return { icon: '🟢', label: 'Valid CO', className: 'bg-success/10 text-success' };
+      case 'temporary':
+        return { icon: '🟡', label: 'Temp CO', className: 'bg-warning/10 text-warning' };
+      case 'expired_tco':
+        return { icon: '🔴', label: 'Expired', className: 'bg-destructive/10 text-destructive' };
+      case 'missing':
+        return { icon: '🔴', label: 'No CO', className: 'bg-destructive/10 text-destructive' };
+      case 'pre_1938':
+        return { icon: '🏛️', label: 'Pre-1938', className: 'bg-muted text-muted-foreground' };
+      case 'use_violation':
+        return { icon: '🟡', label: 'Use Viol.', className: 'bg-warning/10 text-warning' };
+      default:
+        return { icon: '❔', label: 'Unknown', className: 'bg-muted text-muted-foreground' };
+    }
+  };
+
+  const getPropertyTypeDisplay = (property: Property) => {
+    const useGroup = property.primary_use_group || '';
+    const units = property.dwelling_units;
+    
+    if (useGroup.includes('R-2') || useGroup.includes('R-1')) {
+      return `${useGroup}${units ? ` (${units} units)` : ''}`;
+    }
+    if (useGroup) return useGroup;
+    if (property.use_type) return property.use_type;
+    return '-';
+  };
 
   if (loading) {
     return (
@@ -173,7 +210,7 @@ const PropertiesPage = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -182,180 +219,167 @@ const PropertiesPage = () => {
             Manage your buildings and track compliance
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="hero">
-              <Plus className="w-4 h-4" />
-              Add Property
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="font-display text-xl">Add New Property</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-5 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="address">Address *</Label>
-                <Input
-                  id="address"
-                  placeholder="123 Main Street, New York, NY 10001"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Jurisdiction</Label>
-                  <Select
-                    value={formData.jurisdiction}
-                    onValueChange={(v) => setFormData({ ...formData, jurisdiction: v as 'NYC' | 'NON_NYC' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NYC">NYC</SelectItem>
-                      <SelectItem value="NON_NYC">Non-NYC</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="stories">Stories</Label>
-                  <Input
-                    id="stories"
-                    type="number"
-                    placeholder="4"
-                    value={formData.stories}
-                    onChange={(e) => setFormData({ ...formData, stories: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="use_type">Use Type</Label>
-                <Input
-                  id="use_type"
-                  placeholder="Mixed-use, Retail, Residential..."
-                  value={formData.use_type}
-                  onChange={(e) => setFormData({ ...formData, use_type: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label>Building Features</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { key: 'has_gas', label: 'Has Gas' },
-                    { key: 'has_boiler', label: 'Has Boiler' },
-                    { key: 'has_elevator', label: 'Has Elevator' },
-                    { key: 'has_sprinkler', label: 'Has Sprinkler' },
-                  ].map((feature) => (
-                    <div key={feature.key} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                      <span className="text-sm font-medium">{feature.label}</span>
-                      <Switch
-                        checked={formData[feature.key as keyof typeof formData] as boolean}
-                        onCheckedChange={(checked) => setFormData({ ...formData, [feature.key]: checked })}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="hero" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Property'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search properties..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
-      {/* Properties Grid */}
-      {filteredProperties.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProperties.map((property) => (
-            <div
-              key={property.id}
-              className="bg-card rounded-xl border border-border p-6 shadow-card hover:shadow-card-hover transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Building2 className="w-6 h-6 text-primary" />
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
-                      <Pencil className="w-4 h-4 mr-2" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      className="text-destructive"
-                      onClick={() => handleDelete(property.id)}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <h3 className="font-display font-semibold text-foreground mb-1 line-clamp-2">
-                {property.address}
-              </h3>
-              
-              <div className="flex items-center gap-2 mb-4">
-                <span className={`
-                  px-2 py-0.5 rounded text-xs font-medium
-                  ${property.jurisdiction === 'NYC' ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground'}
-                `}>
-                  {property.jurisdiction}
-                </span>
-                {property.use_type && (
-                  <span className="text-xs text-muted-foreground">{property.use_type}</span>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-border">
-                <div className="flex items-center gap-1 text-sm">
-                  <MapPin className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">
-                    {property.stories ? `${property.stories} stories` : 'N/A'}
-                  </span>
-                </div>
-                {property.violations_count && property.violations_count > 0 ? (
-                  <div className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/10 text-destructive text-xs font-medium">
-                    <AlertTriangle className="w-3 h-3" />
-                    {property.violations_count} violation{property.violations_count > 1 ? 's' : ''}
-                  </div>
-                ) : (
-                  <span className="text-xs text-success font-medium">Compliant</span>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            onClick={syncAllViolations}
+            disabled={isSyncing || properties.length === 0}
+          >
+            {isSyncing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {isSyncing ? 'Syncing...' : 'Sync All'}
+          </Button>
+          <Button variant="hero" onClick={() => setIsDialogOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Add Property
+          </Button>
         </div>
+      </div>
+
+      {/* Search and View Toggle */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by address, borough, or BIN..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <div className="flex items-center gap-1 p-1 rounded-lg border border-border bg-muted/30">
+          <Button
+            variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setViewMode('table')}
+            className="h-8 px-3"
+          >
+            <TableIcon className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'cards' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setViewMode('cards')}
+            className="h-8 px-3"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Properties Display */}
+      {filteredProperties.length > 0 ? (
+        viewMode === 'table' ? (
+          <div className="rounded-xl border border-border overflow-hidden bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="font-semibold">Address</TableHead>
+                  <TableHead className="font-semibold">Borough</TableHead>
+                  <TableHead className="font-semibold">Type</TableHead>
+                  <TableHead className="font-semibold">CO Status</TableHead>
+                  <TableHead className="font-semibold">Agencies</TableHead>
+                  <TableHead className="font-semibold text-center">Violations</TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProperties.map((property) => {
+                  const coStatus = getCOStatusDisplay(property.co_status);
+                  const violationsCount = property.violations_count || 0;
+                  
+                  return (
+                    <TableRow key={property.id} className="hover:bg-muted/30 cursor-pointer">
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                            <Building2 className="w-4 h-4 text-primary" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-foreground line-clamp-1">
+                              {property.address}
+                            </div>
+                            {property.bin && (
+                              <div className="text-xs text-muted-foreground">
+                                BIN: {property.bin}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {property.jurisdiction === 'NYC' ? (
+                          <span className="text-sm">
+                            {property.borough ? getBoroughName(property.borough) : 'NYC'}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Non-NYC</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{getPropertyTypeDisplay(property)}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${coStatus.className}`}>
+                          <span>{coStatus.icon}</span>
+                          {coStatus.label}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {(property.applicable_agencies || []).slice(0, 3).map((agency) => (
+                            <Badge key={agency} variant="outline" className="text-[10px] px-1.5 py-0">
+                              {agency}
+                            </Badge>
+                          ))}
+                          {(property.applicable_agencies || []).length > 3 && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              +{(property.applicable_agencies || []).length - 3}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {violationsCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-destructive/10 text-destructive text-xs font-medium">
+                            <AlertTriangle className="w-3 h-3" />
+                            {violationsCount}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">0</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {violationsCount > 0 ? (
+                          <Badge variant="destructive" className="text-xs">
+                            Issues
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs bg-success/10 text-success border-0">
+                            Compliant
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProperties.map((property) => (
+              <PropertyCard
+                key={property.id}
+                property={property}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        )
       ) : (
         <div className="text-center py-16 bg-card rounded-xl border border-border">
           <Building2 className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -371,6 +395,12 @@ const PropertiesPage = () => {
           </Button>
         </div>
       )}
+
+      <AddPropertyDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        onSuccess={fetchProperties}
+      />
     </div>
   );
 };
