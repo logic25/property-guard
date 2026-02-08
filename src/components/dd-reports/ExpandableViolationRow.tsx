@@ -14,10 +14,19 @@ interface ExpandableViolationRowProps {
   bbl?: string | null;
 }
 
-// Format date to MM/DD/YY
+// Format date to MM/DD/YY - handles various NYC Open Data date formats
 const formatDate = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '—';
   try {
+    // Handle YYYYMMDD format (common in NYC Open Data)
+    if (/^\d{8}$/.test(dateStr)) {
+      const year = dateStr.slice(0, 4);
+      const month = dateStr.slice(4, 6);
+      const day = dateStr.slice(6, 8);
+      return `${month}/${day}/${year.slice(-2)}`;
+    }
+    
+    // Handle ISO or other standard formats
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
     return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;

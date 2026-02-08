@@ -43,6 +43,27 @@ const generateReportId = (date: string): string => {
   return `pg-${year}-${month}-${day}-${seq}`;
 };
 
+// Format date to MM/DD/YY - handles various NYC Open Data date formats
+const formatShortDate = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '—';
+  try {
+    // Handle YYYYMMDD format (common in NYC Open Data)
+    if (/^\d{8}$/.test(dateStr)) {
+      const year = dateStr.slice(0, 4);
+      const month = dateStr.slice(4, 6);
+      const day = dateStr.slice(6, 8);
+      return `${month}/${day}/${year.slice(-2)}`;
+    }
+    
+    // Handle ISO or other standard formats
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
+  } catch {
+    return dateStr;
+  }
+};
+
 const DDReportPrintView = ({ report, userProfile }: DDReportPrintViewProps) => {
   const violations = report.violations_data || [];
   const applications = report.applications_data || [];
@@ -170,13 +191,13 @@ const DDReportPrintView = ({ report, userProfile }: DDReportPrintViewProps) => {
           <h3 className="text-lg font-bold border-b border-gray-300 pb-1 mb-3 text-red-600">⚠ Active Orders</h3>
           {orders.stop_work?.map((order: any, idx: number) => (
             <div key={`swo-${idx}`} className="p-3 mb-2 border border-red-300 bg-red-50 rounded">
-              <p className="font-bold">Stop Work Order - {order.issued_date}</p>
+              <p className="font-bold">Stop Work Order - {formatShortDate(order.issued_date)}</p>
               <p className="text-sm">{order.description || 'No description available'}</p>
             </div>
           ))}
           {orders.vacate?.map((order: any, idx: number) => (
             <div key={`vacate-${idx}`} className="p-3 mb-2 border border-red-300 bg-red-50 rounded">
-              <p className="font-bold">Vacate Order - {order.issued_date}</p>
+              <p className="font-bold">Vacate Order - {formatShortDate(order.issued_date)}</p>
               <p className="text-sm">{order.description || 'No description available'}</p>
             </div>
           ))}
@@ -230,7 +251,7 @@ const DDReportPrintView = ({ report, userProfile }: DDReportPrintViewProps) => {
                   <td className="border p-2">{v.agency}</td>
                   <td className="border p-2 max-w-[200px] truncate">{v.violation_type || v.description_raw || '—'}</td>
                   <td className="border p-2">{v.severity || '—'}</td>
-                  <td className="border p-2">{v.issued_date || '—'}</td>
+                  <td className="border p-2">{formatShortDate(v.issued_date)}</td>
                   <td className="border p-2">{v.status}</td>
                 </tr>
               ))}
@@ -266,7 +287,7 @@ const DDReportPrintView = ({ report, userProfile }: DDReportPrintViewProps) => {
                   <td className="border p-2">{app.source}</td>
                   <td className="border p-2">{app.application_type || app.job_type || '—'}</td>
                   <td className="border p-2">{app.status || '—'}</td>
-                  <td className="border p-2">{app.filing_date || '—'}</td>
+                  <td className="border p-2">{formatShortDate(app.filing_date)}</td>
                   <td className="border p-2">{app.estimated_cost ? `$${Number(app.estimated_cost).toLocaleString()}` : '—'}</td>
                 </tr>
               ))}
