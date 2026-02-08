@@ -32,8 +32,21 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import DDReportPrintView from './DDReportPrintView';
+import ExpandableViolationRow from './ExpandableViolationRow';
+import ExpandableApplicationRow from './ExpandableApplicationRow';
 import html2pdf from 'html2pdf.js';
 import { getAgencyColor, getAgencyLookupUrl } from '@/lib/violation-utils';
+
+// Format BBL as Borough-Block-Lot
+const formatBBL = (bbl: string | null | undefined): string => {
+  if (!bbl) return '—';
+  const clean = bbl.replace(/\D/g, '');
+  if (clean.length < 10) return bbl;
+  const borough = clean.slice(0, 1);
+  const block = clean.slice(1, 6).replace(/^0+/, '') || '0';
+  const lot = clean.slice(6, 10).replace(/^0+/, '') || '0';
+  return `${borough}-${block}-${lot}`;
+};
 
 interface DDReportViewerProps {
   report: {
@@ -204,8 +217,8 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
               <p className="font-mono">{report.bin || building.bin || '—'}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">BBL</p>
-              <p className="font-mono">{report.bbl || building.bbl || '—'}</p>
+              <p className="text-sm text-muted-foreground">BBL (Borough-Block-Lot)</p>
+              <p className="font-mono">{formatBBL(report.bbl || building.bbl)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Year Built</p>
@@ -328,47 +341,29 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
                       No open violations found for this property.
                     </div>
                   ) : (
-                    <ScrollArea className="h-[400px]">
+                    <ScrollArea className="h-[500px]">
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead className="w-8"></TableHead>
                             <TableHead>Violation #</TableHead>
                             <TableHead>Agency</TableHead>
                             <TableHead>Type</TableHead>
                             <TableHead>Severity</TableHead>
                             <TableHead>Issued</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Note</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {violations.map((v: any, idx: number) => (
-                            <TableRow key={v.id || idx}>
-                              <TableCell className="font-mono text-sm">{v.violation_number}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{v.agency}</Badge>
-                              </TableCell>
-                              <TableCell className="max-w-[200px] truncate">{v.violation_type || v.description_raw}</TableCell>
-                              <TableCell>
-                                <Badge variant={getSeverityVariant(v.severity)}>
-                                  {v.severity || 'Unknown'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>{v.issued_date}</TableCell>
-                              <TableCell>
-                                <Badge variant={v.status === 'open' ? 'destructive' : 'default'}>
-                                  {v.status}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  placeholder="Add note..."
-                                  value={lineItemNotes[`violation-${v.id || idx}`] || ''}
-                                  onChange={(e) => updateLineItemNote('violation', v.id || String(idx), e.target.value)}
-                                  className="h-8 text-sm"
-                                />
-                              </TableCell>
-                            </TableRow>
+                            <ExpandableViolationRow
+                              key={v.id || idx}
+                              violation={v}
+                              index={idx}
+                              note={lineItemNotes[`violation-${v.id || idx}`] || ''}
+                              onNoteChange={(note) => updateLineItemNote('violation', v.id || String(idx), note)}
+                              bbl={report.bbl || building.bbl}
+                            />
                           ))}
                         </TableBody>
                       </Table>
@@ -405,39 +400,27 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
                       No applications found for this property.
                     </div>
                   ) : (
-                    <ScrollArea className="h-[400px]">
+                    <ScrollArea className="h-[500px]">
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead className="w-8"></TableHead>
                             <TableHead>Application #</TableHead>
+                            <TableHead>Source</TableHead>
                             <TableHead>Type</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Filed</TableHead>
-                            <TableHead>Est. Cost</TableHead>
-                            <TableHead>Note</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {applications.map((app: any, idx: number) => (
-                            <TableRow key={app.id || idx}>
-                              <TableCell className="font-mono text-sm">{app.application_number || app.job_number}</TableCell>
-                              <TableCell>{app.application_type || app.job_type}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{app.status}</Badge>
-                              </TableCell>
-                              <TableCell>{app.filing_date || app.filed_date}</TableCell>
-                              <TableCell>
-                                {app.estimated_cost ? `$${Number(app.estimated_cost).toLocaleString()}` : '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  placeholder="Add note..."
-                                  value={lineItemNotes[`application-${app.id || idx}`] || ''}
-                                  onChange={(e) => updateLineItemNote('application', app.id || String(idx), e.target.value)}
-                                  className="h-8 text-sm"
-                                />
-                              </TableCell>
-                            </TableRow>
+                            <ExpandableApplicationRow
+                              key={app.id || idx}
+                              application={app}
+                              index={idx}
+                              note={lineItemNotes[`application-${app.id || idx}`] || ''}
+                              onNoteChange={(note) => updateLineItemNote('application', app.id || String(idx), note)}
+                            />
                           ))}
                         </TableBody>
                       </Table>
