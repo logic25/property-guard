@@ -340,6 +340,7 @@ const PropertyDetailPage = () => {
           <PropertyViolationsTab 
             violations={violations} 
             onRefresh={fetchPropertyData}
+            bbl={property.bbl}
           />
         </TabsContent>
 

@@ -23,9 +23,18 @@ import {
   ExternalLink,
   AlertOctagon,
   Ban,
-  Building2
+  Building2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  getAgencyLookupUrl, 
+  getAgencyColor, 
+  getStatusColor, 
+  getOATHLookupUrl 
+} from '@/lib/violation-utils';
 
 interface Violation {
   id: string;
@@ -40,6 +49,7 @@ interface Violation {
   is_vacate_order: boolean;
   property_id: string;
   property_address?: string;
+  property_bbl?: string | null;
 }
 
 interface PortfolioViolationsViewProps {
@@ -47,14 +57,19 @@ interface PortfolioViolationsViewProps {
   portfolioName: string;
 }
 
+type SortField = 'issued_date' | 'agency' | 'status' | 'property_address';
+type SortDirection = 'asc' | 'desc';
+
 export const PortfolioViolationsView = ({ violations, portfolioName }: PortfolioViolationsViewProps) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [agencyFilter, setAgencyFilter] = useState<string>('all');
   const [propertyFilter, setPropertyFilter] = useState<string>('all');
+  const [sortField, setSortField] = useState<SortField>('issued_date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
-  const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))], [violations]);
+  const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))].sort(), [violations]);
   const properties = useMemo(() => {
     const map = new Map<string, string>();
     violations.forEach(v => {
@@ -65,8 +80,24 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
     return Array.from(map.entries());
   }, [violations]);
 
-  const filteredViolations = useMemo(() => {
-    return violations.filter(v => {
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-50" />;
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="w-3 h-3 ml-1" /> 
+      : <ArrowDown className="w-3 h-3 ml-1" />;
+  };
+
+  const filteredAndSortedViolations = useMemo(() => {
+    let result = violations.filter(v => {
       const matchesSearch = 
         v.violation_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         v.description_raw?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -78,35 +109,29 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
       
       return matchesSearch && matchesStatus && matchesAgency && matchesProperty;
     });
-  }, [violations, searchQuery, statusFilter, agencyFilter, propertyFilter]);
 
-  const getAgencyColor = (agency: string) => {
-    const colors: Record<string, string> = {
-      FDNY: 'bg-red-500/10 text-red-600 border-red-200',
-      DOB: 'bg-orange-500/10 text-orange-600 border-orange-200',
-      ECB: 'bg-blue-500/10 text-blue-600 border-blue-200',
-      HPD: 'bg-purple-500/10 text-purple-600 border-purple-200',
-      DEP: 'bg-cyan-500/10 text-cyan-600 border-cyan-200',
-      DOT: 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
-      DSNY: 'bg-green-500/10 text-green-600 border-green-200',
-      LPC: 'bg-pink-500/10 text-pink-600 border-pink-200',
-      DOF: 'bg-indigo-500/10 text-indigo-600 border-indigo-200',
-    };
-    return colors[agency] || 'bg-gray-500/10 text-gray-600 border-gray-200';
-  };
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'issued_date':
+          comparison = new Date(a.issued_date).getTime() - new Date(b.issued_date).getTime();
+          break;
+        case 'agency':
+          comparison = a.agency.localeCompare(b.agency);
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+        case 'property_address':
+          comparison = (a.property_address || '').localeCompare(b.property_address || '');
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'open': return 'bg-destructive/10 text-destructive';
-      case 'in_progress': return 'bg-warning/10 text-warning';
-      case 'closed': return 'bg-success/10 text-success';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
-
-  const getOATHLookupUrl = (ticketNumber: string) => {
-    return `https://a820-summonsfinder.nyc.gov/DARP/OATHViewer/ticket?ticket_number=${ticketNumber}`;
-  };
+    return result;
+  }, [violations, searchQuery, statusFilter, agencyFilter, propertyFilter, sortField, sortDirection]);
 
   return (
     <div className="space-y-4">
@@ -183,22 +208,50 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
       </div>
 
       {/* Table */}
-      {filteredViolations.length > 0 ? (
+      {filteredAndSortedViolations.length > 0 ? (
         <div className="rounded-xl border border-border overflow-hidden bg-card">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="font-semibold">Property</TableHead>
+                <TableHead 
+                  className="font-semibold cursor-pointer hover:bg-muted/80"
+                  onClick={() => handleSort('property_address')}
+                >
+                  <div className="flex items-center">
+                    Property {getSortIcon('property_address')}
+                  </div>
+                </TableHead>
                 <TableHead className="font-semibold">Violation</TableHead>
-                <TableHead className="font-semibold">Agency</TableHead>
-                <TableHead className="font-semibold">Issued</TableHead>
+                <TableHead 
+                  className="font-semibold cursor-pointer hover:bg-muted/80"
+                  onClick={() => handleSort('agency')}
+                >
+                  <div className="flex items-center">
+                    Agency {getSortIcon('agency')}
+                  </div>
+                </TableHead>
+                <TableHead 
+                  className="font-semibold cursor-pointer hover:bg-muted/80"
+                  onClick={() => handleSort('issued_date')}
+                >
+                  <div className="flex items-center">
+                    Issued {getSortIcon('issued_date')}
+                  </div>
+                </TableHead>
                 <TableHead className="font-semibold">Deadline</TableHead>
-                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead 
+                  className="font-semibold cursor-pointer hover:bg-muted/80"
+                  onClick={() => handleSort('status')}
+                >
+                  <div className="flex items-center">
+                    Status {getSortIcon('status')}
+                  </div>
+                </TableHead>
                 <TableHead className="font-semibold">Lookup</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredViolations.map((violation) => (
+              {filteredAndSortedViolations.map((violation) => (
                 <TableRow key={violation.id} className="hover:bg-muted/30">
                   <TableCell>
                     <Button
@@ -222,9 +275,15 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={getAgencyColor(violation.agency)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-auto py-1 px-2 ${getAgencyColor(violation.agency)}`}
+                      onClick={() => window.open(getAgencyLookupUrl(violation.agency, violation.violation_number, violation.property_bbl), '_blank')}
+                    >
                       {violation.agency}
-                    </Badge>
+                      <ExternalLink className="w-3 h-3 ml-1" />
+                    </Button>
                   </TableCell>
                   <TableCell className="text-sm">
                     {new Date(violation.issued_date).toLocaleDateString()}
