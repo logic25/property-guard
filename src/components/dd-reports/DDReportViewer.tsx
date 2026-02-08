@@ -110,6 +110,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
   const [applicationsOpen, setApplicationsOpen] = useState(true);
   const [applicationFilter, setApplicationFilter] = useState<string>('all');
   const [violationFilter, setViolationFilter] = useState<string>('all');
+  const [criticalOrdersOpen, setCriticalOrdersOpen] = useState(false);
 
   const handleExportPDF = async () => {
     if (!printRef.current) return;
@@ -366,8 +367,11 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
               }`}
               onClick={() => {
                 if (hasCriticalOrders) {
-                  // Scroll to Critical Orders section
-                  document.getElementById('critical-orders-section')?.scrollIntoView({ behavior: 'smooth' });
+                  // Open the collapsible and scroll to it
+                  setCriticalOrdersOpen(true);
+                  setTimeout(() => {
+                    document.getElementById('critical-orders-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
                 }
               }}
             >
@@ -383,7 +387,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <div className="text-destructive">⚠ {orders.stop_work?.length} Full SWO</div>
                   )}
                   {hasPartialStopWork && (
-                    <div className="text-amber-600">⚠ {orders.partial_stop_work?.length} Partial SWO</div>
+                    <div className="text-warning">⚠ {orders.partial_stop_work?.length} Partial SWO</div>
                   )}
                   {hasVacateOrder && (
                     <div className="text-destructive">⚠ {orders.vacate?.length} Vacate</div>
@@ -401,71 +405,109 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
         </CardContent>
       </Card>
 
-      {/* Critical Orders Alert */}
-      {(orders.stop_work?.length > 0 || orders.partial_stop_work?.length > 0 || orders.vacate?.length > 0) && (
+      {/* Critical Orders Alert - Collapsible */}
+      {hasCriticalOrders && (
         <Card id="critical-orders-section" className="border-destructive bg-destructive/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <FileWarning className="w-5 h-5" />
-              Active Orders
-            </CardTitle>
-            <CardDescription className="text-destructive/80">
-              This property has active Stop Work or Vacate orders
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {orders.stop_work?.map((order: any, idx: number) => (
-              <div key={`swo-${idx}`} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                <div className="flex items-center justify-between mb-2">
-                  <Badge variant="destructive">Full Stop Work Order</Badge>
-                  <span className="text-sm">{order.issued_date}</span>
+          <Collapsible open={criticalOrdersOpen} onOpenChange={setCriticalOrdersOpen}>
+            <CardHeader 
+              className="cursor-pointer" 
+              onClick={() => setCriticalOrdersOpen(!criticalOrdersOpen)}
+            >
+              <CollapsibleTrigger asChild>
+                <div className="flex items-center justify-between w-full">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-destructive">
+                      {criticalOrdersOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      <FileWarning className="w-5 h-5" />
+                      Active Orders ({(orders.stop_work?.length || 0) + (orders.partial_stop_work?.length || 0) + (orders.vacate?.length || 0)})
+                    </CardTitle>
+                    <CardDescription className="text-destructive/80 mt-1">
+                      {hasStopWorkOrder && <span className="mr-2">⚠ {orders.stop_work?.length} Full SWO</span>}
+                      {hasPartialStopWork && <span className="mr-2">⚠ {orders.partial_stop_work?.length} Partial SWO</span>}
+                      {hasVacateOrder && <span>⚠ {orders.vacate?.length} Vacate</span>}
+                    </CardDescription>
+                  </div>
+                  <Badge variant="destructive" className="mr-2">Click to {criticalOrdersOpen ? 'collapse' : 'expand'}</Badge>
                 </div>
-                <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
-                <div className="mt-2">
-                  <Input
-                    placeholder="Add note for this order..."
-                    value={lineItemNotes[`swo-${idx}`] || ''}
-                    onChange={(e) => updateLineItemNote('swo', String(idx), e.target.value)}
-                    className="bg-background"
-                  />
-                </div>
-              </div>
-            ))}
-            {orders.partial_stop_work?.map((order: any, idx: number) => (
-              <div key={`pswo-${idx}`} className="p-3 rounded-lg bg-accent/50 border border-accent">
-                <div className="flex items-center justify-between mb-2">
-                  <Badge variant="secondary" className="bg-accent text-accent-foreground">Partial Stop Work Order</Badge>
-                  <span className="text-sm">{order.issued_date}</span>
-                </div>
-                <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
-                <div className="mt-2">
-                  <Input
-                    placeholder="Add note for this order..."
-                    value={lineItemNotes[`pswo-${idx}`] || ''}
-                    onChange={(e) => updateLineItemNote('pswo', String(idx), e.target.value)}
-                    className="bg-background"
-                  />
-                </div>
-              </div>
-            ))}
-            {orders.vacate?.map((order: any, idx: number) => (
-              <div key={`vacate-${idx}`} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                <div className="flex items-center justify-between mb-2">
-                  <Badge variant="destructive">Vacate Order</Badge>
-                  <span className="text-sm">{order.issued_date}</span>
-                </div>
-                <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
-                <div className="mt-2">
-                  <Input
-                    placeholder="Add note for this order..."
-                    value={lineItemNotes[`vacate-${idx}`] || ''}
-                    onChange={(e) => updateLineItemNote('vacate', String(idx), e.target.value)}
-                    className="bg-background"
-                  />
-                </div>
-              </div>
-            ))}
-          </CardContent>
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-4 pt-0">
+                {orders.stop_work?.map((order: any, idx: number) => {
+                  const formattedDate = order.issued_date ? format(new Date(order.issued_date), 'MMM d, yyyy') : '—';
+                  const identifier = order.violation_number || order.id || `SWO-${idx + 1}`;
+                  return (
+                    <div key={`swo-${idx}`} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive">Full Stop Work Order</Badge>
+                          <span className="font-mono text-sm text-muted-foreground">#{identifier}</span>
+                        </div>
+                        <span className="text-sm font-medium">{formattedDate}</span>
+                      </div>
+                      <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
+                      <div className="mt-2">
+                        <Input
+                          placeholder="Add note for this order..."
+                          value={lineItemNotes[`swo-${idx}`] || ''}
+                          onChange={(e) => updateLineItemNote('swo', String(idx), e.target.value)}
+                          className="bg-background"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                {orders.partial_stop_work?.map((order: any, idx: number) => {
+                  const formattedDate = order.issued_date ? format(new Date(order.issued_date), 'MMM d, yyyy') : '—';
+                  const identifier = order.violation_number || order.id || `PSWO-${idx + 1}`;
+                  return (
+                    <div key={`pswo-${idx}`} className="p-3 rounded-lg bg-warning/10 border border-warning/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="bg-warning/20 text-warning border-warning/30">Partial Stop Work Order</Badge>
+                          <span className="font-mono text-sm text-muted-foreground">#{identifier}</span>
+                        </div>
+                        <span className="text-sm font-medium">{formattedDate}</span>
+                      </div>
+                      <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
+                      <div className="mt-2">
+                        <Input
+                          placeholder="Add note for this order..."
+                          value={lineItemNotes[`pswo-${idx}`] || ''}
+                          onChange={(e) => updateLineItemNote('pswo', String(idx), e.target.value)}
+                          className="bg-background"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                {orders.vacate?.map((order: any, idx: number) => {
+                  const formattedDate = order.issued_date ? format(new Date(order.issued_date), 'MMM d, yyyy') : '—';
+                  const identifier = order.violation_number || order.id || `VAC-${idx + 1}`;
+                  return (
+                    <div key={`vacate-${idx}`} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive">Vacate Order</Badge>
+                          <span className="font-mono text-sm text-muted-foreground">#{identifier}</span>
+                        </div>
+                        <span className="text-sm font-medium">{formattedDate}</span>
+                      </div>
+                      <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
+                      <div className="mt-2">
+                        <Input
+                          placeholder="Add note for this order..."
+                          value={lineItemNotes[`vacate-${idx}`] || ''}
+                          onChange={(e) => updateLineItemNote('vacate', String(idx), e.target.value)}
+                          className="bg-background"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
         </Card>
       )}
 
