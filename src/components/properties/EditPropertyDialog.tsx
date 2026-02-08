@@ -34,7 +34,8 @@ const propertySchema = z.object({
   address: z.string().min(1, 'Address is required').max(500),
   owner_name: z.string().max(200).optional().nullable(),
   bin: z.string().max(20).optional().nullable(),
-  bbl: z.string().max(20).optional().nullable(),
+  block: z.string().max(10).optional().nullable(),
+  lot: z.string().max(10).optional().nullable(),
   borough: z.string().max(1).optional().nullable(),
   stories: z.coerce.number().min(0).max(200).optional().nullable(),
   height_ft: z.coerce.number().min(0).max(2000).optional().nullable(),
@@ -48,6 +49,28 @@ const propertySchema = z.object({
   has_elevator: z.boolean().optional().nullable(),
   has_sprinkler: z.boolean().optional().nullable(),
 });
+
+// Helper to parse BBL into block and lot (BBL format: borough + block + lot)
+const parseBBL = (bbl: string | null): { block: string; lot: string } => {
+  if (!bbl) return { block: '', lot: '' };
+  // BBL is typically 10 digits: 1 borough + 5 block + 4 lot
+  const clean = bbl.replace(/\D/g, '');
+  if (clean.length >= 10) {
+    return {
+      block: clean.substring(1, 6).replace(/^0+/, '') || '0',
+      lot: clean.substring(6, 10).replace(/^0+/, '') || '0',
+    };
+  }
+  return { block: '', lot: '' };
+};
+
+// Helper to combine borough, block, lot into BBL
+const combineToBBL = (borough: string | null, block: string | null, lot: string | null): string | null => {
+  if (!borough || !block || !lot) return null;
+  const paddedBlock = block.padStart(5, '0');
+  const paddedLot = lot.padStart(4, '0');
+  return `${borough}${paddedBlock}${paddedLot}`;
+};
 
 type PropertyFormData = z.infer<typeof propertySchema>;
 
@@ -86,13 +109,16 @@ export const EditPropertyDialog = ({
 }: EditPropertyDialogProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const { block: initialBlock, lot: initialLot } = parseBBL(property.bbl);
+  
   const form = useForm<PropertyFormData>({
     resolver: zodResolver(propertySchema),
     defaultValues: {
       address: property.address,
       owner_name: property.owner_name || '',
       bin: property.bin || '',
-      bbl: property.bbl || '',
+      block: initialBlock,
+      lot: initialLot,
       borough: property.borough || '',
       stories: property.stories || undefined,
       height_ft: property.height_ft || undefined,
@@ -110,11 +136,13 @@ export const EditPropertyDialog = ({
 
   // Reset form when property changes
   useEffect(() => {
+    const { block, lot } = parseBBL(property.bbl);
     form.reset({
       address: property.address,
       owner_name: property.owner_name || '',
       bin: property.bin || '',
-      bbl: property.bbl || '',
+      block,
+      lot,
       borough: property.borough || '',
       stories: property.stories || undefined,
       height_ft: property.height_ft || undefined,
@@ -134,11 +162,14 @@ export const EditPropertyDialog = ({
     setIsSubmitting(true);
     
     try {
+      // Combine borough, block, lot into BBL
+      const bbl = combineToBBL(data.borough, data.block, data.lot);
+      
       const updateData = {
         address: data.address,
         owner_name: data.owner_name || null,
         bin: data.bin || null,
-        bbl: data.bbl || null,
+        bbl,
         borough: data.borough || null,
         stories: data.stories || null,
         height_ft: data.height_ft || null,
@@ -233,12 +264,26 @@ export const EditPropertyDialog = ({
 
                 <FormField
                   control={form.control}
-                  name="bbl"
+                  name="block"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>BBL</FormLabel>
+                      <FormLabel>Block</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value || ''} placeholder="Borough-Block-Lot" />
+                        <Input {...field} value={field.value || ''} placeholder="e.g., 835" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="lot"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Lot</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value || ''} placeholder="e.g., 32" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
