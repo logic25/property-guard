@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
       propertyId, 
       propertyData, 
       violationsSummary, 
-      documentTypes, 
+      documentContents, 
       workOrdersSummary 
     } = await req.json();
 
@@ -78,13 +78,31 @@ VIOLATIONS SUMMARY:
 - In Progress: ${violationsSummary?.inProgress || 0}
 - Has critical issues (stop work/vacate): ${violationsSummary?.hasCritical ? 'Yes' : 'No'}
 
-DOCUMENTS ON FILE:
-${documentTypes?.length ? documentTypes.join(', ') : 'None'}
-
 WORK ORDERS:
 - Total: ${workOrdersSummary?.total || 0}
 - Active: ${workOrdersSummary?.active || 0}
 `;
+
+    // Build document content section
+    let documentContext = "\nDOCUMENTS ON FILE:\n";
+    const docs = documentContents || [];
+    
+    if (docs.length === 0) {
+      documentContext += "No documents uploaded.\n";
+    } else {
+      for (const doc of docs) {
+        documentContext += `\n--- ${doc.type.toUpperCase()}: ${doc.name} ---\n`;
+        if (doc.content) {
+          // Limit content to avoid token limits (first 8000 chars per doc)
+          const truncatedContent = doc.content.length > 8000 
+            ? doc.content.substring(0, 8000) + "\n... [content truncated]"
+            : doc.content;
+          documentContext += truncatedContent + "\n";
+        } else {
+          documentContext += "(Document uploaded but text not yet extracted. Ask user to re-upload for AI analysis.)\n";
+        }
+      }
+    }
 
     // System prompt that restricts to property-related topics
     const systemPrompt = `You are a property management assistant for a specific building. You MUST follow these strict rules:
@@ -98,16 +116,18 @@ WORK ORDERS:
 
 4. When discussing violations or deadlines, be specific about what actions might be needed.
 
-5. For questions about specific document contents (like lease terms), explain that you can see the document types but would need the actual content to answer specific questions.
+5. For questions about specific document contents (like lease terms, rent amounts, responsibilities), USE THE ACTUAL DOCUMENT CONTENT provided below to answer accurately. Always cite the document name and section when quoting.
 
 6. Never provide legal, financial, or tax advice. Say: "For legal/financial matters, please consult a professional."
 
 7. If you don't have enough information to answer, say so clearly.
 
 ${propertyContext}
+${documentContext}
 
 When answering:
 - Reference specific data from the property context above
+- Quote directly from documents when answering document-related questions
 - Highlight urgent issues (like critical violations)
 - Be helpful for property management decisions`;
 

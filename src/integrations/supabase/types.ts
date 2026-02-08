@@ -471,6 +471,7 @@ export type Database = {
           document_name: string
           document_type: string
           expiration_date: string | null
+          extracted_text: string | null
           file_size_bytes: number | null
           file_type: string | null
           file_url: string
@@ -488,6 +489,7 @@ export type Database = {
           document_name: string
           document_type: string
           expiration_date?: string | null
+          extracted_text?: string | null
           file_size_bytes?: number | null
           file_type?: string | null
           file_url: string
@@ -505,6 +507,7 @@ export type Database = {
           document_name?: string
           document_type?: string
           expiration_date?: string | null
+          extracted_text?: string | null
           file_size_bytes?: number | null
           file_type?: string | null
           file_url?: string

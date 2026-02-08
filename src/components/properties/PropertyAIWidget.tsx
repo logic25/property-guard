@@ -78,13 +78,13 @@ export const PropertyAIWidget = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch all documents for context
+  // Fetch all documents with extracted text for context
   const { data: allDocuments } = useQuery({
     queryKey: ['property-documents-ai', propertyId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('property_documents')
-        .select('id, document_type, document_name, metadata')
+        .select('id, document_type, document_name, metadata, extracted_text')
         .eq('property_id', propertyId)
         .eq('is_current', true);
 
@@ -135,7 +135,12 @@ export const PropertyAIWidget = ({
               inProgress: violations.filter(v => v.status === 'in_progress').length,
               hasCritical: violations.some(v => v.is_stop_work_order || v.is_vacate_order),
             },
-            documentTypes: (allDocuments || documents).map(d => d.document_type),
+            // Include document types and extracted text for AI context
+            documentContents: (allDocuments || []).map(d => ({
+              type: d.document_type,
+              name: d.document_name,
+              content: d.extracted_text || null,
+            })),
             workOrdersSummary: {
               total: workOrders.length,
               active: workOrders.filter(w => w.status !== 'completed').length,

@@ -109,7 +109,7 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
     setIsUploading(true);
 
     try {
-      const fileExt = selectedFile.name.split('.').pop();
+      const fileExt = selectedFile.name.split('.').pop()?.toLowerCase();
       const fileName = `${propertyId}/${Date.now()}.${fileExt}`;
 
       // Upload to storage
@@ -125,7 +125,7 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
         .getPublicUrl(fileName);
 
       // Create document record
-      const { error: insertError } = await supabase
+      const { data: insertedDoc, error: insertError } = await supabase
         .from('property_documents')
         .insert({
           property_id: propertyId,
@@ -135,7 +135,9 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
           file_type: fileExt,
           file_size_bytes: selectedFile.size,
           uploaded_by: user.id,
-        });
+        })
+        .select()
+        .single();
 
       if (insertError) throw insertError;
 
@@ -145,6 +147,24 @@ export const PropertyDocumentsTab = ({ propertyId, documents, onRefresh }: Prope
       setDocumentName('');
       setDocumentType('other');
       onRefresh();
+
+      // If it's a PDF, automatically extract text for AI
+      if (fileExt === 'pdf' && insertedDoc) {
+        toast.info('Extracting text for AI analysis...');
+        try {
+          const { data, error } = await supabase.functions.invoke('extract-document-text', {
+            body: { documentId: insertedDoc.id, fileUrl: urlData.publicUrl }
+          });
+          if (error) throw error;
+          if (data?.success) {
+            toast.success(`Extracted ${data.charactersExtracted.toLocaleString()} characters for AI`);
+            onRefresh();
+          }
+        } catch (extractError) {
+          console.error('Text extraction error:', extractError);
+          toast.error('Could not extract text for AI analysis');
+        }
+      }
     } catch (error) {
       console.error('Error uploading document:', error);
       toast.error('Failed to upload document');
