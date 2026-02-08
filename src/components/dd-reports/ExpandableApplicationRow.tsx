@@ -93,22 +93,16 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
                 </div>
               )}
               
-              {/* Details Grid */}
+              {/* Details Grid - Common fields */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Source</p>
-                  <p className="font-medium">{application.source || 'BIS'}</p>
+                  <p className="font-medium">{application.source === 'DOB_NOW' ? 'DOB NOW Build' : 'DOB BIS'}</p>
                 </div>
                 {application.work_type && (
                   <div>
                     <p className="text-muted-foreground">Work Type</p>
                     <p className="font-medium">{application.work_type}</p>
-                  </div>
-                )}
-                {application.estimated_cost && (
-                  <div>
-                    <p className="text-muted-foreground">Estimated Cost</p>
-                    <p className="font-medium">${Number(application.estimated_cost).toLocaleString()}</p>
                   </div>
                 )}
                 {application.latest_action_date && (
@@ -117,42 +111,97 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
                     <p className="font-medium">{formatDate(application.latest_action_date)}</p>
                   </div>
                 )}
-                {application.approval_date && (
-                  <div>
-                    <p className="text-muted-foreground">Approval Date</p>
-                    <p className="font-medium">{formatDate(application.approval_date)}</p>
-                  </div>
-                )}
-                {application.expiration_date && (
-                  <div>
-                    <p className="text-muted-foreground">Permit Expiration</p>
-                    <p className="font-medium">{formatDate(application.expiration_date)}</p>
-                  </div>
-                )}
-                {application.signoff_date && (
-                  <div>
-                    <p className="text-muted-foreground">Sign-Off Date</p>
-                    <p className="font-medium">{formatDate(application.signoff_date)}</p>
-                  </div>
-                )}
-                {application.fully_permitted && (
-                  <div>
-                    <p className="text-muted-foreground">Fully Permitted</p>
-                    <p className="font-medium">{application.fully_permitted}</p>
-                  </div>
-                )}
               </div>
 
-              {/* Owner & Applicant Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm border-t pt-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Owner Information</p>
-                  <p className="font-medium">{application.owner_name || '—'}</p>
+              {/* DOB NOW Build specific fields */}
+              {application.source === 'DOB_NOW' && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t pt-4">
+                  {application.permit_status && (
+                    <div>
+                      <p className="text-muted-foreground">Permit Status</p>
+                      <p className="font-medium">{application.permit_status}</p>
+                    </div>
+                  )}
+                  {application.approved_date && (
+                    <div>
+                      <p className="text-muted-foreground">Approved Date</p>
+                      <p className="font-medium">{formatDate(application.approved_date)}</p>
+                    </div>
+                  )}
+                  {application.issued_date && (
+                    <div>
+                      <p className="text-muted-foreground">Issued Date</p>
+                      <p className="font-medium">{formatDate(application.issued_date)}</p>
+                    </div>
+                  )}
+                  {application.filing_reason && (
+                    <div>
+                      <p className="text-muted-foreground">Filing Reason</p>
+                      <p className="font-medium">{application.filing_reason}</p>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Applicant Information</p>
+              )}
+
+              {/* DOB BIS specific fields */}
+              {application.source !== 'DOB_NOW' && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t pt-4">
+                  {application.approval_date && (
+                    <div>
+                      <p className="text-muted-foreground">Approval Date</p>
+                      <p className="font-medium">{formatDate(application.approval_date)}</p>
+                    </div>
+                  )}
+                  {application.expiration_date && (
+                    <div>
+                      <p className="text-muted-foreground">Permit Expiration</p>
+                      <p className="font-medium">{formatDate(application.expiration_date)}</p>
+                    </div>
+                  )}
+                  {application.signoff_date && (
+                    <div>
+                      <p className="text-muted-foreground">Sign-Off Date</p>
+                      <p className="font-medium">{formatDate(application.signoff_date)}</p>
+                    </div>
+                  )}
+                  {application.fully_permitted && (
+                    <div>
+                      <p className="text-muted-foreground">Fully Permitted</p>
+                      <p className="font-medium">{application.fully_permitted}</p>
+                    </div>
+                  )}
+                  {application.owner_name && (
+                    <div>
+                      <p className="text-muted-foreground">Owner</p>
+                      <p className="font-medium">{application.owner_name}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Applicant Info - different layout based on source */}
+              <div className="text-sm border-t pt-4">
+                <p className="text-sm font-medium text-muted-foreground mb-2">Applicant Information</p>
+                {application.source === 'DOB_NOW' ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {(application.applicant_first_name || application.applicant_last_name) && (
+                      <p className="font-medium">
+                        {[application.applicant_first_name, application.applicant_last_name].filter(Boolean).join(' ')}
+                      </p>
+                    )}
+                    {application.applicant_business_name && (
+                      <p className="text-muted-foreground">{application.applicant_business_name}</p>
+                    )}
+                    {application.applicant_business_address && (
+                      <p className="text-muted-foreground col-span-2">{application.applicant_business_address}</p>
+                    )}
+                    {!application.applicant_first_name && !application.applicant_last_name && !application.applicant_business_name && (
+                      <p className="text-muted-foreground">—</p>
+                    )}
+                  </div>
+                ) : (
                   <p className="font-medium">{application.applicant_name || '—'}</p>
-                </div>
+                )}
               </div>
 
               {/* Note Input */}

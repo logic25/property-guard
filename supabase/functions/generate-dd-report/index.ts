@@ -361,13 +361,24 @@ async function fetchApplications(bin: string): Promise<any[]> {
       application_number: a.job_filing_number || a.filing_number,
       application_type: a.job_type || a.filing_type || null,
       work_type: a.work_type || null,
-      job_description: a.job_description || a.work_on_floor || null,
+      job_description: a.job_description || null,
       status: a.filing_status || a.current_status || null,
       filing_date: a.filing_date || null,
       latest_action_date: a.latest_action_date || null,
-      estimated_cost: a.estimated_job_cost ? parseFloat(a.estimated_job_cost) : null,
+      // DOB NOW specific fields
       floor: a.work_on_floor || null,
-      applicant_name: a.applicant_business_name || a.applicant_name || null,
+      apartment: a.apt_condo_no_s || null,
+      applicant_first_name: a.applicant_first_name || null,
+      applicant_last_name: a.applicant_last_name || null,
+      applicant_business_name: a.applicant_business_name || null,
+      applicant_business_address: a.applicant_business_address || null,
+      applicant_name: a.applicant_first_name && a.applicant_last_name 
+        ? `${a.applicant_first_name} ${a.applicant_last_name}` 
+        : a.applicant_business_name || null,
+      approved_date: a.approved_date || null,
+      issued_date: a.issued_date || null,
+      permit_status: a.permit_status || null,
+      filing_reason: a.filing_reason || null,
     }))
     .filter((app: any) => !shouldExcludeApplication(app.status, (app as any).status_code ?? null));
   

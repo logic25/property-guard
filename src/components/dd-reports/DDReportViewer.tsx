@@ -464,7 +464,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
           </TabsTrigger>
           <TabsTrigger value="applications" className="flex items-center gap-2">
             <FileStack className="w-4 h-4" />
-            Applications ({applications.length})
+            Applications ({bisApplications.length} BIS, {dobNowApplications.length} Build)
           </TabsTrigger>
           <TabsTrigger value="ai-analysis" className="flex items-center gap-2">
             <StickyNote className="w-4 h-4" />
@@ -577,10 +577,10 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <div>
                       <CardTitle className="flex items-center gap-2">
                         {applicationsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        Permit Applications ({applications.length})
+                        Permit Applications ({bisApplications.length} BIS, {dobNowApplications.length} Build)
                       </CardTitle>
                       <CardDescription className="mt-1">
-                        DOB BIS and DOB NOW applications
+                        {bisApplications.length} legacy BIS applications, {dobNowApplications.length} DOB NOW Build applications
                       </CardDescription>
                     </div>
                   </div>
