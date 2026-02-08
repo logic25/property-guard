@@ -12,8 +12,8 @@ const NYC_OPEN_DATA_ENDPOINTS = {
   DOB_NEW: "https://data.cityofnewyork.us/resource/855j-jady.json",
   ECB: "https://data.cityofnewyork.us/resource/6bgk-3dad.json",
   HPD: "https://data.cityofnewyork.us/resource/wvxf-dwi5.json",
-  // FDNY Violations via OATH Hearings - uses borough/block/lot
-  FDNY: "https://data.cityofnewyork.us/resource/avgm-ztsb.json",
+  // OATH Hearings Division - main dataset for ALL agency violations including FDNY
+  OATH_HEARINGS: "https://data.cityofnewyork.us/resource/jz4z-kudi.json",
   CO: "https://data.cityofnewyork.us/resource/bs8b-p36w.json",
 };
 
@@ -210,9 +210,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch FDNY Violations via OATH Hearings - Uses borough/block/lot
+    // Fetch FDNY Violations from OATH Hearings Division (main dataset)
     if (agenciesToSync.includes("FDNY") && borough && block && lot) {
-      // FDNY OATH dataset uses borough name
+      // OATH uses borough name, not code
       const boroughNames: Record<string, string> = {
         "1": "MANHATTAN",
         "2": "BRONX", 
@@ -223,13 +223,14 @@ Deno.serve(async (req) => {
       const boroughName = boroughNames[borough] || "";
 
       if (boroughName) {
-        // Query FDNY violations from OATH dataset using borough/block/lot
+        // Query FDNY violations from main OATH Hearings dataset
+        // Filter by issuing_agency and location
         const fdnyData = await safeFetch(
-          `${NYC_OPEN_DATA_ENDPOINTS.FDNY}?violation_location_borough=${encodeURIComponent(boroughName)}&violation_location_block_no=${block}&violation_location_lot_no=${lot}&$limit=100&$order=violation_date DESC`,
-          "FDNY"
+          `${NYC_OPEN_DATA_ENDPOINTS.OATH_HEARINGS}?issuing_agency=${encodeURIComponent("FIRE DEPARTMENT OF NYC")}&violation_location_borough=${encodeURIComponent(boroughName)}&violation_location_block_no=${block}&violation_location_lot_no=${lot}&$limit=100&$order=violation_date DESC`,
+          "FDNY/OATH"
         );
 
-        console.log(`Found ${fdnyData.length} FDNY violations from OATH dataset`);
+        console.log(`Found ${fdnyData.length} FDNY violations from OATH Hearings`);
 
         for (const v of fdnyData as Record<string, unknown>[]) {
           const violationNum = v.ticket_number as string;
@@ -243,7 +244,7 @@ Deno.serve(async (req) => {
               v.charge_3_code_description,
             ].filter(Boolean).join("; ") || "FDNY Violation";
 
-            const hearingDate = v.hearing_date as string || v.scheduled_hearing_date as string;
+            const hearingDate = v.hearing_date as string;
             
             violations.push({
               agency: "FDNY",
@@ -254,14 +255,14 @@ Deno.serve(async (req) => {
               description_raw: description,
               property_id,
               severity: "critical",
-              violation_class: (v.charge_1_code || v.infraction_code) as string || null,
+              violation_class: (v.charge_1_code || v.charge_1_code_section) as string || null,
               is_stop_work_order: false,
               is_vacate_order: false,
               penalty_amount: v.penalty_imposed ? parseFloat(v.penalty_imposed as string) : 
                              v.total_violation_amount ? parseFloat(v.total_violation_amount as string) : null,
-              respondent_name: v.respondent_first_name ? 
-                `${v.respondent_first_name} ${v.respondent_last_name || ""}`.trim() : 
-                v.respondent_name as string || null,
+              respondent_name: v.respondent_last_name ? 
+                `${v.respondent_first_name || ""} ${v.respondent_last_name}`.trim() : 
+                null,
               synced_at: now,
             });
           }
