@@ -137,6 +137,44 @@ export type Database = {
         }
         Relationships: []
       }
+      property_activity_log: {
+        Row: {
+          activity_type: string
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          property_id: string
+          title: string
+        }
+        Insert: {
+          activity_type: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          property_id: string
+          title: string
+        }
+        Update: {
+          activity_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          property_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_activity_log_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       property_documents: {
         Row: {
           created_at: string

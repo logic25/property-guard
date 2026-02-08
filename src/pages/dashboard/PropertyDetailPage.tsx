@@ -15,6 +15,7 @@ import { PropertyOverviewTab } from '@/components/properties/detail/PropertyOver
 import { PropertyViolationsTab } from '@/components/properties/detail/PropertyViolationsTab';
 import { PropertyDocumentsTab } from '@/components/properties/detail/PropertyDocumentsTab';
 import { PropertyWorkOrdersTab } from '@/components/properties/detail/PropertyWorkOrdersTab';
+import { PropertyActivityTab } from '@/components/properties/detail/PropertyActivityTab';
 import { EditPropertyDialog } from '@/components/properties/EditPropertyDialog';
 import { getBoroughName } from '@/lib/property-utils';
 import { Badge } from '@/components/ui/badge';
@@ -307,17 +308,18 @@ const PropertyDetailPage = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-lg">
+        <TabsList className="grid w-full grid-cols-5 max-w-2xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="violations">
             Violations {openViolations > 0 && `(${openViolations})`}
           </TabsTrigger>
           <TabsTrigger value="documents">
-            Documents {documents.length > 0 && `(${documents.length})`}
+            Docs {documents.length > 0 && `(${documents.length})`}
           </TabsTrigger>
           <TabsTrigger value="work-orders">
             Work Orders {workOrders.length > 0 && `(${workOrders.length})`}
           </TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -351,6 +353,10 @@ const PropertyDetailPage = () => {
             violations={violations}
             onRefresh={fetchPropertyData}
           />
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-6">
+          <PropertyActivityTab propertyId={property.id} />
         </TabsContent>
       </Tabs>
 
