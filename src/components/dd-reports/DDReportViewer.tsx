@@ -403,7 +403,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                   <p className={`text-2xl font-bold ${hasCriticalOrders ? 'text-destructive' : 'text-foreground'}`}>
                     {(orders.stop_work?.length || 0) + (orders.partial_stop_work?.length || 0) + (orders.vacate?.length || 0)}
                   </p>
-                  <p className="text-sm text-muted-foreground">Critical Orders</p>
+                  <p className="text-sm text-muted-foreground">Critical Items</p>
                 </div>
                 <div className="text-right text-sm">
                   {hasStopWorkOrder && (
@@ -442,7 +442,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <CardTitle className="flex items-center gap-2 text-destructive">
                       {criticalOrdersOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       <FileWarning className="w-5 h-5" />
-                      Active Orders ({(orders.stop_work?.length || 0) + (orders.partial_stop_work?.length || 0) + (orders.vacate?.length || 0)})
+                      Critical Items ({(orders.stop_work?.length || 0) + (orders.partial_stop_work?.length || 0) + (orders.vacate?.length || 0)})
                     </CardTitle>
                     <CardDescription className="text-destructive/80 mt-1">
                       {hasStopWorkOrder && <span className="mr-2">⚠ {orders.stop_work?.length} Full SWO</span>}
