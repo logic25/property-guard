@@ -39,3 +39,9 @@ verify_jwt = false
 
 [functions.lease-qa]
 verify_jwt = false
+
+[functions.property-ai]
+verify_jwt = false
+
+[functions.extract-document-text]
+verify_jwt = false
