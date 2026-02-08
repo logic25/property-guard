@@ -56,7 +56,7 @@ const DashboardSidebar = () => {
       return (
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
-            {linkContent}
+            <span className="block">{linkContent}</span>
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={10}>
             {item.label}
@@ -133,17 +133,19 @@ const DashboardSidebar = () => {
           <>
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <Link
-                  to="/dashboard/settings"
-                  className={cn(
-                    "flex items-center justify-center px-2 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                    location.pathname === '/dashboard/settings'
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  )}
-                >
-                  <Settings className="w-5 h-5" />
-                </Link>
+                <span className="block">
+                  <Link
+                    to="/dashboard/settings"
+                    className={cn(
+                      "flex items-center justify-center px-2 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                      location.pathname === '/dashboard/settings'
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    )}
+                  >
+                    <Settings className="w-5 h-5" />
+                  </Link>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={10}>
                 Settings
