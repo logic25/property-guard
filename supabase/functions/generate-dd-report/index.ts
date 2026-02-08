@@ -358,12 +358,14 @@ async function fetchApplications(bin: string): Promise<any[]> {
       job_description: j.job_description || null,
       status: j.job_status || null,
       status_code: j.job_status_code || null,
+      status_description: j.job_status_descrp || null,
       filing_date: j.pre__filing_date || j.filing_date || null,
       latest_action_date: j.latest_action_date || null,
       approval_date: j.approved_date || null,
       expiration_date: j.permit_expiration_date || null,
       estimated_cost: j.initial_cost ? parseFloat(j.initial_cost) : null,
-      floor: j.bldg_floor || null,
+      // Work location fields
+      floor: j.work_on_floors__ || j.bldg_floor || null,
       apartment: j.apt_condonos || null,
       owner_name: j.owner_s_first_name && j.owner_s_last_name 
         ? `${j.owner_s_first_name} ${j.owner_s_last_name}` 
