@@ -4,17 +4,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { 
   ArrowLeft, 
   Loader2, 
   Building2,
   Plus,
   FolderOpen,
-  Settings
+  Settings,
+  LayoutGrid,
+  List,
+  Trash2,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PortfolioViolationsView } from '@/components/portfolios/PortfolioViolationsView';
-import { PropertyCard } from '@/components/properties/PropertyCard';
 import { CreatePortfolioDialog } from '@/components/portfolios/CreatePortfolioDialog';
 import {
   Select,
@@ -63,6 +74,7 @@ const PortfolioDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('violations');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
 
   const fetchData = async () => {
     if (!id) return;
@@ -73,9 +85,14 @@ const PortfolioDetailPage = () => {
         .from('portfolios')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (portfolioError) throw portfolioError;
+      if (!portfolioData) {
+        toast.error('Portfolio not found');
+        navigate('/dashboard/portfolios');
+        return;
+      }
       setPortfolio(portfolioData);
 
       // Fetch properties in this portfolio
@@ -165,6 +182,15 @@ const PortfolioDetailPage = () => {
     }
   };
 
+  const getPropertyViolationCounts = (propertyId: string) => {
+    const propertyViolations = violations.filter(v => v.property_id === propertyId);
+    return {
+      total: propertyViolations.length,
+      open: propertyViolations.filter(v => v.status === 'open').length,
+      critical: propertyViolations.filter(v => v.is_stop_work_order || v.is_vacate_order).length,
+    };
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -220,9 +246,12 @@ const PortfolioDetailPage = () => {
                 <Building2 className="w-3 h-3 mr-1" />
                 {properties.length} Properties
               </Badge>
+              <Badge variant="outline">
+                {violations.length} Total Violations
+              </Badge>
               {openViolations > 0 && (
                 <Badge variant="destructive">
-                  {openViolations} Open Violations
+                  {openViolations} Open
                 </Badge>
               )}
             </div>
@@ -254,77 +283,175 @@ const PortfolioDetailPage = () => {
 
         <TabsContent value="properties" className="mt-6">
           <div className="space-y-4">
-            {/* Add Property */}
-            {availableProperties.length > 0 && (
-              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+            {/* Header with Add Property and View Toggle */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-4 flex-1">
                 <Plus className="w-5 h-5 text-muted-foreground" />
-                <Select onValueChange={addPropertyToPortfolio}>
-                  <SelectTrigger className="flex-1 max-w-md">
-                    <SelectValue placeholder="Add property to portfolio..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableProperties.map(p => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.address}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {availableProperties.length > 0 ? (
+                  <Select onValueChange={addPropertyToPortfolio}>
+                    <SelectTrigger className="flex-1 max-w-md">
+                      <SelectValue placeholder="Add property to portfolio..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableProperties.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.address}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    All properties are already in portfolios
+                  </span>
+                )}
               </div>
-            )}
+              
+              <div className="flex items-center gap-1 border rounded-lg p-1">
+                <Button
+                  variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('table')}
+                >
+                  <List className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('grid')}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
 
             {/* Property List */}
             {properties.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {properties.map(property => (
-                  <div key={property.id} className="relative group">
-                    <div 
-                      className="bg-card rounded-xl border border-border p-6 shadow-card hover:shadow-card-hover transition-shadow cursor-pointer"
-                      onClick={() => navigate(`/dashboard/properties/${property.id}`)}
-                    >
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Building2 className="w-5 h-5 text-primary" />
+              viewMode === 'table' ? (
+                <div className="rounded-xl border border-border overflow-hidden bg-card">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="font-semibold">Address</TableHead>
+                        <TableHead className="font-semibold">Borough</TableHead>
+                        <TableHead className="font-semibold">Stories</TableHead>
+                        <TableHead className="font-semibold">Total Violations</TableHead>
+                        <TableHead className="font-semibold">Open</TableHead>
+                        <TableHead className="font-semibold">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {properties.map(property => {
+                        const counts = getPropertyViolationCounts(property.id);
+                        return (
+                          <TableRow key={property.id} className="hover:bg-muted/30">
+                            <TableCell>
+                              <Button
+                                variant="link"
+                                className="p-0 h-auto text-left justify-start font-medium"
+                                onClick={() => navigate(`/dashboard/properties/${property.id}`)}
+                              >
+                                {property.address}
+                              </Button>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {property.borough || '-'}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {property.stories || '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{counts.total}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              {counts.open > 0 ? (
+                                <Badge variant="destructive">{counts.open}</Badge>
+                              ) : (
+                                <Badge variant="secondary">0</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => navigate(`/dashboard/properties/${property.id}`)}
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => removePropertyFromPortfolio(property.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {properties.map(property => {
+                    const counts = getPropertyViolationCounts(property.id);
+                    return (
+                      <div key={property.id} className="relative group">
+                        <div 
+                          className="bg-card rounded-xl border border-border p-6 shadow-card hover:shadow-card-hover transition-shadow cursor-pointer"
+                          onClick={() => navigate(`/dashboard/properties/${property.id}`)}
+                        >
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                              <Building2 className="w-5 h-5 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-foreground truncate">{property.address}</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {property.borough && `${property.borough} • `}
+                                {property.stories ? `${property.stories} stories` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <Badge variant="outline" className="text-xs">
+                              {counts.total} violations
+                            </Badge>
+                            {counts.open > 0 && (
+                              <Badge variant="destructive" className="text-xs">
+                                {counts.open} open
+                              </Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-foreground truncate">{property.address}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {property.borough && `${property.borough} • `}
-                            {property.stories ? `${property.stories} stories` : ''}
-                          </p>
-                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute top-2 right-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removePropertyFromPortfolio(property.id);
+                          }}
+                        >
+                          Remove
+                        </Button>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline" className="text-xs">
-                          {violations.filter(v => v.property_id === property.id).length} violations
-                        </Badge>
-                        {violations.filter(v => v.property_id === property.id && v.status === 'open').length > 0 && (
-                          <Badge variant="destructive" className="text-xs">
-                            {violations.filter(v => v.property_id === property.id && v.status === 'open').length} open
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="absolute top-2 right-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removePropertyFromPortfolio(property.id);
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                    );
+                  })}
+                </div>
+              )
             ) : (
               <div className="text-center py-12 bg-card rounded-xl border border-border">
                 <Building2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                 <h3 className="font-semibold text-foreground mb-2">No properties in this portfolio</h3>
                 <p className="text-muted-foreground text-sm">
-                  Add properties from the dropdown above to include them in this portfolio.
+                  {availableProperties.length > 0 
+                    ? 'Add properties from the dropdown above to include them in this portfolio.'
+                    : 'All your properties are already assigned to portfolios.'}
                 </p>
               </div>
             )}

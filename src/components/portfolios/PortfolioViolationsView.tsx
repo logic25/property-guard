@@ -104,8 +104,8 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
     }
   };
 
-  const getOATHLookupUrl = (agency: string, ticketNumber: string) => {
-    return `https://a]820-summonsfinder.nyc.gov/DARP/OATHViewer/ticket?ticket_number=${ticketNumber}`;
+  const getOATHLookupUrl = (ticketNumber: string) => {
+    return `https://a820-summonsfinder.nyc.gov/DARP/OATHViewer/ticket?ticket_number=${ticketNumber}`;
   };
 
   return (
@@ -249,7 +249,7 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2"
-                      onClick={() => window.open(getOATHLookupUrl(violation.agency, violation.violation_number), '_blank')}
+                      onClick={() => window.open(getOATHLookupUrl(violation.violation_number), '_blank')}
                     >
                       <ExternalLink className="w-3 h-3 mr-1" />
                       OATH
