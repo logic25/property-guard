@@ -169,10 +169,22 @@ export const EditPropertyDialog = ({
 
     setIsSyncing(true);
     try {
-      // Search NYC DOB BIS API
-      const searchUrl = `https://data.cityofnewyork.us/resource/s3zn-tf7c.json?$where=upper(address) like upper('%25${encodeURIComponent(address.split(',')[0])}%25')&$limit=5`;
+      // Parse address into house number and street
+      const parts = address.split(',')[0].trim().split(/\s+/);
+      const houseNumber = parts[0];
+      const streetQuery = parts.slice(1).join(' ').toUpperCase();
+
+      // Use the correct NYC DOB BIS API endpoint (ic3t-wcy2)
+      const url = new URL('https://data.cityofnewyork.us/resource/ic3t-wcy2.json');
       
-      const response = await fetch(searchUrl);
+      if (streetQuery) {
+        url.searchParams.set('$where', `house_ LIKE '%${houseNumber}%' AND upper(street_name) LIKE '%${streetQuery}%'`);
+      } else {
+        url.searchParams.set('$where', `house_ LIKE '%${houseNumber}%'`);
+      }
+      url.searchParams.set('$limit', '5');
+      
+      const response = await fetch(url.toString());
       if (!response.ok) throw new Error('Failed to fetch building data');
       
       const results = await response.json();
@@ -184,31 +196,24 @@ export const EditPropertyDialog = ({
 
       const building = results[0];
       
-      // Parse BBL into block and lot
-      const bbl = building.bbl || '';
-      let block = '';
-      let lot = '';
-      let borough = '';
-      
-      if (bbl.length >= 10) {
-        borough = bbl.substring(0, 1);
-        block = bbl.substring(1, 6).replace(/^0+/, '') || '0';
-        lot = bbl.substring(6, 10).replace(/^0+/, '') || '0';
-      }
+      // Build BBL from borough, block, lot
+      const borough = building.borough || '';
+      const block = building.block || '';
+      const lot = building.lot || '';
 
       // Update form with fetched data
-      form.setValue('bin', building.bin || '');
+      form.setValue('bin', building.bin_ || '');
       form.setValue('borough', borough);
-      form.setValue('block', block);
-      form.setValue('lot', lot);
-      form.setValue('stories', building.cnstrct_flrs ? parseInt(building.cnstrct_flrs) : undefined);
-      form.setValue('height_ft', building.bldg_hgt ? parseInt(building.bldg_hgt) : undefined);
-      form.setValue('gross_sqft', building.gross_sqft ? parseInt(building.gross_sqft) : undefined);
-      form.setValue('dwelling_units', building.dwelling_units ? parseInt(building.dwelling_units) : undefined);
-      form.setValue('primary_use_group', building.occupancy_classification_description || '');
-      form.setValue('use_type', building.use_type || '');
+      form.setValue('block', block.replace(/^0+/, '') || '0');
+      form.setValue('lot', lot.replace(/^0+/, '') || '0');
+      form.setValue('stories', building.existingstories ? parseInt(building.existingstories) : undefined);
+      form.setValue('height_ft', building.existingheight ? parseFloat(building.existingheight) : undefined);
+      form.setValue('gross_sqft', building.existingzoningsqft ? parseFloat(building.existingzoningsqft) : undefined);
+      form.setValue('dwelling_units', building.existingdwellingunits ? parseInt(building.existingdwellingunits) : undefined);
+      form.setValue('primary_use_group', building.existing_occupancy || '');
+      form.setValue('use_type', '');
 
-      toast.success(`Synced data for BIN ${building.bin}`);
+      toast.success(`Synced data for BIN ${building.bin_}`);
     } catch (error) {
       console.error('Error syncing building data:', error);
       toast.error('Failed to sync building data from NYC BIS');
