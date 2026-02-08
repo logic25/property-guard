@@ -48,6 +48,7 @@ interface Property {
   borough: string | null;
   stories: number | null;
   portfolio_id: string | null;
+  bbl: string | null;
 }
 
 interface Violation {
@@ -62,6 +63,7 @@ interface Violation {
   is_stop_work_order: boolean;
   is_vacate_order: boolean;
   property_id: string;
+  property_bbl?: string | null;
 }
 
 const PortfolioDetailPage = () => {
@@ -69,7 +71,7 @@ const PortfolioDetailPage = () => {
   const navigate = useNavigate();
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
-  const [violations, setViolations] = useState<(Violation & { property_address?: string })[]>([]);
+  const [violations, setViolations] = useState<(Violation & { property_address?: string; property_bbl?: string | null })[]>([]);
   const [availableProperties, setAvailableProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('violations');
@@ -98,7 +100,7 @@ const PortfolioDetailPage = () => {
       // Fetch properties in this portfolio
       const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
-        .select('id, address, borough, stories, portfolio_id')
+        .select('id, address, borough, stories, portfolio_id, bbl')
         .eq('portfolio_id', id)
         .order('address');
 
@@ -108,7 +110,7 @@ const PortfolioDetailPage = () => {
       // Fetch available properties (not in any portfolio)
       const { data: availableData } = await supabase
         .from('properties')
-        .select('id, address, borough, stories, portfolio_id')
+        .select('id, address, borough, stories, portfolio_id, bbl')
         .is('portfolio_id', null)
         .order('address');
 
@@ -125,11 +127,15 @@ const PortfolioDetailPage = () => {
 
         if (violationsError) throw violationsError;
 
-        // Add property address to each violation
-        const violationsWithAddress = (violationsData || []).map(v => ({
-          ...v,
-          property_address: propertiesData.find(p => p.id === v.property_id)?.address,
-        }));
+        // Add property address and bbl to each violation
+        const violationsWithAddress = (violationsData || []).map(v => {
+          const property = propertiesData.find(p => p.id === v.property_id);
+          return {
+            ...v,
+            property_address: property?.address,
+            property_bbl: property?.bbl,
+          };
+        });
 
         setViolations(violationsWithAddress);
       } else {
