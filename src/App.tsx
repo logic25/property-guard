@@ -13,7 +13,9 @@ import PropertiesPage from "@/pages/dashboard/PropertiesPage";
 import PropertyDetailPage from "@/pages/dashboard/PropertyDetailPage";
 import PortfoliosPage from "@/pages/dashboard/PortfoliosPage";
 import PortfolioDetailPage from "@/pages/dashboard/PortfolioDetailPage";
+import ApplicationsPage from "@/pages/dashboard/ApplicationsPage";
 import ViolationsPage from "@/pages/dashboard/ViolationsPage";
+import DDReportsPage from "@/pages/dashboard/DDReportsPage";
 import VendorsPage from "@/pages/dashboard/VendorsPage";
 import WorkOrdersPage from "@/pages/dashboard/WorkOrdersPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
@@ -44,7 +46,9 @@ const App = () => (
               <Route path="properties/:id" element={<PropertyDetailPage />} />
               <Route path="portfolios" element={<PortfoliosPage />} />
               <Route path="portfolios/:id" element={<PortfolioDetailPage />} />
+              <Route path="applications" element={<ApplicationsPage />} />
               <Route path="violations" element={<ViolationsPage />} />
+              <Route path="dd-reports" element={<DDReportsPage />} />
               <Route path="vendors" element={<VendorsPage />} />
               <Route path="work-orders" element={<WorkOrdersPage />} />
               <Route path="settings" element={<SettingsPage />} />

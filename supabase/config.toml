@@ -48,3 +48,6 @@ verify_jwt = false
 
 [functions.sms-webhook]
 verify_jwt = false
+
+[functions.generate-dd-report]
+verify_jwt = true
