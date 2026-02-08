@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -35,6 +36,8 @@ interface PropertyCardProps {
 }
 
 export const PropertyCard = ({ property, onEdit, onDelete }: PropertyCardProps) => {
+  const navigate = useNavigate();
+
   const getCOStatusDisplay = (status: string | null | undefined) => {
     switch (status) {
       case 'valid':
@@ -73,7 +76,10 @@ export const PropertyCard = ({ property, onEdit, onDelete }: PropertyCardProps) 
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border p-6 shadow-card hover:shadow-card-hover transition-shadow">
+    <div 
+      className="bg-card rounded-xl border border-border p-6 shadow-card hover:shadow-card-hover transition-shadow cursor-pointer"
+      onClick={() => navigate(`/dashboard/properties/${property.id}`)}
+    >
       <div className="flex items-start justify-between mb-4">
         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
           <Building2 className="w-6 h-6 text-primary" />

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -52,6 +53,7 @@ type ViewMode = 'table' | 'cards';
 
 const PropertiesPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -292,7 +294,11 @@ const PropertiesPage = () => {
                   const violationsCount = property.violations_count || 0;
                   
                   return (
-                    <TableRow key={property.id} className="hover:bg-muted/30 cursor-pointer">
+                    <TableRow 
+                      key={property.id} 
+                      className="hover:bg-muted/30 cursor-pointer"
+                      onClick={() => navigate(`/dashboard/properties/${property.id}`)}
+                    >
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
