@@ -62,6 +62,11 @@ interface Violation {
   severity: string | null;
   is_stop_work_order: boolean;
   is_vacate_order: boolean;
+  penalty_amount?: number | null;
+  respondent_name?: string | null;
+  violation_class?: string | null;
+  oath_status?: string | null;
+  notes?: string | null;
 }
 
 interface WorkOrder {

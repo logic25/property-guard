@@ -51,7 +51,15 @@ interface ViolationRecord {
   respondent_name: string | null;
   synced_at: string;
   source?: string;
+  oath_status?: string | null;
+  status: 'open' | 'in_progress' | 'closed';
 }
+
+// Statuses that indicate a violation is resolved/closed
+const CLOSED_STATUSES = [
+  'WRITTEN OFF', 'CLOSED', 'DISMISSED', 'PAID', 'RESOLVED', 'COMPLIED',
+  'SETTLED', 'SATISFIED', 'VACATED', 'WAIVED', 'NO PENALTY', 'DEFAULT - PAID'
+];
 
 async function sendSMSAlert(
   supabaseUrl: string,
@@ -164,8 +172,14 @@ Deno.serve(async (req) => {
       for (const v of data as Record<string, unknown>[]) {
         const violationNum = v.ticket_number as string;
         const issueDate = v.violation_date as string;
+        const oathStatus = (v.hearing_status || v.violation_status || v.status || "") as string;
 
         if (violationNum && issueDate) {
+          // Determine if violation is closed based on OATH status
+          const isResolved = CLOSED_STATUSES.some(s => 
+            oathStatus.toUpperCase().includes(s)
+          );
+
           const description = [
             v.charge_1_code_description,
             v.charge_2_code_description,
@@ -190,6 +204,8 @@ Deno.serve(async (req) => {
               `${v.respondent_first_name || ""} ${v.respondent_last_name}`.trim() : null,
             synced_at: now,
             source: "oath",
+            oath_status: oathStatus || null,
+            status: isResolved ? 'closed' : 'open',
           });
         }
       }
@@ -207,8 +223,13 @@ Deno.serve(async (req) => {
       for (const v of dobOldData as Record<string, unknown>[]) {
         const violationNum = (v.violation_number || v.ecb_violation_number || v.number) as string;
         const issueDate = v.issue_date as string;
+        const dobStatus = (v.disposition_status || v.status || "") as string;
 
         if (violationNum && issueDate) {
+          const isResolved = CLOSED_STATUSES.some(s => 
+            dobStatus.toUpperCase().includes(s)
+          ) || dobStatus.toUpperCase().includes('CURED') || dobStatus.toUpperCase().includes('COMPLIED');
+
           violations.push({
             agency: "DOB",
             violation_number: violationNum,
@@ -225,6 +246,8 @@ Deno.serve(async (req) => {
             respondent_name: (v.respondent_name || v.owner) as string || null,
             synced_at: now,
             source: "dob_bis",
+            oath_status: dobStatus || null,
+            status: isResolved ? 'closed' : 'open',
           });
         }
       }
@@ -232,8 +255,13 @@ Deno.serve(async (req) => {
       for (const v of dobNewData as Record<string, unknown>[]) {
         const violationNum = v.violation_number as string;
         const issueDate = v.violation_issue_date as string;
+        const dobStatus = (v.disposition_status || v.status || "") as string;
 
         if (violationNum && issueDate) {
+          const isResolved = CLOSED_STATUSES.some(s => 
+            dobStatus.toUpperCase().includes(s)
+          ) || dobStatus.toUpperCase().includes('CURED') || dobStatus.toUpperCase().includes('COMPLIED');
+
           violations.push({
             agency: "DOB",
             violation_number: violationNum,
@@ -250,6 +278,8 @@ Deno.serve(async (req) => {
             respondent_name: v.respondent_name as string || null,
             synced_at: now,
             source: "dob_now",
+            oath_status: dobStatus || null,
+            status: isResolved ? 'closed' : 'open',
           });
         }
       }
@@ -267,8 +297,13 @@ Deno.serve(async (req) => {
       for (const v of ecbData as Record<string, unknown>[]) {
         const violationNum = v.ecb_violation_number as string;
         const issueDate = v.issue_date as string;
+        const ecbStatus = (v.ecb_violation_status || v.status || "") as string;
 
         if (violationNum && issueDate) {
+          const isResolved = CLOSED_STATUSES.some(s => 
+            ecbStatus.toUpperCase().includes(s)
+          ) || ecbStatus.toUpperCase().includes('RESOLVE') || ecbStatus.toUpperCase().includes('CERTIF');
+
           violations.push({
             agency: "ECB",
             violation_number: violationNum,
@@ -285,6 +320,8 @@ Deno.serve(async (req) => {
             respondent_name: v.respondent_name as string || null,
             synced_at: now,
             source: "ecb",
+            oath_status: ecbStatus || null,
+            status: isResolved ? 'closed' : 'open',
           });
         }
       }
@@ -302,8 +339,14 @@ Deno.serve(async (req) => {
       for (const v of hpdData as Record<string, unknown>[]) {
         const violationNum = v.violationid as string;
         const issueDate = v.inspectiondate as string;
+        const hpdStatus = (v.currentstatus || v.status || "") as string;
 
         if (violationNum && issueDate) {
+          // HPD uses different status terms
+          const isResolved = hpdStatus.toUpperCase().includes('CERTIF') || 
+                            hpdStatus.toUpperCase().includes('CLOSED') ||
+                            hpdStatus.toUpperCase().includes('DISMISS');
+
           violations.push({
             agency: "HPD",
             violation_number: String(violationNum),
@@ -320,6 +363,8 @@ Deno.serve(async (req) => {
             respondent_name: null,
             synced_at: now,
             source: "hpd",
+            oath_status: hpdStatus || null,
+            status: isResolved ? 'closed' : 'open',
           });
         }
       }

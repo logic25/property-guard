@@ -625,6 +625,8 @@ export type Database = {
           is_stop_work_order: boolean | null
           is_vacate_order: boolean | null
           issued_date: string
+          notes: string | null
+          oath_status: string | null
           penalty_amount: number | null
           penalty_paid: boolean | null
           penalty_text: string | null
@@ -651,6 +653,8 @@ export type Database = {
           is_stop_work_order?: boolean | null
           is_vacate_order?: boolean | null
           issued_date: string
+          notes?: string | null
+          oath_status?: string | null
           penalty_amount?: number | null
           penalty_paid?: boolean | null
           penalty_text?: string | null
@@ -677,6 +681,8 @@ export type Database = {
           is_stop_work_order?: boolean | null
           is_vacate_order?: boolean | null
           issued_date?: string
+          notes?: string | null
+          oath_status?: string | null
           penalty_amount?: number | null
           penalty_paid?: boolean | null
           penalty_text?: string | null
