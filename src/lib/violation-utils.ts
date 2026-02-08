@@ -115,6 +115,33 @@ export const RESOLVED_VIOLATION_STATUSES = [
   'in violation - paid',
 ];
 
+// OATH status patterns that indicate a violation is resolved
+export const RESOLVED_OATH_PATTERNS = [
+  'paid in full',
+  'dismissed',
+  'written off',
+  'withdrawn',
+  'stipulation complied',
+];
+
+// Check if OATH status indicates resolution
+export const isResolvedOATHStatus = (oathStatus: string | null | undefined): boolean => {
+  if (!oathStatus) return false;
+  const normalized = oathStatus.toLowerCase().trim();
+  
+  // Check for resolved patterns
+  if (RESOLVED_OATH_PATTERNS.some(pattern => normalized.includes(pattern))) {
+    return true;
+  }
+  
+  // "All Terms Met" without "Due" typically means resolved
+  if (normalized.includes('all terms met') && !normalized.includes('due')) {
+    return true;
+  }
+  
+  return false;
+};
+
 // Check if a violation status indicates it's resolved
 export const isResolvedViolationStatus = (status: string | null | undefined): boolean => {
   if (!status) return false;
@@ -132,7 +159,7 @@ export const isActiveViolation = (violation: {
   // Exclude anything explicitly resolved first
   if (violation.status === 'closed') return false;
   if (isResolvedViolationStatus(violation.status)) return false;
-  if (isResolvedViolationStatus(violation.oath_status)) return false;
+  if (isResolvedOATHStatus(violation.oath_status)) return false;
 
   // Otherwise it's active (even if the OATH status is "Docketed", "Rescheduled", etc.)
   return true;
