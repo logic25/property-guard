@@ -240,11 +240,12 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
 
   return (
     <div className="space-y-4">
-      {/* Summary */}
+      {/* Summary - show total vs active */}
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <span><strong>{activeViolations.length}</strong> active</span>
         <span><strong>{openCount}</strong> open</span>
-        <span><strong>{violations.filter(v => v.status === 'in_progress').length}</strong> in progress</span>
-        <span><strong>{violations.filter(v => v.status === 'closed').length}</strong> closed</span>
+        <span><strong>{activeViolations.filter(v => v.status === 'in_progress').length}</strong> in progress</span>
+        <span className="text-muted-foreground/60"><strong>{violations.length - activeViolations.length}</strong> resolved</span>
       </div>
 
       {/* Filters */}
