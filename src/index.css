@@ -129,10 +129,23 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Space Grotesk', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Improve table text rendering for reports */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  
+  table td, table th {
+    -webkit-font-smoothing: antialiased;
   }
 }
 
