@@ -12,14 +12,26 @@ interface ExpandableApplicationRowProps {
   onNoteChange: (note: string) => void;
 }
 
+// Format date to MM/DD/YY
+const formatDate = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '—';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
+  } catch {
+    return dateStr;
+  }
+};
+
 const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: ExpandableApplicationRowProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const getStatusColor = (status: string) => {
     const s = (status || '').toLowerCase();
-    if (s.includes('approved') || s.includes('complete') || s === 'x') return 'bg-green-500/10 text-green-600 border-green-200';
-    if (s.includes('pending') || s.includes('review') || s === 'p') return 'bg-yellow-500/10 text-yellow-600 border-yellow-200';
-    if (s.includes('rejected') || s.includes('denied')) return 'bg-red-500/10 text-red-600 border-red-200';
+    if (s.includes('approved') || s.includes('complete') || s === 'x' || s.includes('sign-off')) return 'bg-green-500/10 text-green-600 border-green-200';
+    if (s.includes('pending') || s.includes('review') || s === 'p' || s.includes('filed')) return 'bg-yellow-500/10 text-yellow-600 border-yellow-200';
+    if (s.includes('rejected') || s.includes('denied') || s.includes('withdrawn')) return 'bg-red-500/10 text-red-600 border-red-200';
     return '';
   };
 
@@ -48,12 +60,21 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
             {application.status || '—'}
           </Badge>
         </TableCell>
-        <TableCell>{application.filing_date || application.filed_date || '—'}</TableCell>
+        <TableCell>{formatDate(application.filing_date)}</TableCell>
+        <TableCell>{formatDate(application.latest_action_date)}</TableCell>
       </TableRow>
       {isOpen && (
         <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={6} className="p-4">
+          <TableCell colSpan={7} className="p-4">
             <div className="space-y-4">
+              {/* Job Description */}
+              {application.job_description && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Job Description</p>
+                  <p className="text-sm">{application.job_description}</p>
+                </div>
+              )}
+              
               {/* Details Grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 {application.work_type && (
@@ -71,7 +92,25 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
                 {application.approval_date && (
                   <div>
                     <p className="text-muted-foreground">Approval Date</p>
-                    <p className="font-medium">{application.approval_date}</p>
+                    <p className="font-medium">{formatDate(application.approval_date)}</p>
+                  </div>
+                )}
+                {application.expiration_date && (
+                  <div>
+                    <p className="text-muted-foreground">Permit Expiration</p>
+                    <p className="font-medium">{formatDate(application.expiration_date)}</p>
+                  </div>
+                )}
+                {application.floor && (
+                  <div>
+                    <p className="text-muted-foreground">Floor</p>
+                    <p className="font-medium">{application.floor}</p>
+                  </div>
+                )}
+                {application.apartment && (
+                  <div>
+                    <p className="text-muted-foreground">Apt/Unit</p>
+                    <p className="font-medium">{application.apartment}</p>
                   </div>
                 )}
                 {application.owner_name && (
@@ -84,6 +123,12 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
                   <div>
                     <p className="text-muted-foreground">Applicant</p>
                     <p className="font-medium">{application.applicant_name}</p>
+                  </div>
+                )}
+                {application.signoff_date && (
+                  <div>
+                    <p className="text-muted-foreground">Sign-Off Date</p>
+                    <p className="font-medium">{formatDate(application.signoff_date)}</p>
                   </div>
                 )}
               </div>

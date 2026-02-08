@@ -249,7 +249,7 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
       </Card>
 
       {/* Critical Orders Alert */}
-      {(orders.stop_work?.length > 0 || orders.vacate?.length > 0) && (
+      {(orders.stop_work?.length > 0 || orders.partial_stop_work?.length > 0 || orders.vacate?.length > 0) && (
         <Card className="border-destructive bg-destructive/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-destructive">
@@ -264,15 +264,32 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
             {orders.stop_work?.map((order: any, idx: number) => (
               <div key={`swo-${idx}`} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <div className="flex items-center justify-between mb-2">
-                  <Badge variant="destructive">Stop Work Order</Badge>
+                  <Badge variant="destructive">Full Stop Work Order</Badge>
                   <span className="text-sm">{order.issued_date}</span>
                 </div>
-                <p className="text-sm">{order.description || 'No description available'}</p>
+                <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
                 <div className="mt-2">
                   <Input
                     placeholder="Add note for this order..."
                     value={lineItemNotes[`swo-${idx}`] || ''}
                     onChange={(e) => updateLineItemNote('swo', String(idx), e.target.value)}
+                    className="bg-background"
+                  />
+                </div>
+              </div>
+            ))}
+            {orders.partial_stop_work?.map((order: any, idx: number) => (
+              <div key={`pswo-${idx}`} className="p-3 rounded-lg bg-accent/50 border border-accent">
+                <div className="flex items-center justify-between mb-2">
+                  <Badge variant="secondary" className="bg-accent text-accent-foreground">Partial Stop Work Order</Badge>
+                  <span className="text-sm">{order.issued_date}</span>
+                </div>
+                <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
+                <div className="mt-2">
+                  <Input
+                    placeholder="Add note for this order..."
+                    value={lineItemNotes[`pswo-${idx}`] || ''}
+                    onChange={(e) => updateLineItemNote('pswo', String(idx), e.target.value)}
                     className="bg-background"
                   />
                 </div>
@@ -284,7 +301,7 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
                   <Badge variant="destructive">Vacate Order</Badge>
                   <span className="text-sm">{order.issued_date}</span>
                 </div>
-                <p className="text-sm">{order.description || 'No description available'}</p>
+                <p className="text-sm">{order.description_raw || order.violation_type || 'No description available'}</p>
                 <div className="mt-2">
                   <Input
                     placeholder="Add note for this order..."
@@ -410,6 +427,7 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
                             <TableHead>Type</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Filed</TableHead>
+                            <TableHead>Last Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>

@@ -14,6 +14,18 @@ interface ExpandableViolationRowProps {
   bbl?: string | null;
 }
 
+// Format date to MM/DD/YY
+const formatDate = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '—';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}/${date.getFullYear().toString().slice(-2)}`;
+  } catch {
+    return dateStr;
+  }
+};
+
 const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: ExpandableViolationRowProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -22,6 +34,7 @@ const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: E
       case 'critical':
       case 'immediately hazardous':
       case 'class c':
+      case 'v-dob':
         return 'destructive';
       case 'major':
       case 'hazardous':
@@ -53,11 +66,11 @@ const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: E
           {violation.violation_type || violation.description_raw?.slice(0, 50) || '—'}
         </TableCell>
         <TableCell>
-          <Badge variant={getSeverityVariant(violation.severity)}>
-            {violation.severity || 'Unknown'}
+          <Badge variant={getSeverityVariant(violation.severity || violation.violation_class)}>
+            {violation.severity || violation.violation_class || 'Unknown'}
           </Badge>
         </TableCell>
-        <TableCell>{violation.issued_date || '—'}</TableCell>
+        <TableCell>{formatDate(violation.issued_date)}</TableCell>
         <TableCell>
           <Badge variant={violation.status === 'open' ? 'destructive' : 'default'}>
             {violation.status}
@@ -81,7 +94,7 @@ const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: E
                 {violation.hearing_date && (
                   <div>
                     <p className="text-muted-foreground">Hearing Date</p>
-                    <p className="font-medium">{violation.hearing_date}</p>
+                    <p className="font-medium">{formatDate(violation.hearing_date)}</p>
                   </div>
                 )}
                 {violation.penalty_amount && (
@@ -100,6 +113,12 @@ const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: E
                   <div>
                     <p className="text-muted-foreground">Apartment</p>
                     <p className="font-medium">{violation.apartment}</p>
+                  </div>
+                )}
+                {violation.story && (
+                  <div>
+                    <p className="text-muted-foreground">Floor</p>
+                    <p className="font-medium">{violation.story}</p>
                   </div>
                 )}
               </div>
