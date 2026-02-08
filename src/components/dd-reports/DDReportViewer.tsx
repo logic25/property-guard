@@ -442,7 +442,7 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
               </CardHeader>
               <CollapsibleContent>
                 <CardContent>
-                  {/* Filter Buttons */}
+                  {/* Filter Buttons - Based on DOB Status Codes */}
                   <div className="flex flex-wrap gap-2 mb-4" onClick={(e) => e.stopPropagation()}>
                     <Button 
                       variant={applicationFilter === 'all' ? 'default' : 'outline'} 
@@ -452,41 +452,54 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
                       All ({applications.length})
                     </Button>
                     <Button 
-                      variant={applicationFilter === 'permit_entire' ? 'default' : 'outline'} 
+                      variant={applicationFilter === 'R' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('permit_entire')}
+                      onClick={() => setApplicationFilter('R')}
                     >
-                      Permit Entire ({applications.filter((a: any) => a.status?.toLowerCase().includes('permit entire') || a.job_type?.toLowerCase() === 'nb').length})
+                      R - Permit Entire ({applications.filter((a: any) => {
+                        const s = (a.status || '').toUpperCase();
+                        return s === 'R' || s.includes('PERMIT ENTIRE') || s.includes('PERMIT - ENTIRE');
+                      }).length})
                     </Button>
                     <Button 
-                      variant={applicationFilter === 'permit_partial' ? 'default' : 'outline'} 
+                      variant={applicationFilter === 'Q' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('permit_partial')}
+                      onClick={() => setApplicationFilter('Q')}
                     >
-                      Permit Partial ({applications.filter((a: any) => a.status?.toLowerCase().includes('permit partial')).length})
+                      Q - Permit Partial ({applications.filter((a: any) => {
+                        const s = (a.status || '').toUpperCase();
+                        return s === 'Q' || s.includes('PERMIT PARTIAL') || s.includes('PERMIT-PARTIAL');
+                      }).length})
                     </Button>
                     <Button 
-                      variant={applicationFilter === 'approved' ? 'default' : 'outline'} 
+                      variant={applicationFilter === 'P' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('approved')}
+                      onClick={() => setApplicationFilter('P')}
                     >
-                      Approved ({applications.filter((a: any) => a.status?.toLowerCase().includes('approv') && !a.status?.toLowerCase().includes('disapprov')).length})
+                      P - Approved ({applications.filter((a: any) => {
+                        const s = (a.status || '').toUpperCase();
+                        return s === 'P' || (s.includes('APPROVED') && !s.includes('DISAPPROVED'));
+                      }).length})
                     </Button>
                     <Button 
-                      variant={applicationFilter === 'disapproved' ? 'default' : 'outline'} 
+                      variant={applicationFilter === 'J' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('disapproved')}
+                      onClick={() => setApplicationFilter('J')}
                     >
-                      Disapproved ({applications.filter((a: any) => a.status?.toLowerCase().includes('disapprov')).length})
+                      J - Disapproved ({applications.filter((a: any) => {
+                        const s = (a.status || '').toUpperCase();
+                        return s === 'J' || s.includes('DISAPPROVED') || s.includes('P/E DISAPP');
+                      }).length})
                     </Button>
                     <Button 
-                      variant={applicationFilter === 'open' ? 'default' : 'outline'} 
+                      variant={applicationFilter === 'in_process' ? 'default' : 'outline'} 
                       size="sm"
-                      onClick={() => setApplicationFilter('open')}
+                      onClick={() => setApplicationFilter('in_process')}
                     >
-                      Open/Filed ({applications.filter((a: any) => {
-                        const s = (a.status || '').toLowerCase();
-                        return s.includes('file') || s.includes('plan') || s.includes('review') || s === 'p' || s === 'q';
+                      In Process ({applications.filter((a: any) => {
+                        const s = (a.status || '').toUpperCase();
+                        return s === 'A' || s === 'B' || s === 'C' || s === 'D' || s === 'E' || s === 'F' || s === 'G' || s === 'H' || s === 'K' || s === 'L' || s === 'M' ||
+                          s.includes('PRE-FILED') || s.includes('A/P') || s.includes('ASSIGNED') || s.includes('IN PROCESS') || s.includes('FILED') || s.includes('PLAN EXAM');
                       }).length})
                     </Button>
                   </div>
@@ -513,19 +526,19 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
                           {applications
                             .filter((app: any) => {
                               if (applicationFilter === 'all') return true;
-                              const s = (app.status || '').toLowerCase();
-                              const jt = (app.job_type || '').toLowerCase();
+                              const s = (app.status || '').toUpperCase();
                               switch (applicationFilter) {
-                                case 'permit_entire':
-                                  return s.includes('permit entire') || jt === 'nb';
-                                case 'permit_partial':
-                                  return s.includes('permit partial');
-                                case 'approved':
-                                  return s.includes('approv') && !s.includes('disapprov');
-                                case 'disapproved':
-                                  return s.includes('disapprov');
-                                case 'open':
-                                  return s.includes('file') || s.includes('plan') || s.includes('review') || s === 'p' || s === 'q';
+                                case 'R': // Permit Entire
+                                  return s === 'R' || s.includes('PERMIT ENTIRE') || s.includes('PERMIT - ENTIRE');
+                                case 'Q': // Permit Partial
+                                  return s === 'Q' || s.includes('PERMIT PARTIAL') || s.includes('PERMIT-PARTIAL');
+                                case 'P': // Approved
+                                  return s === 'P' || (s.includes('APPROVED') && !s.includes('DISAPPROVED'));
+                                case 'J': // Disapproved
+                                  return s === 'J' || s.includes('DISAPPROVED') || s.includes('P/E DISAPP');
+                                case 'in_process': // All in-progress statuses (A-H, K-M)
+                                  return s === 'A' || s === 'B' || s === 'C' || s === 'D' || s === 'E' || s === 'F' || s === 'G' || s === 'H' || s === 'K' || s === 'L' || s === 'M' ||
+                                    s.includes('PRE-FILED') || s.includes('A/P') || s.includes('ASSIGNED') || s.includes('IN PROCESS') || s.includes('FILED') || s.includes('PLAN EXAM');
                                 default:
                                   return true;
                               }
