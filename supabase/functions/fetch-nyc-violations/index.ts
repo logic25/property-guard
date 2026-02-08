@@ -33,6 +33,33 @@ interface ViolationRecord {
   synced_at: string;
 }
 
+async function sendSMSAlert(
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+  to: string,
+  message: string
+): Promise<void> {
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({ to, message }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("SMS send failed:", error);
+    } else {
+      console.log("SMS alert sent successfully");
+    }
+  } catch (error) {
+    console.error("Error sending SMS:", error);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -48,7 +75,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { bin, property_id, applicable_agencies } = await req.json();
+    const { bin, property_id, applicable_agencies, send_sms_alert } = await req.json();
 
     if (!bin) {
       throw new Error("BIN is required");
@@ -185,6 +212,23 @@ Deno.serve(async (req) => {
     console.log(`Total unique violations: ${uniqueViolations.length}`);
 
     let newViolationsCount = 0;
+    let criticalCount = 0;
+    let propertyAddress = "";
+    let ownerPhone = "";
+
+    // Get property info for SMS
+    if (property_id) {
+      const { data: propertyData } = await supabase
+        .from("properties")
+        .select("address, owner_phone, sms_enabled")
+        .eq("id", property_id)
+        .single();
+
+      if (propertyData) {
+        propertyAddress = propertyData.address || "";
+        ownerPhone = propertyData.owner_phone || "";
+      }
+    }
 
     // Insert new violations
     if (uniqueViolations.length > 0 && property_id) {
@@ -202,6 +246,7 @@ Deno.serve(async (req) => {
       );
 
       newViolationsCount = newViolations.length;
+      criticalCount = newViolations.filter(v => v.is_stop_work_order || v.is_vacate_order).length;
 
       if (newViolations.length > 0) {
         const { error: insertError } = await supabase
@@ -235,10 +280,11 @@ Deno.serve(async (req) => {
           agencies_synced: agenciesToSync.join(", "),
           total_found: uniqueViolations.length,
           new_violations: newViolationsCount,
+          critical_count: criticalCount,
         },
       });
 
-      // Log individual new violations
+      // Log individual new violations (first 5)
       if (newViolationsCount > 0) {
         const violationLogs = newViolations.slice(0, 5).map(v => ({
           property_id,
@@ -254,6 +300,28 @@ Deno.serve(async (req) => {
 
         await supabase.from("property_activity_log").insert(violationLogs);
       }
+
+      // Send SMS alert if enabled and new violations found
+      if (send_sms_alert !== false && newViolationsCount > 0 && ownerPhone) {
+        let smsMessage = `🚨 ${newViolationsCount} new violation${newViolationsCount > 1 ? 's' : ''} found at ${propertyAddress}`;
+        
+        if (criticalCount > 0) {
+          smsMessage += ` ⚠️ ${criticalCount} CRITICAL (Stop Work/Vacate)`;
+        }
+        
+        smsMessage += `. Agencies: ${agenciesToSync.join(", ")}. Log in to review.`;
+        
+        await sendSMSAlert(supabaseUrl, supabaseServiceKey, ownerPhone, smsMessage);
+        
+        // Log SMS sent
+        await supabase.from("property_activity_log").insert({
+          property_id,
+          activity_type: "sms_sent",
+          title: "SMS Alert Sent",
+          description: `Notified owner about ${newViolationsCount} new violations`,
+          metadata: { to: ownerPhone.slice(-4) },
+        });
+      }
     }
 
     return new Response(
@@ -261,7 +329,9 @@ Deno.serve(async (req) => {
         success: true,
         total_found: uniqueViolations.length,
         new_violations: newViolationsCount,
+        critical_count: criticalCount,
         agencies_synced: agenciesToSync,
+        sms_sent: newViolationsCount > 0 && ownerPhone ? true : false,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
