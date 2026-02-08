@@ -197,14 +197,15 @@ async function fetchPLUTOData(bbl: string): Promise<any> {
   };
 }
 
-// Fetch violations for property
+// Fetch violations for property - only OPEN/ACTIVE violations
 async function fetchViolations(bin: string, bbl: string): Promise<any[]> {
   const violations: any[] = [];
   
-  // DOB Violations by BIN
+  // DOB Violations by BIN - filter for only ACTIVE violations (no disposition date)
   if (bin) {
     const dobViolations = await fetchNYCData(NYC_ENDPOINTS.DOB_VIOLATIONS, {
       "bin": bin,
+      "$where": "disposition_date IS NULL",
       "$limit": "200",
       "$order": "issue_date DESC",
     });
@@ -214,20 +215,23 @@ async function fetchViolations(bin: string, bbl: string): Promise<any[]> {
       agency: "DOB",
       violation_number: v.isn_dob_bis_viol || v.number,
       violation_type: v.violation_type || null,
+      violation_class: v.violation_category || null,
       description_raw: v.description || v.violation_type_code || null,
       issued_date: v.issue_date || null,
       severity: v.violation_category || null,
-      status: v.disposition_date ? "closed" : "open",
+      status: "open",
       is_stop_work_order: (v.violation_type || '').toLowerCase().includes('stop work'),
+      is_partial_stop_work: (v.violation_type || '').toLowerCase().includes('partial stop work'),
       is_vacate_order: (v.violation_type || '').toLowerCase().includes('vacate'),
       disposition: v.disposition_comments || null,
     })));
   }
   
-  // ECB Violations by BIN
+  // ECB Violations by BIN - only RESOLVE status = open
   if (bin) {
     const ecbViolations = await fetchNYCData(NYC_ENDPOINTS.ECB_VIOLATIONS, {
       "bin": bin,
+      "$where": "ecb_violation_status != 'RESOLVE'",
       "$limit": "200",
       "$order": "issue_date DESC",
     });
@@ -237,16 +241,18 @@ async function fetchViolations(bin: string, bbl: string): Promise<any[]> {
       agency: "ECB",
       violation_number: v.ecb_violation_number,
       violation_type: v.infraction_code1 || null,
+      violation_class: v.violation_type || null,
       description_raw: v.violation_description || null,
       issued_date: v.issue_date || null,
       severity: v.severity || null,
       status: (v.ecb_violation_status || 'open').toLowerCase(),
       penalty_amount: v.penality_imposed ? parseFloat(v.penality_imposed) : null,
       hearing_date: v.hearing_date || null,
+      scheduled_hearing_date: v.scheduled_hearing_date || null,
     })));
   }
   
-  // HPD Violations by BBL components
+  // HPD Violations by BBL components - only open status
   if (bbl && bbl.length >= 10) {
     const borough = bbl.slice(0, 1);
     const block = bbl.slice(1, 6).replace(/^0+/, '') || '0';
@@ -256,6 +262,7 @@ async function fetchViolations(bin: string, bbl: string): Promise<any[]> {
       "boroid": borough,
       "block": block,
       "lot": lot,
+      "$where": "violationstatus = 'Open'",
       "$limit": "200",
       "$order": "inspectiondate DESC",
     });
@@ -264,12 +271,14 @@ async function fetchViolations(bin: string, bbl: string): Promise<any[]> {
       id: v.violationid,
       agency: "HPD",
       violation_number: v.violationid?.toString() || null,
-      violation_type: v.class || null,
+      violation_type: v.novdescription?.slice(0, 50) || null,
+      violation_class: v.class || null,
       description_raw: v.novdescription || null,
       issued_date: v.inspectiondate || v.novissueddate || null,
       severity: v.class || null,
-      status: (v.violationstatus || 'open').toLowerCase(),
+      status: "open",
       apartment: v.apartment || null,
+      story: v.story || null,
     })));
   }
   
@@ -282,7 +291,7 @@ async function fetchApplications(bin: string): Promise<any[]> {
   
   if (!bin) return applications;
   
-  // DOB BIS Jobs
+  // DOB BIS Jobs - include more detail fields
   const dobJobs = await fetchNYCData(NYC_ENDPOINTS.DOB_JOBS, {
     "bin__": bin,
     "$limit": "100",
@@ -296,22 +305,30 @@ async function fetchApplications(bin: string): Promise<any[]> {
     application_type: j.job_type || null,
     job_type: j.job_doc_type || null,
     work_type: j.work_type || null,
+    job_description: j.job_description || null,
     status: j.job_status || null,
     filing_date: j.pre__filing_date || j.filing_date || null,
+    latest_action_date: j.latest_action_date || null,
     approval_date: j.approved_date || null,
+    expiration_date: j.permit_expiration_date || null,
     estimated_cost: j.initial_cost ? parseFloat(j.initial_cost) : null,
+    floor: j.bldg_floor || null,
+    apartment: j.apt_condonos || null,
     owner_name: j.owner_s_first_name && j.owner_s_last_name 
       ? `${j.owner_s_first_name} ${j.owner_s_last_name}` 
       : j.owner_s_business_name || null,
     applicant_name: j.applicant_s_first_name && j.applicant_s_last_name
       ? `${j.applicant_s_first_name} ${j.applicant_s_last_name}`
       : null,
+    fully_permitted: j.fully_permitted || null,
+    signoff_date: j.signoff_date || null,
   })));
   
   // DOB NOW Applications
   const dobNowApps = await fetchNYCData(NYC_ENDPOINTS.DOB_NOW, {
     "bin": bin,
     "$limit": "100",
+    "$order": "filing_date DESC",
   });
   
   applications.push(...dobNowApps.map((a: any) => ({
@@ -320,9 +337,12 @@ async function fetchApplications(bin: string): Promise<any[]> {
     application_number: a.job_filing_number || a.filing_number,
     application_type: a.job_type || a.filing_type || null,
     work_type: a.work_type || null,
+    job_description: a.job_description || a.work_on_floor || null,
     status: a.filing_status || a.current_status || null,
     filing_date: a.filing_date || null,
+    latest_action_date: a.latest_action_date || null,
     estimated_cost: a.estimated_job_cost ? parseFloat(a.estimated_job_cost) : null,
+    floor: a.work_on_floor || null,
     applicant_name: a.applicant_business_name || a.applicant_name || null,
   })));
   
@@ -520,19 +540,19 @@ serve(async (req) => {
 
     // Step 5: Separate critical orders
     const orders = {
-      stop_work: violations.filter(v => v.is_stop_work_order),
+      stop_work: violations.filter(v => v.is_stop_work_order && !v.is_partial_stop_work),
+      partial_stop_work: violations.filter(v => v.is_partial_stop_work),
       vacate: violations.filter(v => v.is_vacate_order),
     };
-    console.log(`Stop Work Orders: ${orders.stop_work.length}, Vacate Orders: ${orders.vacate.length}`);
+    console.log(`Stop Work Orders: ${orders.stop_work.length}, Partial SWO: ${orders.partial_stop_work.length}, Vacate Orders: ${orders.vacate.length}`);
 
-    // Filter open violations
-    const openViolations = violations.filter(v => v.status === 'open');
-    console.log(`Open violations: ${openViolations.length}`);
+    // All violations are already filtered to open status
+    console.log(`Open violations: ${violations.length}`);
 
     // Step 6: Generate AI analysis
     console.log(`Generating AI analysis...`);
     const aiAnalysis = await generateAIAnalysis(
-      { building: building || { address: resolvedAddress, bin, bbl }, violations: openViolations, applications, orders },
+      { building: building || { address: resolvedAddress, bin, bbl }, violations, applications, orders },
       LOVABLE_API_KEY
     );
     console.log(`AI analysis generated (${aiAnalysis.length} chars)`);
@@ -544,7 +564,7 @@ serve(async (req) => {
         bin: bin || null,
         bbl: bbl || null,
         building_data: building || { address: resolvedAddress, bin, bbl },
-        violations_data: openViolations,
+        violations_data: violations,
         applications_data: applications,
         orders_data: orders,
         ai_analysis: aiAnalysis,
