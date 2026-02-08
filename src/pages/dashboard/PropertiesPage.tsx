@@ -212,13 +212,33 @@ const PropertiesPage = () => {
   const getPropertyTypeDisplay = (property: Property) => {
     const useGroup = property.primary_use_group || '';
     const units = property.dwelling_units;
+    const stories = property.stories;
     
+    // Show use group with units if residential
     if (useGroup.includes('R-2') || useGroup.includes('R-1')) {
       return `${useGroup}${units ? ` (${units} units)` : ''}`;
     }
     if (useGroup) return useGroup;
     if (property.use_type) return property.use_type;
+    // Fallback to stories if available
+    if (stories) return `${stories}-story building`;
     return '-';
+  };
+
+  const formatLastSynced = (date: string | null | undefined) => {
+    if (!date) return '-';
+    const syncDate = new Date(date);
+    const now = new Date();
+    const diffMs = now.getTime() - syncDate.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return syncDate.toLocaleDateString();
   };
 
   if (loading) {
@@ -304,6 +324,7 @@ const PropertiesPage = () => {
                   <TableHead className="font-semibold">Agencies</TableHead>
                   <TableHead className="font-semibold text-center">Violations</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold">Last Synced</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -386,6 +407,11 @@ const PropertiesPage = () => {
                             Compliant
                           </Badge>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">
+                          {formatLastSynced(property.last_synced_at)}
+                        </span>
                       </TableCell>
                     </TableRow>
                   );

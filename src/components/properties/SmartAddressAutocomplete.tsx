@@ -21,6 +21,23 @@ interface NYCBuildingData {
   existing_dwelling_units: string;
 }
 
+interface PLUTOData {
+  bbl: string;
+  borough: string;
+  block: string;
+  lot: string;
+  address: string;
+  numfloors: string;
+  unitsres: string;
+  unitstotal: string;
+  bldgarea: string;
+  lotarea: string;
+  bldgclass: string;
+  landuse: string;
+  yearbuilt: string;
+  ownername: string;
+}
+
 interface PlacePrediction {
   place_id: string;
   description: string;
@@ -109,6 +126,27 @@ export const SmartAddressAutocomplete = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Fetch PLUTO data for accurate building characteristics
+  const fetchPLUTOData = async (borough: string, block: string, lot: string): Promise<PLUTOData | null> => {
+    if (!borough || !block || !lot) return null;
+
+    try {
+      // PLUTO dataset on NYC Open Data
+      const url = new URL('https://data.cityofnewyork.us/resource/64uk-42ks.json');
+      url.searchParams.set('$where', `borough='${borough}' AND block='${block}' AND lot='${lot}'`);
+      url.searchParams.set('$limit', '1');
+
+      const response = await fetch(url.toString());
+      if (!response.ok) return null;
+
+      const data: PLUTOData[] = await response.json();
+      return data[0] || null;
+    } catch (error) {
+      console.error('Error fetching PLUTO data:', error);
+      return null;
+    }
+  };
+
   // Search NYC DOB buildings database
   const searchNYCBuildings = async (query: string): Promise<AutocompleteResult[]> => {
     if (query.length < 3) return [];
@@ -142,28 +180,43 @@ export const SmartAddressAutocomplete = ({
         return true;
       });
 
-      return uniqueBuildings.slice(0, 10).map(building => {
-        const boroughCode = getBoroughCode(building.borough || '');
-        const block = building.block || '';
-        const lot = building.lot || '';
-        const bbl = block && lot 
-          ? `${boroughCode}${block.padStart(5, '0')}${lot.padStart(4, '0')}` 
-          : '';
-        
-        return {
-          bin: building.bin__ || '',
-          address: `${building.house__} ${building.street_name}`.trim(),
-          borough: boroughCode,
-          bbl,
-          block,
-          lot,
-          stories: building.existingno_of_stories ? parseInt(building.existingno_of_stories) : null,
-          heightFt: building.existing_height ? parseFloat(building.existing_height) : null,
-          grossSqft: building.existing_zoning_sqft ? parseFloat(building.existing_zoning_sqft) : null,
-          primaryUseGroup: building.existing_occupancy || null,
-          dwellingUnits: building.existing_dwelling_units ? parseInt(building.existing_dwelling_units) : null,
-        };
-      });
+      // Map and enrich with PLUTO data
+      const results = await Promise.all(
+        uniqueBuildings.slice(0, 10).map(async building => {
+          const boroughCode = getBoroughCode(building.borough || '');
+          const block = building.block || '';
+          const lot = building.lot || '';
+          const bbl = block && lot 
+            ? `${boroughCode}${block.padStart(5, '0')}${lot.padStart(4, '0')}` 
+            : '';
+
+          // Try to get PLUTO data for more accurate building info
+          const plutoData = await fetchPLUTOData(boroughCode, block, lot);
+          
+          return {
+            bin: building.bin__ || '',
+            address: `${building.house__} ${building.street_name}`.trim(),
+            borough: boroughCode,
+            bbl,
+            block,
+            lot,
+            // Prefer PLUTO data for stories/units, fallback to DOB filings
+            stories: plutoData?.numfloors 
+              ? parseInt(plutoData.numfloors) 
+              : (building.existingno_of_stories ? parseInt(building.existingno_of_stories) : null),
+            heightFt: building.existing_height ? parseFloat(building.existing_height) : null,
+            grossSqft: plutoData?.bldgarea 
+              ? parseFloat(plutoData.bldgarea) 
+              : (building.existing_zoning_sqft ? parseFloat(building.existing_zoning_sqft) : null),
+            primaryUseGroup: building.existing_occupancy || plutoData?.bldgclass || null,
+            dwellingUnits: plutoData?.unitsres 
+              ? parseInt(plutoData.unitsres) 
+              : (building.existing_dwelling_units ? parseInt(building.existing_dwelling_units) : null),
+          };
+        })
+      );
+
+      return results;
     } catch (error) {
       console.error('Error searching NYC buildings:', error);
       return [];
