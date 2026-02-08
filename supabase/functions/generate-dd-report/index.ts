@@ -333,6 +333,117 @@ function shouldExcludeApplication(status: string | null, statusCode?: string | n
   return EXCLUDED_STATUS_NAMES.some((excluded) => statusLower.includes(excluded));
 }
 
+// Extract floor/apartment info from job description using regex patterns
+function extractFloorAptFromDescription(description: string | null): { floor: string | null; apartment: string | null } {
+  if (!description) return { floor: null, apartment: null };
+  
+  const desc = description.toUpperCase();
+  let floor: string | null = null;
+  let apartment: string | null = null;
+  
+  // Floor patterns - ordered by specificity
+  const floorPatterns = [
+    // "FLOORS 1-3", "FLOORS 1,2,3", "FLOORS 1 THRU 5"
+    /FLOORS?\s*(\d+(?:\s*[-,&]\s*\d+)*(?:\s*(?:THRU|TO|AND)\s*\d+)?)/i,
+    // "1ST FLOOR", "2ND FLOOR", "3RD FLOOR", "4TH FLOOR"
+    /(\d+)(?:ST|ND|RD|TH)\s+FL(?:OOR|R)?/i,
+    // "FL 1", "FLR 1", "FLOOR 1"
+    /FL(?:OOR|R)?\s*[:#]?\s*(\d+(?:\s*[-,&]\s*\d+)*)/i,
+    // "1ST FL", "2ND FLR"
+    /(\d+)(?:ST|ND|RD|TH)\s+FL(?:R)?/i,
+    // "ON FLOOR 1", "AT FLOOR 2"
+    /(?:ON|AT)\s+FLOOR\s+(\d+)/i,
+    // "CELLAR", "BASEMENT", "BSMT"
+    /(CELLAR|BASEMENT|BSMT|CEL)/i,
+    // "ROOF"
+    /(ROOF)/i,
+    // "GROUND FLOOR", "GROUND FL"
+    /(GROUND\s*FL(?:OOR|R)?)/i,
+    // "MEZZANINE", "MEZZ"
+    /(MEZZANINE|MEZZ)/i,
+  ];
+  
+  for (const pattern of floorPatterns) {
+    const match = desc.match(pattern);
+    if (match) {
+      floor = match[1]?.trim() || match[0]?.trim();
+      break;
+    }
+  }
+  
+  // Apartment patterns
+  const aptPatterns = [
+    // "APT 2A", "APT. 2A", "APT #2A"
+    /APT\.?\s*[:#]?\s*(\w+)/i,
+    // "UNIT 2A", "UNIT #2A"
+    /UNIT\s*[:#]?\s*(\w+)/i,
+    // "APARTMENT 2A"
+    /APARTMENT\s*[:#]?\s*(\w+)/i,
+    // "#2A" at word boundary (standalone)
+    /\b#(\d+[A-Z]?)\b/i,
+  ];
+  
+  for (const pattern of aptPatterns) {
+    const match = desc.match(pattern);
+    if (match) {
+      apartment = match[1]?.trim();
+      break;
+    }
+  }
+  
+  return { floor, apartment };
+}
+
+// Scrape BIS website for floor data (fallback when regex extraction fails)
+async function scrapeBISJobForFloor(jobNumber: string): Promise<string | null> {
+  try {
+    const url = `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${jobNumber}`;
+    console.log(`Scraping BIS for job ${jobNumber}: ${url}`);
+    
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+    
+    if (!response.ok) {
+      console.log(`BIS scrape failed for ${jobNumber}: ${response.status}`);
+      return null;
+    }
+    
+    const html = await response.text();
+    
+    // Look for "Work on Floor(s)" in the HTML
+    // Pattern: <td...>Work on Floor(s):</td>...<td...>value</td>
+    const floorPatterns = [
+      // Pattern 1: Table row with "Work on Floor" header
+      /Work\s+on\s+Floor[s]?\s*:?\s*<\/t[dh]>\s*<t[dh][^>]*>\s*([^<]+)/i,
+      // Pattern 2: Different table structure
+      /Work\s+on\s+Floor[s]?\s*:\s*([^<\n]+)/i,
+      // Pattern 3: Look for the specific BIS table pattern
+      /<td[^>]*class="[^"]*content[^"]*"[^>]*>Work\s+on\s+Floor[^<]*<\/td>\s*<td[^>]*>([^<]+)/i,
+    ];
+    
+    for (const pattern of floorPatterns) {
+      const match = html.match(pattern);
+      if (match && match[1]) {
+        const floor = match[1].trim().replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+        if (floor && floor !== '-' && floor !== 'N/A' && floor.length < 50) {
+          console.log(`Found floor for job ${jobNumber}: ${floor}`);
+          return floor;
+        }
+      }
+    }
+    
+    console.log(`No floor data found in BIS HTML for job ${jobNumber}`);
+    return null;
+  } catch (error) {
+    console.error(`Error scraping BIS for job ${jobNumber}:`, error);
+    return null;
+  }
+}
+
 // Fetch applications/permits for property (excludes completed/signed-off)
 async function fetchApplications(bin: string): Promise<any[]> {
   const applications: any[] = [];
@@ -348,34 +459,49 @@ async function fetchApplications(bin: string): Promise<any[]> {
   
   // Map and filter out completed/signed-off applications
   const bisApps = dobJobs
-    .map((j: any) => ({
-      id: j.job__,
-      source: "BIS",
-      application_number: j.job__,
-      application_type: j.job_type || null,
-      job_type: j.job_doc_type || null,
-      work_type: j.work_type || null,
-      job_description: j.job_description || null,
-      status: j.job_status || null,
-      status_code: j.job_status_code || null,
-      status_description: j.job_status_descrp || null,
-      filing_date: j.pre__filing_date || j.filing_date || null,
-      latest_action_date: j.latest_action_date || null,
-      approval_date: j.approved_date || null,
-      expiration_date: j.permit_expiration_date || null,
-      estimated_cost: j.initial_cost ? parseFloat(j.initial_cost) : null,
-      // Work location fields
-      floor: j.work_on_floors__ || j.bldg_floor || null,
-      apartment: j.apt_condonos || null,
-      owner_name: j.owner_s_first_name && j.owner_s_last_name 
-        ? `${j.owner_s_first_name} ${j.owner_s_last_name}` 
-        : j.owner_s_business_name || null,
-      applicant_name: j.applicant_s_first_name && j.applicant_s_last_name
-        ? `${j.applicant_s_first_name} ${j.applicant_s_last_name}`
-        : null,
-      fully_permitted: j.fully_permitted || null,
-      signoff_date: j.signoff_date || null,
-    }))
+    .map((j: any) => {
+      // Try to get floor/apt from API fields first
+      let floor = j.work_on_floors__ || j.bldg_floor || null;
+      let apartment = j.apt_condonos || null;
+      
+      // If no floor from API, try regex extraction from description
+      if (!floor && j.job_description) {
+        const extracted = extractFloorAptFromDescription(j.job_description);
+        if (extracted.floor) floor = extracted.floor;
+        if (!apartment && extracted.apartment) apartment = extracted.apartment;
+      }
+      
+      return {
+        id: j.job__,
+        source: "BIS",
+        application_number: j.job__,
+        application_type: j.job_type || null,
+        job_type: j.job_doc_type || null,
+        work_type: j.work_type || null,
+        job_description: j.job_description || null,
+        status: j.job_status || null,
+        status_code: j.job_status_code || null,
+        status_description: j.job_status_descrp || null,
+        filing_date: j.pre__filing_date || j.filing_date || null,
+        latest_action_date: j.latest_action_date || null,
+        approval_date: j.approved_date || null,
+        expiration_date: j.permit_expiration_date || null,
+        estimated_cost: j.initial_cost ? parseFloat(j.initial_cost) : null,
+        // Work location fields (from API or regex extraction)
+        floor: floor,
+        apartment: apartment,
+        floor_source: j.work_on_floors__ || j.bldg_floor ? 'api' : (floor ? 'regex' : null),
+        owner_name: j.owner_s_first_name && j.owner_s_last_name 
+          ? `${j.owner_s_first_name} ${j.owner_s_last_name}` 
+          : j.owner_s_business_name || null,
+        applicant_name: j.applicant_s_first_name && j.applicant_s_last_name
+          ? `${j.applicant_s_first_name} ${j.applicant_s_last_name}`
+          : null,
+        fully_permitted: j.fully_permitted || null,
+        signoff_date: j.signoff_date || null,
+        needs_floor_scrape: !floor, // Flag for BIS scraping
+      };
+    })
     .filter((app: any) => !shouldExcludeApplication(app.status, app.status_code));
   
   applications.push(...bisApps);
@@ -400,6 +526,7 @@ async function fetchApplications(bin: string): Promise<any[]> {
       // DOB NOW specific fields
       floor: a.work_on_floor || null,
       apartment: a.apt_condo_no_s || null,
+      floor_source: a.work_on_floor ? 'api' : null,
       applicant_first_name: a.applicant_first_name || null,
       applicant_last_name: a.applicant_last_name || null,
       applicant_business_name: a.applicant_business_name || null,
@@ -411,12 +538,57 @@ async function fetchApplications(bin: string): Promise<any[]> {
       issued_date: a.issued_date || null,
       permit_status: a.permit_status || null,
       filing_reason: a.filing_reason || null,
+      needs_floor_scrape: false, // DOB NOW has floor data in API
     }))
     .filter((app: any) => !shouldExcludeApplication(app.status, (app as any).status_code ?? null));
   
   applications.push(...nowApps);
   
   console.log(`Filtered to ${applications.length} active applications (excluded completed/signed-off)`);
+  
+  return applications;
+}
+
+// Enhance applications with scraped floor data for BIS jobs that need it
+async function enhanceApplicationsWithScrapedFloors(applications: any[]): Promise<any[]> {
+  const appsNeedingScrape = applications.filter(
+    (app) => app.source === 'BIS' && app.needs_floor_scrape && app.application_number
+  );
+  
+  if (appsNeedingScrape.length === 0) {
+    console.log('No BIS applications need floor scraping');
+    return applications;
+  }
+  
+  // Limit to first 10 to avoid too many requests
+  const toScrape = appsNeedingScrape.slice(0, 10);
+  console.log(`Scraping BIS for floor data on ${toScrape.length} applications...`);
+  
+  // Scrape in batches of 3 to be respectful to BIS servers
+  for (let i = 0; i < toScrape.length; i += 3) {
+    const batch = toScrape.slice(i, i + 3);
+    const scrapePromises = batch.map(async (app) => {
+      const floor = await scrapeBISJobForFloor(app.application_number);
+      if (floor) {
+        app.floor = floor;
+        app.floor_source = 'scrape';
+      }
+      delete app.needs_floor_scrape;
+    });
+    
+    await Promise.all(scrapePromises);
+    
+    // Small delay between batches
+    if (i + 3 < toScrape.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  // Clean up remaining apps
+  applications.forEach(app => delete app.needs_floor_scrape);
+  
+  const withFloor = applications.filter(app => app.floor).length;
+  console.log(`After scraping: ${withFloor}/${applications.length} applications have floor data`);
   
   return applications;
 }
@@ -611,13 +783,16 @@ serve(async (req) => {
     
     // Dedupe applications by source + application_number
     const seenApps = new Set<string>();
-    const applications = rawApplications.filter((app: any) => {
+    let applications = rawApplications.filter((app: any) => {
       const key = `${app.source || 'BIS'}-${app.application_number}`;
       if (seenApps.has(key)) return false;
       seenApps.add(key);
       return true;
     });
     console.log(`Found ${rawApplications.length} applications, ${applications.length} unique`);
+    
+    // Step 4b: Enhance BIS applications with scraped floor data
+    applications = await enhanceApplicationsWithScrapedFloors(applications);
 
     // Step 5: Separate critical orders
     const orders = {
