@@ -46,94 +46,265 @@ export type Database = {
       }
       properties: {
         Row: {
+          additional_bins: string[] | null
           address: string
+          air_rights_sqft: number | null
           applicable_agencies: string[] | null
+          assessed_land_value: number | null
+          assessed_total_value: number | null
           assigned_phone_number: string | null
+          basement_code: string | null
           bbl: string | null
           bin: string | null
           borough: string | null
+          building_area_sqft: number | null
+          building_class: string | null
+          building_remarks: string | null
+          census_tract: string | null
           co_data: Json | null
           co_status: string | null
+          commercial_area_sqft: number | null
+          commercial_overlay: string | null
+          community_board: string | null
           compliance_status: string | null
+          council_district: string | null
           created_at: string
+          cross_streets: string | null
           dwelling_units: number | null
+          environmental_restrictions: string | null
+          exempt_land_value: number | null
+          exempt_total_value: number | null
+          factory_area_sqft: number | null
+          floor_area_ratio: number | null
+          garage_area_sqft: number | null
+          grandfathered_sign: boolean | null
           gross_sqft: number | null
           has_boiler: boolean | null
           has_elevator: boolean | null
           has_gas: boolean | null
           has_sprinkler: boolean | null
           height_ft: number | null
+          historic_district: string | null
+          hpd_multiple_dwelling: boolean | null
           id: string
+          is_city_owned: boolean | null
+          is_landmark: boolean | null
           jurisdiction: Database["public"]["Enums"]["jurisdiction_type"]
+          landmark_status: string | null
           last_synced_at: string | null
+          latitude: number | null
+          legal_adult_use: boolean | null
+          local_law: string | null
+          loft_law: boolean | null
+          longitude: number | null
+          lot_area_sqft: number | null
+          max_floor_area_ratio: number | null
+          nta_name: string | null
+          number_of_buildings: number | null
+          number_of_floors: number | null
+          occupancy_classification: string | null
+          occupancy_group: string | null
+          office_area_sqft: number | null
+          other_area_sqft: number | null
+          overlay_district: string | null
           owner_name: string | null
           owner_phone: string | null
           primary_use_group: string | null
+          professional_cert_restricted: boolean | null
+          residential_area_sqft: number | null
+          retail_area_sqft: number | null
           sms_enabled: boolean | null
+          special_district: string | null
+          special_place_name: string | null
+          special_status: string | null
+          sro_restricted: boolean | null
+          storage_area_sqft: number | null
           stories: number | null
+          ta_restricted: boolean | null
+          ub_restricted: boolean | null
+          unused_far: number | null
           updated_at: string
           use_type: string | null
           user_id: string
+          year_altered_1: number | null
+          year_altered_2: number | null
+          year_built: number | null
+          zoning_district: string | null
+          zoning_map: string | null
         }
         Insert: {
+          additional_bins?: string[] | null
           address: string
+          air_rights_sqft?: number | null
           applicable_agencies?: string[] | null
+          assessed_land_value?: number | null
+          assessed_total_value?: number | null
           assigned_phone_number?: string | null
+          basement_code?: string | null
           bbl?: string | null
           bin?: string | null
           borough?: string | null
+          building_area_sqft?: number | null
+          building_class?: string | null
+          building_remarks?: string | null
+          census_tract?: string | null
           co_data?: Json | null
           co_status?: string | null
+          commercial_area_sqft?: number | null
+          commercial_overlay?: string | null
+          community_board?: string | null
           compliance_status?: string | null
+          council_district?: string | null
           created_at?: string
+          cross_streets?: string | null
           dwelling_units?: number | null
+          environmental_restrictions?: string | null
+          exempt_land_value?: number | null
+          exempt_total_value?: number | null
+          factory_area_sqft?: number | null
+          floor_area_ratio?: number | null
+          garage_area_sqft?: number | null
+          grandfathered_sign?: boolean | null
           gross_sqft?: number | null
           has_boiler?: boolean | null
           has_elevator?: boolean | null
           has_gas?: boolean | null
           has_sprinkler?: boolean | null
           height_ft?: number | null
+          historic_district?: string | null
+          hpd_multiple_dwelling?: boolean | null
           id?: string
+          is_city_owned?: boolean | null
+          is_landmark?: boolean | null
           jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
+          landmark_status?: string | null
           last_synced_at?: string | null
+          latitude?: number | null
+          legal_adult_use?: boolean | null
+          local_law?: string | null
+          loft_law?: boolean | null
+          longitude?: number | null
+          lot_area_sqft?: number | null
+          max_floor_area_ratio?: number | null
+          nta_name?: string | null
+          number_of_buildings?: number | null
+          number_of_floors?: number | null
+          occupancy_classification?: string | null
+          occupancy_group?: string | null
+          office_area_sqft?: number | null
+          other_area_sqft?: number | null
+          overlay_district?: string | null
           owner_name?: string | null
           owner_phone?: string | null
           primary_use_group?: string | null
+          professional_cert_restricted?: boolean | null
+          residential_area_sqft?: number | null
+          retail_area_sqft?: number | null
           sms_enabled?: boolean | null
+          special_district?: string | null
+          special_place_name?: string | null
+          special_status?: string | null
+          sro_restricted?: boolean | null
+          storage_area_sqft?: number | null
           stories?: number | null
+          ta_restricted?: boolean | null
+          ub_restricted?: boolean | null
+          unused_far?: number | null
           updated_at?: string
           use_type?: string | null
           user_id: string
+          year_altered_1?: number | null
+          year_altered_2?: number | null
+          year_built?: number | null
+          zoning_district?: string | null
+          zoning_map?: string | null
         }
         Update: {
+          additional_bins?: string[] | null
           address?: string
+          air_rights_sqft?: number | null
           applicable_agencies?: string[] | null
+          assessed_land_value?: number | null
+          assessed_total_value?: number | null
           assigned_phone_number?: string | null
+          basement_code?: string | null
           bbl?: string | null
           bin?: string | null
           borough?: string | null
+          building_area_sqft?: number | null
+          building_class?: string | null
+          building_remarks?: string | null
+          census_tract?: string | null
           co_data?: Json | null
           co_status?: string | null
+          commercial_area_sqft?: number | null
+          commercial_overlay?: string | null
+          community_board?: string | null
           compliance_status?: string | null
+          council_district?: string | null
           created_at?: string
+          cross_streets?: string | null
           dwelling_units?: number | null
+          environmental_restrictions?: string | null
+          exempt_land_value?: number | null
+          exempt_total_value?: number | null
+          factory_area_sqft?: number | null
+          floor_area_ratio?: number | null
+          garage_area_sqft?: number | null
+          grandfathered_sign?: boolean | null
           gross_sqft?: number | null
           has_boiler?: boolean | null
           has_elevator?: boolean | null
           has_gas?: boolean | null
           has_sprinkler?: boolean | null
           height_ft?: number | null
+          historic_district?: string | null
+          hpd_multiple_dwelling?: boolean | null
           id?: string
+          is_city_owned?: boolean | null
+          is_landmark?: boolean | null
           jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
+          landmark_status?: string | null
           last_synced_at?: string | null
+          latitude?: number | null
+          legal_adult_use?: boolean | null
+          local_law?: string | null
+          loft_law?: boolean | null
+          longitude?: number | null
+          lot_area_sqft?: number | null
+          max_floor_area_ratio?: number | null
+          nta_name?: string | null
+          number_of_buildings?: number | null
+          number_of_floors?: number | null
+          occupancy_classification?: string | null
+          occupancy_group?: string | null
+          office_area_sqft?: number | null
+          other_area_sqft?: number | null
+          overlay_district?: string | null
           owner_name?: string | null
           owner_phone?: string | null
           primary_use_group?: string | null
+          professional_cert_restricted?: boolean | null
+          residential_area_sqft?: number | null
+          retail_area_sqft?: number | null
           sms_enabled?: boolean | null
+          special_district?: string | null
+          special_place_name?: string | null
+          special_status?: string | null
+          sro_restricted?: boolean | null
+          storage_area_sqft?: number | null
           stories?: number | null
+          ta_restricted?: boolean | null
+          ub_restricted?: boolean | null
+          unused_far?: number | null
           updated_at?: string
           use_type?: string | null
           user_id?: string
+          year_altered_1?: number | null
+          year_altered_2?: number | null
+          year_built?: number | null
+          zoning_district?: string | null
+          zoning_map?: string | null
         }
         Relationships: []
       }
