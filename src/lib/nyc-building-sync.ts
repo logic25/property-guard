@@ -86,14 +86,83 @@ export interface NYCBuildingData {
   exemptTotalValue: number | null;
 }
 
-// PLUTO dataset - Primary Land Use Tax Lot Output
+// PLUTO dataset - Primary Land Use Tax Lot Output (same as ZoLa uses)
 const PLUTO_API = 'https://data.cityofnewyork.us/resource/64uk-42ks.json';
 
 // DOB Job Application Filings (for building info)
 const DOB_JOBS_API = 'https://data.cityofnewyork.us/resource/ic3t-wcy2.json';
 
+// NYC Property Address Directory (PAD) - authoritative for BIN/BBL lookups
+const PAD_API = 'https://data.cityofnewyork.us/resource/bc8t-ecyu.json';
+
 // NYC Geoclient API for cross streets (requires BBL)
 const GEOCLIENT_PLACE_API = 'https://data.cityofnewyork.us/resource/ahrc-nbvq.json';
+
+// Fetch authoritative BBL/BIN from PAD (Property Address Directory)
+export async function fetchPADData(houseNumber: string, streetName: string, borough: string): Promise<{
+  bin: string;
+  bbl: string;
+} | null> {
+  try {
+    // PAD uses numeric borough codes: 1=MN, 2=BX, 3=BK, 4=QN, 5=SI
+    const url = new URL(PAD_API);
+    
+    // Clean up street name - remove common suffixes for matching
+    const cleanStreet = streetName.toUpperCase()
+      .replace(/\bAVENUE\b/g, 'AVE')
+      .replace(/\bSTREET\b/g, 'ST')
+      .replace(/\bBOULEVARD\b/g, 'BLVD')
+      .replace(/\bPLACE\b/g, 'PL')
+      .replace(/\bDRIVE\b/g, 'DR')
+      .trim();
+    
+    url.searchParams.set('$where', `lhnd <= '${houseNumber}' AND hhnd >= '${houseNumber}' AND upper(stname) LIKE '%${cleanStreet}%' AND boro = '${borough}'`);
+    url.searchParams.set('$limit', '1');
+    
+    console.log('Fetching PAD data for:', houseNumber, streetName, borough);
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      console.error('PAD API error:', response.status);
+      return null;
+    }
+    
+    const results = await response.json();
+    if (!Array.isArray(results) || results.length === 0) {
+      console.log('No PAD results found, trying alternate query');
+      // Try simpler query
+      const altUrl = new URL(PAD_API);
+      altUrl.searchParams.set('$where', `upper(stname) LIKE '%${cleanStreet}%' AND boro = '${borough}'`);
+      altUrl.searchParams.set('$limit', '10');
+      
+      const altResponse = await fetch(altUrl.toString());
+      if (!altResponse.ok) return null;
+      
+      const altResults = await altResponse.json();
+      const match = altResults.find((r: any) => {
+        const low = parseInt(r.lhnd) || 0;
+        const high = parseInt(r.hhnd) || 0;
+        const house = parseInt(houseNumber) || 0;
+        return house >= low && house <= high;
+      });
+      
+      if (!match) return null;
+      
+      return {
+        bin: match.bin || '',
+        bbl: `${match.boro}${(match.block || '').padStart(5, '0')}${(match.lot || '').padStart(4, '0')}`,
+      };
+    }
+    
+    const r = results[0];
+    return {
+      bin: r.bin || '',
+      bbl: `${r.boro}${(r.block || '').padStart(5, '0')}${(r.lot || '').padStart(4, '0')}`,
+    };
+  } catch (error) {
+    console.error('Error fetching PAD data:', error);
+    return null;
+  }
+}
 
 // Fetch building data from DOB Jobs by BIN
 async function fetchDOBJobsByBin(bin: string): Promise<Partial<NYCBuildingData> | null> {

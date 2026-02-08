@@ -496,9 +496,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Deduplicate by violation number
+    // Deduplicate by composite key: agency + violation_number
+    // Different agencies can have overlapping violation numbers
     const uniqueViolations = Array.from(
-      new Map(violations.map((v) => [v.violation_number, v])).values()
+      new Map(violations.map((v) => [`${v.agency}:${v.violation_number}`, v])).values()
     );
 
     console.log(`Total unique violations: ${uniqueViolations.length}`);
@@ -527,23 +528,24 @@ Deno.serve(async (req) => {
       // We refresh existing records every sync so OATH "Written Off" (etc.) actually updates counters.
       const { data: existingViolations, error: existingError } = await supabase
         .from("violations")
-        .select("id, violation_number")
+        .select("id, violation_number, agency")
         .eq("property_id", property_id);
 
       if (existingError) {
         console.error("Error fetching existing violations:", existingError);
       }
 
+      // Use composite key for matching existing violations
       const existingMap = new Map(
-        (existingViolations || []).map((v) => [v.violation_number, v.id] as const)
+        (existingViolations || []).map((v) => [`${v.agency}:${v.violation_number}`, v.id] as const)
       );
 
        const newViolations = uniqueViolations.filter(
-         (v) => !existingMap.has(v.violation_number)
+         (v) => !existingMap.has(`${v.agency}:${v.violation_number}`)
        );
 
        const existingToUpdate = uniqueViolations.filter((v) =>
-         existingMap.has(v.violation_number)
+         existingMap.has(`${v.agency}:${v.violation_number}`)
        );
 
        console.log(
@@ -575,7 +577,7 @@ Deno.serve(async (req) => {
       if (existingToUpdate.length > 0) {
         const updateResults = await Promise.all(
           existingToUpdate.map(async ({ source, ...v }) => {
-            const id = existingMap.get(v.violation_number);
+            const id = existingMap.get(`${v.agency}:${v.violation_number}`);
             if (!id) return { ok: true };
 
             const { error } = await supabase
