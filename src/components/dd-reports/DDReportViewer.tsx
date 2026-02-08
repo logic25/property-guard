@@ -332,7 +332,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Violations Summary */}
             <div className="p-4 rounded-lg bg-secondary/50 border border-border">
               <p className="text-2xl font-bold text-foreground">{violations.length}</p>
@@ -357,31 +357,45 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
               </div>
             </div>
             
-            {/* Stop Work Orders */}
-            <div className={`p-4 rounded-lg border ${hasStopWorkOrder ? 'bg-destructive/10 border-destructive/30' : 'bg-secondary/50 border-border'}`}>
-              <p className={`text-2xl font-bold ${hasStopWorkOrder ? 'text-destructive' : 'text-foreground'}`}>
-                {orders.stop_work?.length || 0}
-              </p>
-              <p className="text-sm text-muted-foreground">Stop Work Orders</p>
-              {hasStopWorkOrder && <p className="text-xs text-destructive mt-1">⚠ Active</p>}
-            </div>
-            
-            {/* Partial Stop Work */}
-            <div className={`p-4 rounded-lg border ${hasPartialStopWork ? 'bg-accent/20 border-accent' : 'bg-secondary/50 border-border'}`}>
-              <p className={`text-2xl font-bold ${hasPartialStopWork ? 'text-accent-foreground' : 'text-foreground'}`}>
-                {orders.partial_stop_work?.length || 0}
-              </p>
-              <p className="text-sm text-muted-foreground">Partial SWO</p>
-              {hasPartialStopWork && <p className="text-xs text-accent-foreground mt-1">⚠ Active</p>}
-            </div>
-            
-            {/* Vacate Orders */}
-            <div className={`p-4 rounded-lg border ${hasVacateOrder ? 'bg-destructive/10 border-destructive/30' : 'bg-secondary/50 border-border'}`}>
-              <p className={`text-2xl font-bold ${hasVacateOrder ? 'text-destructive' : 'text-foreground'}`}>
-                {orders.vacate?.length || 0}
-              </p>
-              <p className="text-sm text-muted-foreground">Vacate Orders</p>
-              {hasVacateOrder && <p className="text-xs text-destructive mt-1">⚠ Active</p>}
+            {/* Critical Orders - Combined Card */}
+            <div 
+              className={`p-4 rounded-lg border col-span-2 cursor-pointer transition-colors ${
+                hasCriticalOrders 
+                  ? 'bg-destructive/10 border-destructive/30 hover:bg-destructive/20' 
+                  : 'bg-secondary/50 border-border hover:bg-secondary/70'
+              }`}
+              onClick={() => {
+                if (hasCriticalOrders) {
+                  // Scroll to Critical Orders section
+                  document.getElementById('critical-orders-section')?.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-2xl font-bold ${hasCriticalOrders ? 'text-destructive' : 'text-foreground'}`}>
+                    {(orders.stop_work?.length || 0) + (orders.partial_stop_work?.length || 0) + (orders.vacate?.length || 0)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Critical Orders</p>
+                </div>
+                <div className="text-right text-sm">
+                  {hasStopWorkOrder && (
+                    <div className="text-destructive">⚠ {orders.stop_work?.length} Full SWO</div>
+                  )}
+                  {hasPartialStopWork && (
+                    <div className="text-amber-600">⚠ {orders.partial_stop_work?.length} Partial SWO</div>
+                  )}
+                  {hasVacateOrder && (
+                    <div className="text-destructive">⚠ {orders.vacate?.length} Vacate</div>
+                  )}
+                  {!hasCriticalOrders && (
+                    <div className="text-muted-foreground">None detected</div>
+                  )}
+                </div>
+              </div>
+              {hasCriticalOrders && (
+                <p className="text-xs text-destructive/80 mt-2">Click to view details ↓</p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -389,7 +403,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
 
       {/* Critical Orders Alert */}
       {(orders.stop_work?.length > 0 || orders.partial_stop_work?.length > 0 || orders.vacate?.length > 0) && (
-        <Card className="border-destructive bg-destructive/5">
+        <Card id="critical-orders-section" className="border-destructive bg-destructive/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-destructive">
               <FileWarning className="w-5 h-5" />
