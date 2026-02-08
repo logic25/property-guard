@@ -24,6 +24,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 import { 
   AlertTriangle, 
   Search,
@@ -35,7 +42,8 @@ import {
   ArrowUp,
   ArrowDown,
   MoreHorizontal,
-  Wrench
+  Wrench,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { 
@@ -43,6 +51,7 @@ import {
   getAgencyColor, 
   getStatusColor
 } from '@/lib/violation-utils';
+import { CreateWorkOrderDialog } from '@/components/violations/CreateWorkOrderDialog';
 
 interface Violation {
   id: string;
@@ -69,9 +78,12 @@ type SortField = 'issued_date' | 'agency' | 'status' | 'violation_number';
 type SortDirection = 'asc' | 'desc';
 
 export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }: PropertyViolationsTabProps) => {
-  const [creatingWorkOrder, setCreatingWorkOrder] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
+  const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
+  const [selectedViolation, setSelectedViolation] = useState<Violation | null>(null);
   const [agencyFilter, setAgencyFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('issued_date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -110,26 +122,14 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
       : <ArrowDown className="w-3 h-3 ml-1" />;
   };
 
-  const createWorkOrder = async (violation: Violation) => {
-    setCreatingWorkOrder(violation.id);
-    try {
-      const { error } = await supabase
-        .from('work_orders')
-        .insert({
-          property_id: propertyId,
-          linked_violation_id: violation.id,
-          scope: `Resolve ${violation.agency} violation #${violation.violation_number}${violation.description_raw ? `: ${violation.description_raw.substring(0, 100)}` : ''}`,
-          status: 'open'
-        });
+  const openWorkOrderDialog = (violation: Violation) => {
+    setSelectedViolation(violation);
+    setWorkOrderDialogOpen(true);
+  };
 
-      if (error) throw error;
-      toast.success('Work order created successfully');
-    } catch (error) {
-      console.error('Error creating work order:', error);
-      toast.error('Failed to create work order');
-    } finally {
-      setCreatingWorkOrder(null);
-    }
+  const clearDateFilters = () => {
+    setDateFrom(undefined);
+    setDateTo(undefined);
   };
 
   const filteredAndSortedViolations = useMemo(() => {
@@ -141,7 +141,12 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
       const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
       const matchesAgency = agencyFilter === 'all' || v.agency === agencyFilter;
       
-      return matchesSearch && matchesStatus && matchesAgency;
+      // Date filtering
+      const violationDate = new Date(v.issued_date);
+      const matchesDateFrom = !dateFrom || violationDate >= dateFrom;
+      const matchesDateTo = !dateTo || violationDate <= dateTo;
+      
+      return matchesSearch && matchesStatus && matchesAgency && matchesDateFrom && matchesDateTo;
     });
 
     // Sort
@@ -165,7 +170,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
     });
 
     return result;
-  }, [violations, searchQuery, statusFilter, agencyFilter, sortField, sortDirection]);
+  }, [violations, searchQuery, statusFilter, agencyFilter, dateFrom, dateTo, sortField, sortDirection]);
 
   return (
     <div className="space-y-4">
@@ -202,6 +207,48 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
             ))}
           </SelectContent>
         </Select>
+
+        {/* Date Filters */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-10">
+              <Calendar className="w-4 h-4 mr-2" />
+              {dateFrom ? format(dateFrom, 'MM/dd/yy') : 'From'}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <CalendarComponent
+              mode="single"
+              selected={dateFrom}
+              onSelect={setDateFrom}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-10">
+              <Calendar className="w-4 h-4 mr-2" />
+              {dateTo ? format(dateTo, 'MM/dd/yy') : 'To'}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <CalendarComponent
+              mode="single"
+              selected={dateTo}
+              onSelect={setDateTo}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
+
+        {(dateFrom || dateTo) && (
+          <Button variant="ghost" size="sm" onClick={clearDateFilters} className="h-10">
+            <X className="w-4 h-4 mr-1" />
+            Clear dates
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -320,10 +367,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem 
-                          onClick={() => createWorkOrder(violation)}
-                          disabled={creatingWorkOrder === violation.id}
-                        >
+                        <DropdownMenuItem onClick={() => openWorkOrderDialog(violation)}>
                           <Wrench className="w-4 h-4 mr-2" />
                           Create Work Order
                         </DropdownMenuItem>
@@ -345,6 +389,17 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
               : 'No violations match your filters.'}
           </p>
         </div>
+      )}
+
+      {/* Work Order Dialog */}
+      {selectedViolation && (
+        <CreateWorkOrderDialog
+          open={workOrderDialogOpen}
+          onOpenChange={setWorkOrderDialogOpen}
+          propertyId={propertyId}
+          violation={selectedViolation}
+          onSuccess={onRefresh}
+        />
       )}
     </div>
   );
