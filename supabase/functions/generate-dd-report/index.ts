@@ -290,16 +290,17 @@ const EXCLUDED_STATUS_CODES = ['X', 'U', 'I']; // X=SIGNED-OFF, U=COMPLETED, I=S
 const EXCLUDED_STATUS_NAMES = ['signed-off', 'completed', 'signoff', 'sign-off'];
 
 // Check if status should be excluded
-function shouldExcludeApplication(status: string | null): boolean {
-  if (!status) return false;
-  const statusUpper = status.toUpperCase().trim();
-  const statusLower = status.toLowerCase().trim();
-  
-  // Check single-letter codes
+function shouldExcludeApplication(status: string | null, statusCode?: string | null): boolean {
+  const statusUpper = (status || '').toUpperCase().trim();
+  const statusLower = (status || '').toLowerCase().trim();
+  const codeUpper = (statusCode || '').toUpperCase().trim();
+
+  // Check single-letter codes (sometimes only status_code is populated)
+  if (EXCLUDED_STATUS_CODES.includes(codeUpper)) return true;
   if (EXCLUDED_STATUS_CODES.includes(statusUpper)) return true;
-  
+
   // Check status names
-  return EXCLUDED_STATUS_NAMES.some(excluded => statusLower.includes(excluded));
+  return EXCLUDED_STATUS_NAMES.some((excluded) => statusLower.includes(excluded));
 }
 
 // Fetch applications/permits for property (excludes completed/signed-off)
@@ -343,7 +344,7 @@ async function fetchApplications(bin: string): Promise<any[]> {
       fully_permitted: j.fully_permitted || null,
       signoff_date: j.signoff_date || null,
     }))
-    .filter((app: any) => !shouldExcludeApplication(app.status));
+    .filter((app: any) => !shouldExcludeApplication(app.status, app.status_code));
   
   applications.push(...bisApps);
   
@@ -368,7 +369,7 @@ async function fetchApplications(bin: string): Promise<any[]> {
       floor: a.work_on_floor || null,
       applicant_name: a.applicant_business_name || a.applicant_name || null,
     }))
-    .filter((app: any) => !shouldExcludeApplication(app.status));
+    .filter((app: any) => !shouldExcludeApplication(app.status, (app as any).status_code ?? null));
   
   applications.push(...nowApps);
   
