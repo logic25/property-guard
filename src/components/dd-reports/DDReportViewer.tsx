@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Separator } from '@/components/ui/separator';
 import {
   ArrowLeft,
@@ -25,7 +26,9 @@ import {
   User,
   MapPin,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 import DDReportPrintView from './DDReportPrintView';
@@ -67,6 +70,8 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
       return acc;
     }, {})
   );
+  const [violationsOpen, setViolationsOpen] = useState(true);
+  const [applicationsOpen, setApplicationsOpen] = useState(true);
 
   const handleExportPDF = async () => {
     if (!printRef.current) return;
@@ -300,121 +305,147 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
 
         <TabsContent value="violations">
           <Card>
-            <CardHeader>
-              <CardTitle>Open Violations</CardTitle>
-              <CardDescription>
-                All open violations from DOB, ECB, HPD, FDNY, and other agencies
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {violations.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No open violations found for this property.
-                </div>
-              ) : (
-                <ScrollArea className="h-[400px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Violation #</TableHead>
-                        <TableHead>Agency</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Severity</TableHead>
-                        <TableHead>Issued</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Note</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {violations.map((v: any, idx: number) => (
-                        <TableRow key={v.id || idx}>
-                          <TableCell className="font-mono text-sm">{v.violation_number}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{v.agency}</Badge>
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate">{v.violation_type || v.description_raw}</TableCell>
-                          <TableCell>
-                            <Badge variant={getSeverityVariant(v.severity)}>
-                              {v.severity || 'Unknown'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{v.issued_date}</TableCell>
-                          <TableCell>
-                            <Badge variant={v.status === 'open' ? 'destructive' : 'default'}>
-                              {v.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              placeholder="Add note..."
-                              value={lineItemNotes[`violation-${v.id || idx}`] || ''}
-                              onChange={(e) => updateLineItemNote('violation', v.id || String(idx), e.target.value)}
-                              className="h-8 text-sm"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              )}
-            </CardContent>
+            <Collapsible open={violationsOpen} onOpenChange={setViolationsOpen}>
+              <CardHeader className="cursor-pointer" onClick={() => setViolationsOpen(!violationsOpen)}>
+                <CollapsibleTrigger asChild>
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        {violationsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        Open Violations ({violations.length})
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        All open violations from DOB, ECB, HPD, FDNY, and other agencies
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent>
+                  {violations.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No open violations found for this property.
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[400px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Violation #</TableHead>
+                            <TableHead>Agency</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Severity</TableHead>
+                            <TableHead>Issued</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Note</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {violations.map((v: any, idx: number) => (
+                            <TableRow key={v.id || idx}>
+                              <TableCell className="font-mono text-sm">{v.violation_number}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{v.agency}</Badge>
+                              </TableCell>
+                              <TableCell className="max-w-[200px] truncate">{v.violation_type || v.description_raw}</TableCell>
+                              <TableCell>
+                                <Badge variant={getSeverityVariant(v.severity)}>
+                                  {v.severity || 'Unknown'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{v.issued_date}</TableCell>
+                              <TableCell>
+                                <Badge variant={v.status === 'open' ? 'destructive' : 'default'}>
+                                  {v.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  placeholder="Add note..."
+                                  value={lineItemNotes[`violation-${v.id || idx}`] || ''}
+                                  onChange={(e) => updateLineItemNote('violation', v.id || String(idx), e.target.value)}
+                                  className="h-8 text-sm"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
           </Card>
         </TabsContent>
 
         <TabsContent value="applications">
           <Card>
-            <CardHeader>
-              <CardTitle>Permit Applications</CardTitle>
-              <CardDescription>
-                DOB BIS, DOB NOW, and other agency applications
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {applications.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No applications found for this property.
-                </div>
-              ) : (
-                <ScrollArea className="h-[400px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Application #</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Filed</TableHead>
-                        <TableHead>Est. Cost</TableHead>
-                        <TableHead>Note</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {applications.map((app: any, idx: number) => (
-                        <TableRow key={app.id || idx}>
-                          <TableCell className="font-mono text-sm">{app.application_number || app.job_number}</TableCell>
-                          <TableCell>{app.application_type || app.job_type}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{app.status}</Badge>
-                          </TableCell>
-                          <TableCell>{app.filing_date || app.filed_date}</TableCell>
-                          <TableCell>
-                            {app.estimated_cost ? `$${Number(app.estimated_cost).toLocaleString()}` : '—'}
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              placeholder="Add note..."
-                              value={lineItemNotes[`application-${app.id || idx}`] || ''}
-                              onChange={(e) => updateLineItemNote('application', app.id || String(idx), e.target.value)}
-                              className="h-8 text-sm"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              )}
-            </CardContent>
+            <Collapsible open={applicationsOpen} onOpenChange={setApplicationsOpen}>
+              <CardHeader className="cursor-pointer" onClick={() => setApplicationsOpen(!applicationsOpen)}>
+                <CollapsibleTrigger asChild>
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        {applicationsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        Permit Applications ({applications.length})
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        DOB BIS, DOB NOW, and other agency applications
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+              </CardHeader>
+              <CollapsibleContent>
+                <CardContent>
+                  {applications.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No applications found for this property.
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[400px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Application #</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Filed</TableHead>
+                            <TableHead>Est. Cost</TableHead>
+                            <TableHead>Note</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {applications.map((app: any, idx: number) => (
+                            <TableRow key={app.id || idx}>
+                              <TableCell className="font-mono text-sm">{app.application_number || app.job_number}</TableCell>
+                              <TableCell>{app.application_type || app.job_type}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{app.status}</Badge>
+                              </TableCell>
+                              <TableCell>{app.filing_date || app.filed_date}</TableCell>
+                              <TableCell>
+                                {app.estimated_cost ? `$${Number(app.estimated_cost).toLocaleString()}` : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  placeholder="Add note..."
+                                  value={lineItemNotes[`application-${app.id || idx}`] || ''}
+                                  onChange={(e) => updateLineItemNote('application', app.id || String(idx), e.target.value)}
+                                  className="h-8 text-sm"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Collapsible>
           </Card>
         </TabsContent>
 
