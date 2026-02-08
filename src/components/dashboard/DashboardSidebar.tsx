@@ -32,7 +32,7 @@ const DashboardSidebar = () => {
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
             <Building2 className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="font-display font-bold text-xl text-foreground">Threshold</span>
+          <span className="font-display font-bold text-xl text-foreground">Property Guard</span>
         </Link>
       </div>
 
