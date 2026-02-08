@@ -60,6 +60,29 @@ const formatBBL = (bbl: string | null | undefined): string => {
   return `${borough}-${block}-${lot}`;
 };
 
+// Safe date formatter - handles various NYC Open Data date formats
+const safeFormatDate = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '—';
+  try {
+    // Handle YYYYMMDD format (common in NYC Open Data)
+    if (/^\d{8}$/.test(dateStr)) {
+      const year = parseInt(dateStr.slice(0, 4));
+      const month = parseInt(dateStr.slice(4, 6)) - 1; // 0-indexed
+      const day = parseInt(dateStr.slice(6, 8));
+      const date = new Date(year, month, day);
+      if (isNaN(date.getTime())) return dateStr;
+      return format(date, 'MMM d, yyyy');
+    }
+    
+    // Handle ISO or other standard formats
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return format(date, 'MMM d, yyyy');
+  } catch {
+    return dateStr;
+  }
+};
+
 interface UserProfile {
   email: string | null;
   display_name: string | null;
@@ -434,7 +457,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
             <CollapsibleContent>
               <CardContent className="space-y-4 pt-0">
                 {orders.stop_work?.map((order: any, idx: number) => {
-                  const formattedDate = order.issued_date ? format(new Date(order.issued_date), 'MMM d, yyyy') : '—';
+                  const formattedDate = safeFormatDate(order.issued_date);
                   const identifier = order.violation_number || order.id || `SWO-${idx + 1}`;
                   return (
                     <div key={`swo-${idx}`} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
@@ -458,7 +481,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                   );
                 })}
                 {orders.partial_stop_work?.map((order: any, idx: number) => {
-                  const formattedDate = order.issued_date ? format(new Date(order.issued_date), 'MMM d, yyyy') : '—';
+                  const formattedDate = safeFormatDate(order.issued_date);
                   const identifier = order.violation_number || order.id || `PSWO-${idx + 1}`;
                   return (
                     <div key={`pswo-${idx}`} className="p-3 rounded-lg bg-warning/10 border border-warning/30">
@@ -482,7 +505,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                   );
                 })}
                 {orders.vacate?.map((order: any, idx: number) => {
-                  const formattedDate = order.issued_date ? format(new Date(order.issued_date), 'MMM d, yyyy') : '—';
+                  const formattedDate = safeFormatDate(order.issued_date);
                   const identifier = order.violation_number || order.id || `VAC-${idx + 1}`;
                   return (
                     <div key={`vacate-${idx}`} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
