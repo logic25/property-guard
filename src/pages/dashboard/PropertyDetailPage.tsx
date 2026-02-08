@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import { PropertySettingsTab } from '@/components/properties/PropertySettingsTab
 import { EditPropertyDialog } from '@/components/properties/EditPropertyDialog';
 import { getBoroughName } from '@/lib/property-utils';
 import { Badge } from '@/components/ui/badge';
+import { getAgencyColor } from '@/lib/violation-utils';
 
 interface Property {
   id: string;
@@ -199,6 +200,15 @@ const PropertyDetailPage = () => {
     }
   };
 
+  // Count violations per agency - must be before early returns
+  const violationCountsByAgency = useMemo(() => {
+    const counts: Record<string, number> = {};
+    violations.forEach(v => {
+      counts[v.agency] = (counts[v.agency] || 0) + 1;
+    });
+    return counts;
+  }, [violations]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -259,11 +269,26 @@ const PropertyDetailPage = () => {
                 <span>{coStatus.icon}</span>
                 {coStatus.label}
               </span>
-              {(property.applicable_agencies || []).map((agency) => (
-                <Badge key={agency} variant="outline" className="text-xs">
-                  {agency}
-                </Badge>
-              ))}
+              {(property.applicable_agencies || []).map((agency) => {
+                const count = violationCountsByAgency[agency] || 0;
+                const hasViolations = count > 0;
+                return (
+                  <Badge 
+                    key={agency} 
+                    variant="outline" 
+                    className={`text-xs ${hasViolations ? getAgencyColor(agency) : 'bg-muted/50 text-muted-foreground border-muted'}`}
+                  >
+                    {agency}
+                    <span className={`ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold ${
+                      hasViolations 
+                        ? 'bg-background/80 text-foreground' 
+                        : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {count}
+                    </span>
+                  </Badge>
+                );
+              })}
               {property.jurisdiction !== 'NYC' && (
                 <Badge variant="secondary">Non-NYC</Badge>
               )}
