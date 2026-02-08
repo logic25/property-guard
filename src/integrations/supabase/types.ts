@@ -66,6 +66,7 @@ export type Database = {
           id: string
           jurisdiction: Database["public"]["Enums"]["jurisdiction_type"]
           last_synced_at: string | null
+          owner_name: string | null
           owner_phone: string | null
           primary_use_group: string | null
           sms_enabled: boolean | null
@@ -95,6 +96,7 @@ export type Database = {
           id?: string
           jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
           last_synced_at?: string | null
+          owner_name?: string | null
           owner_phone?: string | null
           primary_use_group?: string | null
           sms_enabled?: boolean | null
@@ -124,6 +126,7 @@ export type Database = {
           id?: string
           jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
           last_synced_at?: string | null
+          owner_name?: string | null
           owner_phone?: string | null
           primary_use_group?: string | null
           sms_enabled?: boolean | null
