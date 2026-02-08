@@ -66,6 +66,7 @@ const ViolationsPage = () => {
     hearing_date: '',
     cure_due_date: '',
     description_raw: '',
+    notes: '',
   });
 
   const fetchData = async () => {
@@ -169,6 +170,7 @@ const ViolationsPage = () => {
         hearing_date: formData.hearing_date || null,
         cure_due_date: formData.cure_due_date || null,
         description_raw: formData.description_raw || null,
+        notes: formData.notes || null,
       });
 
       if (error) throw error;
@@ -183,6 +185,7 @@ const ViolationsPage = () => {
         hearing_date: '',
         cure_due_date: '',
         description_raw: '',
+        notes: '',
       });
       fetchData();
     } catch (error) {
@@ -351,6 +354,17 @@ const ViolationsPage = () => {
                   placeholder="Describe the violation..."
                   value={formData.description_raw}
                   onChange={(e) => setFormData({ ...formData, description_raw: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes / Comments</Label>
+                <textarea
+                  id="notes"
+                  placeholder="Add any internal notes or comments..."
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
 

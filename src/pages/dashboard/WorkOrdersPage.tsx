@@ -18,6 +18,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { 
   ClipboardList, 
   Plus, 
@@ -25,8 +38,12 @@ import {
   Loader2,
   Building2,
   Users,
-  AlertTriangle
+  AlertTriangle,
+  ChevronRight,
+  ChevronDown,
+  Calendar
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 interface Property {
@@ -66,7 +83,19 @@ const WorkOrdersPage = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
   const [formData, setFormData] = useState({
     property_id: '',
     vendor_id: '',
@@ -171,11 +200,25 @@ const WorkOrdersPage = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     open: 'bg-destructive/10 text-destructive border-destructive',
     in_progress: 'bg-warning/10 text-warning border-warning',
     awaiting_docs: 'bg-primary/10 text-primary border-primary',
     completed: 'bg-success/10 text-success border-success',
+  };
+
+  const getStatusBadge = (status: string) => {
+    const labels: Record<string, string> = {
+      open: 'Open',
+      in_progress: 'In Progress',
+      awaiting_docs: 'Awaiting Docs',
+      completed: 'Completed',
+    };
+    return (
+      <Badge variant="outline" className={statusColors[status] || ''}>
+        {labels[status] || status}
+      </Badge>
+    );
   };
 
   if (loading) {
@@ -317,66 +360,113 @@ const WorkOrdersPage = () => {
         </Select>
       </div>
 
-      {/* Work Orders List */}
+      {/* Work Orders Table */}
       {filteredWorkOrders.length > 0 ? (
-        <div className="space-y-4">
-          {filteredWorkOrders.map((workOrder) => (
-            <div
-              key={workOrder.id}
-              className="bg-card rounded-xl border border-border p-6 shadow-card"
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <ClipboardList className="w-6 h-6 text-primary" />
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div>
-                      <h3 className="font-display font-semibold text-foreground mb-1">
-                        {workOrder.scope}
-                      </h3>
-                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Building2 className="w-4 h-4" />
-                          {workOrder.property?.address || 'No property'}
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="w-10"></TableHead>
+                <TableHead className="font-semibold">Scope</TableHead>
+                <TableHead className="font-semibold">Property</TableHead>
+                <TableHead className="font-semibold">Vendor</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Created</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredWorkOrders.map((workOrder) => (
+                <Collapsible key={workOrder.id} asChild open={expandedRows.has(workOrder.id)} onOpenChange={() => toggleRow(workOrder.id)}>
+                  <>
+                    <TableRow className="hover:bg-muted/30">
+                      <TableCell>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                            {expandedRows.has(workOrder.id) ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <ClipboardList className="w-4 h-4 text-primary" />
+                          </div>
+                          <span className="font-medium line-clamp-1">{workOrder.scope}</span>
                         </div>
-                        {workOrder.vendor && (
-                          <div className="flex items-center gap-1">
-                            <Users className="w-4 h-4" />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Building2 className="w-3 h-3 text-muted-foreground" />
+                          <span className="line-clamp-1">{workOrder.property?.address || 'No property'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {workOrder.vendor ? (
+                          <div className="flex items-center gap-1 text-sm">
+                            <Users className="w-3 h-3 text-muted-foreground" />
                             {workOrder.vendor.name}
                           </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Unassigned</span>
                         )}
-                        {workOrder.violation && (
-                          <div className="flex items-center gap-1 text-warning">
-                            <AlertTriangle className="w-4 h-4" />
-                            {workOrder.violation.agency} #{workOrder.violation.violation_number}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={workOrder.status}
+                          onValueChange={(v) => updateStatus(workOrder.id, v as WorkOrder['status'])}
+                        >
+                          <SelectTrigger className={`w-32 h-8 text-xs ${statusColors[workOrder.status]}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="open">Open</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="awaiting_docs">Awaiting Docs</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(workOrder.created_at).toLocaleDateString()}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    <CollapsibleContent asChild>
+                      <tr className="bg-muted/20">
+                        <td colSpan={6} className="p-4 border-t border-border">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Full Scope:</span>
+                              <p className="font-medium">{workOrder.scope}</p>
+                            </div>
+                            {workOrder.violation && (
+                              <div>
+                                <span className="text-muted-foreground">Linked Violation:</span>
+                                <p className="font-medium flex items-center gap-1 text-warning">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  {workOrder.violation.agency} #{workOrder.violation.violation_number}
+                                </p>
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-muted-foreground">Created:</span>
+                              <p className="font-medium">{new Date(workOrder.created_at).toLocaleString()}</p>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                    <Select
-                      value={workOrder.status}
-                      onValueChange={(v) => updateStatus(workOrder.id, v as WorkOrder['status'])}
-                    >
-                      <SelectTrigger className={`w-36 h-8 text-xs ${statusColors[workOrder.status]}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="awaiting_docs">Awaiting Docs</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Created {new Date(workOrder.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
+                        </td>
+                      </tr>
+                    </CollapsibleContent>
+                  </>
+                </Collapsible>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <div className="text-center py-16 bg-card rounded-xl border border-border">

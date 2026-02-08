@@ -98,3 +98,39 @@ export const getOATHLookupUrl = (ticketNumber: string) => {
   // Correct URL: a820-ecbticketfinder.nyc.gov/searchHome.action
   return `http://a820-ecbticketfinder.nyc.gov/searchHome.action`;
 };
+
+// Violation statuses that indicate resolution - exclude from active counts
+export const RESOLVED_VIOLATION_STATUSES = [
+  'written off',
+  'closed',
+  'dismissed',
+  'paid',
+  'resolved',
+  'complied',
+  'withdrawn',
+  'stipulation',
+  'default - paid',
+  'in violation - resolved',
+  'in violation - paid',
+];
+
+// Check if a violation status indicates it's resolved
+export const isResolvedViolationStatus = (status: string | null | undefined): boolean => {
+  if (!status) return false;
+  const normalizedStatus = status.toLowerCase().trim();
+  return RESOLVED_VIOLATION_STATUSES.some(resolved => 
+    normalizedStatus.includes(resolved) || resolved.includes(normalizedStatus)
+  );
+};
+
+// Check if a violation should be counted as active
+export const isActiveViolation = (violation: { 
+  status?: string | null; 
+  oath_status?: string | null;
+}): boolean => {
+  // Check both internal status and OATH status
+  if (violation.status === 'closed') return false;
+  if (isResolvedViolationStatus(violation.status)) return false;
+  if (isResolvedViolationStatus(violation.oath_status)) return false;
+  return true;
+};
