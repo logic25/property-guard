@@ -84,6 +84,7 @@ interface Violation {
   penalty_amount?: number | null;
   respondent_name?: string | null;
   violation_class?: string | null;
+  violation_type?: string | null;
   oath_status?: string | null;
   notes?: string | null;
 }
@@ -95,12 +96,36 @@ interface PropertyViolationsTabProps {
   propertyId: string;
 }
 
-type SortField = 'issued_date' | 'agency' | 'status' | 'violation_number';
+type SortField = 'issued_date' | 'agency' | 'status' | 'violation_number' | 'violation_type';
 type SortDirection = 'asc' | 'desc';
+
+// Display-friendly violation type labels
+const VIOLATION_TYPE_LABELS: Record<string, string> = {
+  elevator: 'Elevator',
+  plumbing: 'Plumbing',
+  electrical: 'Electrical',
+  fire_safety: 'Fire Safety',
+  structural: 'Structural',
+  construction: 'Construction',
+  hvac: 'HVAC/Boiler',
+  housing: 'Housing',
+  sanitation: 'Sanitation',
+  landmarks: 'Landmarks',
+  environmental: 'Environmental',
+  signage: 'Signage',
+  zoning: 'Zoning',
+  other: 'Other',
+};
+
+const getViolationTypeLabel = (type: string | null | undefined): string => {
+  if (!type) return '—';
+  return VIOLATION_TYPE_LABELS[type] || type;
+};
 
 export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }: PropertyViolationsTabProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [workOrderDialogOpen, setWorkOrderDialogOpen] = useState(false);
@@ -115,6 +140,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
   const [showActiveOnly, setShowActiveOnly] = useState(true);
 
   const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))].sort(), [violations]);
+  const violationTypes = useMemo(() => [...new Set(violations.map(v => v.violation_type).filter(Boolean))].sort() as string[], [violations]);
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
@@ -208,13 +234,14 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
       
       const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
       const matchesAgency = agencyFilter === 'all' || v.agency === agencyFilter;
+      const matchesType = typeFilter === 'all' || v.violation_type === typeFilter;
       
       // Date filtering
       const violationDate = new Date(v.issued_date);
       const matchesDateFrom = !dateFrom || violationDate >= dateFrom;
       const matchesDateTo = !dateTo || violationDate <= dateTo;
       
-      return matchesSearch && matchesStatus && matchesAgency && matchesDateFrom && matchesDateTo;
+      return matchesSearch && matchesStatus && matchesAgency && matchesType && matchesDateFrom && matchesDateTo;
     });
 
     // Sort
@@ -233,12 +260,15 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
         case 'violation_number':
           comparison = a.violation_number.localeCompare(b.violation_number);
           break;
+        case 'violation_type':
+          comparison = (a.violation_type || '').localeCompare(b.violation_type || '');
+          break;
       }
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
     return result;
-  }, [violations, showActiveOnly, searchQuery, statusFilter, agencyFilter, dateFrom, dateTo, sortField, sortDirection]);
+  }, [violations, showActiveOnly, searchQuery, statusFilter, agencyFilter, typeFilter, dateFrom, dateTo, sortField, sortDirection]);
 
   // Calculate counts using proper active violation filtering
   const activeViolations = violations.filter(isActiveViolation);
@@ -261,10 +291,11 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
             variant="outline"
             size="sm"
             onClick={() => {
-              const headers = ['Violation #', 'Agency', 'Issued Date', 'Deadline', 'Status', 'Description', 'OATH Status', 'Penalty', 'Notes'];
+              const headers = ['Violation #', 'Agency', 'Type', 'Issued Date', 'Deadline', 'Status', 'Description', 'OATH Status', 'Penalty', 'Notes'];
               const rows = filteredAndSortedViolations.map(v => [
                 v.violation_number,
                 v.agency,
+                getViolationTypeLabel(v.violation_type),
                 new Date(v.issued_date).toLocaleDateString(),
                 v.cure_due_date ? new Date(v.cure_due_date).toLocaleDateString() : '',
                 v.status,
@@ -350,6 +381,17 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
             ))}
           </SelectContent>
         </Select>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            {violationTypes.map(type => (
+              <SelectItem key={type} value={type}>{getViolationTypeLabel(type)}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {/* Date Filters */}
         <Popover>
@@ -426,7 +468,15 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                   </div>
                 </TableHead>
                 <TableHead className="font-semibold">Deadline</TableHead>
-                <TableHead className="font-semibold max-w-[250px]">Description</TableHead>
+                <TableHead 
+                  className="font-semibold cursor-pointer hover:bg-muted/80"
+                  onClick={() => handleSort('violation_type')}
+                >
+                  <div className="flex items-center">
+                    Type {getSortIcon('violation_type')}
+                  </div>
+                </TableHead>
+                <TableHead className="font-semibold max-w-[200px]">Description</TableHead>
                 <TableHead 
                   className="font-semibold cursor-pointer hover:bg-muted/80"
                   onClick={() => handleSort('status')}
@@ -501,7 +551,16 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
                       </TableCell>
-                      <TableCell className="max-w-[250px]">
+                      <TableCell>
+                        <Badge 
+                          variant="outline" 
+                          className="text-xs cursor-pointer"
+                          onClick={() => setTypeFilter(violation.violation_type || 'other')}
+                        >
+                          {getViolationTypeLabel(violation.violation_type)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[200px]">
                         <p className="text-sm text-muted-foreground line-clamp-2">
                           {violation.description_raw || 'No description'}
                         </p>
