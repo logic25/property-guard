@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 const propertySchema = z.object({
   address: z.string().min(1, 'Address is required').max(500),
@@ -108,6 +108,7 @@ export const EditPropertyDialog = ({
   onSave 
 }: EditPropertyDialogProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const { block: initialBlock, lot: initialLot } = parseBBL(property.bbl);
   
@@ -158,6 +159,64 @@ export const EditPropertyDialog = ({
     });
   }, [property, form]);
 
+  // Sync building data from NYC BIS
+  const handleSyncBuildingData = async () => {
+    const address = form.getValues('address');
+    if (!address) {
+      toast.error('Please enter an address first');
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      // Search NYC DOB BIS API
+      const searchUrl = `https://data.cityofnewyork.us/resource/s3zn-tf7c.json?$where=upper(address) like upper('%25${encodeURIComponent(address.split(',')[0])}%25')&$limit=5`;
+      
+      const response = await fetch(searchUrl);
+      if (!response.ok) throw new Error('Failed to fetch building data');
+      
+      const results = await response.json();
+      
+      if (results.length === 0) {
+        toast.error('No building found for this address in NYC BIS');
+        return;
+      }
+
+      const building = results[0];
+      
+      // Parse BBL into block and lot
+      const bbl = building.bbl || '';
+      let block = '';
+      let lot = '';
+      let borough = '';
+      
+      if (bbl.length >= 10) {
+        borough = bbl.substring(0, 1);
+        block = bbl.substring(1, 6).replace(/^0+/, '') || '0';
+        lot = bbl.substring(6, 10).replace(/^0+/, '') || '0';
+      }
+
+      // Update form with fetched data
+      form.setValue('bin', building.bin || '');
+      form.setValue('borough', borough);
+      form.setValue('block', block);
+      form.setValue('lot', lot);
+      form.setValue('stories', building.cnstrct_flrs ? parseInt(building.cnstrct_flrs) : undefined);
+      form.setValue('height_ft', building.bldg_hgt ? parseInt(building.bldg_hgt) : undefined);
+      form.setValue('gross_sqft', building.gross_sqft ? parseInt(building.gross_sqft) : undefined);
+      form.setValue('dwelling_units', building.dwelling_units ? parseInt(building.dwelling_units) : undefined);
+      form.setValue('primary_use_group', building.occupancy_classification_description || '');
+      form.setValue('use_type', building.use_type || '');
+
+      toast.success(`Synced data for BIN ${building.bin}`);
+    } catch (error) {
+      console.error('Error syncing building data:', error);
+      toast.error('Failed to sync building data from NYC BIS');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const onSubmit = async (data: PropertyFormData) => {
     setIsSubmitting(true);
     
@@ -206,7 +265,23 @@ export const EditPropertyDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Property</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>Edit Property</DialogTitle>
+            <Button 
+              type="button" 
+              variant="outline" 
+              size="sm"
+              onClick={handleSyncBuildingData}
+              disabled={isSyncing}
+            >
+              {isSyncing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Sync NYC BIS Data
+            </Button>
+          </div>
         </DialogHeader>
 
         <Form {...form}>
