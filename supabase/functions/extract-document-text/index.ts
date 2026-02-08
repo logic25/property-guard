@@ -6,6 +6,84 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Simple PDF text extractor - extracts text streams from PDF without heavy libraries
+async function extractTextFromPdf(pdfBytes: Uint8Array): Promise<string> {
+  const decoder = new TextDecoder('latin1');
+  const content = decoder.decode(pdfBytes);
+  
+  const textParts: string[] = [];
+  
+  // Method 1: Extract text between BT (begin text) and ET (end text) markers
+  const btEtPattern = /BT\s*([\s\S]*?)\s*ET/g;
+  let match;
+  
+  while ((match = btEtPattern.exec(content)) !== null) {
+    const textBlock = match[1];
+    
+    // Extract strings in parentheses (literal strings)
+    const literalPattern = /\(([^)]*)\)/g;
+    let literalMatch;
+    while ((literalMatch = literalPattern.exec(textBlock)) !== null) {
+      let text = literalMatch[1];
+      // Unescape common PDF escape sequences
+      text = text.replace(/\\n/g, '\n')
+                 .replace(/\\r/g, '\r')
+                 .replace(/\\t/g, '\t')
+                 .replace(/\\\(/g, '(')
+                 .replace(/\\\)/g, ')')
+                 .replace(/\\\\/g, '\\');
+      if (text.trim()) {
+        textParts.push(text);
+      }
+    }
+    
+    // Extract hex strings in angle brackets
+    const hexPattern = /<([0-9A-Fa-f]+)>/g;
+    let hexMatch;
+    while ((hexMatch = hexPattern.exec(textBlock)) !== null) {
+      const hex = hexMatch[1];
+      let text = '';
+      for (let i = 0; i < hex.length; i += 2) {
+        const charCode = parseInt(hex.substr(i, 2), 16);
+        if (charCode >= 32 && charCode < 127) {
+          text += String.fromCharCode(charCode);
+        }
+      }
+      if (text.trim()) {
+        textParts.push(text);
+      }
+    }
+  }
+  
+  // Method 2: Also look for stream content that might contain text
+  const streamPattern = /stream\s*([\s\S]*?)\s*endstream/g;
+  while ((match = streamPattern.exec(content)) !== null) {
+    const streamContent = match[1];
+    // Only process if it looks like it contains text operators
+    if (streamContent.includes('Tj') || streamContent.includes('TJ')) {
+      const tjPattern = /\(([^)]+)\)\s*Tj/g;
+      let tjMatch;
+      while ((tjMatch = tjPattern.exec(streamContent)) !== null) {
+        const text = tjMatch[1].replace(/\\./g, '');
+        if (text.trim() && text.length > 1) {
+          textParts.push(text);
+        }
+      }
+    }
+  }
+  
+  // Join and clean up the extracted text
+  let extractedText = textParts.join(' ');
+  
+  // Clean up multiple spaces and normalize
+  extractedText = extractedText
+    .replace(/\s+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .trim();
+  
+  return extractedText;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -23,14 +101,12 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     
-    // Create user client for auth
     const supabaseClient = createClient(
       supabaseUrl,
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Create service client for storage access
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
@@ -50,27 +126,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "AI service not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     console.log("Extracting text from document:", documentId);
-    console.log("File URL:", fileUrl);
 
-    // Extract the storage path from the URL
-    // URL format: https://<project>.supabase.co/storage/v1/object/public/property-documents/<path>
+    // Extract storage path from URL
     const urlParts = fileUrl.split('/property-documents/');
     if (urlParts.length !== 2) {
       throw new Error("Invalid file URL format");
     }
     const storagePath = urlParts[1];
-    console.log("Storage path:", storagePath);
 
-    // Download file using storage client (works regardless of bucket public/private status)
+    // Download the PDF
     const { data: fileData, error: downloadError } = await supabaseAdmin.storage
       .from('property-documents')
       .download(storagePath);
@@ -85,66 +150,78 @@ Deno.serve(async (req) => {
     }
 
     const fileBuffer = await fileData.arrayBuffer();
-    
-    // Convert to base64 in chunks to avoid stack overflow
-    const uint8Array = new Uint8Array(fileBuffer);
-    const chunkSize = 8192;
-    let binaryString = '';
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-    }
-    const base64File = btoa(binaryString);
-    
-    console.log("File size:", fileBuffer.byteLength, "bytes, base64 length:", base64File.length);
+    const pdfBytes = new Uint8Array(fileBuffer);
+    console.log("Downloaded PDF:", pdfBytes.length, "bytes");
 
-    // Use Gemini to extract text from the PDF (use flash-lite for speed on large docs)
-    console.log("Sending to AI for extraction...");
-    const extractResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          {
-            role: "user",
-            content: [
+    // Extract text using our lightweight parser
+    let extractedText = await extractTextFromPdf(pdfBytes);
+    console.log("Extracted text length:", extractedText.length);
+
+    // If basic extraction got little text, try AI as fallback (for scanned/image PDFs)
+    if (extractedText.length < 500) {
+      console.log("Low text content, trying AI extraction for scanned PDF...");
+      
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (LOVABLE_API_KEY) {
+        // Convert to base64 in chunks
+        const chunkSize = 8192;
+        let binaryString = '';
+        for (let i = 0; i < pdfBytes.length; i += chunkSize) {
+          const chunk = pdfBytes.subarray(i, Math.min(i + chunkSize, pdfBytes.length));
+          binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+        }
+        const base64File = btoa(binaryString);
+
+        // Only send first ~2MB to AI to stay within timeout
+        const maxBase64Length = 2 * 1024 * 1024;
+        const truncatedBase64 = base64File.length > maxBase64Length 
+          ? base64File.substring(0, maxBase64Length) 
+          : base64File;
+
+        const extractResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-lite",
+            messages: [
               {
-                type: "text",
-                text: `Extract the text from this PDF. Include all sections, articles, dates, dollar amounts, party names. Output only the extracted text.`,
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:application/pdf;base64,${base64File}`,
-                },
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: "Extract all text from this PDF document. Output only the text content.",
+                  },
+                  {
+                    type: "image_url",
+                    image_url: {
+                      url: `data:application/pdf;base64,${truncatedBase64}`,
+                    },
+                  },
+                ],
               },
             ],
-          },
-        ],
-      }),
-    });
-    console.log("AI response status:", extractResponse.status);
+          }),
+        });
 
-    if (!extractResponse.ok) {
-      const errorText = await extractResponse.text();
-      console.error("AI extraction error:", extractResponse.status, errorText);
-      throw new Error(`AI extraction failed: ${extractResponse.status}`);
+        if (extractResponse.ok) {
+          const result = await extractResponse.json();
+          const aiText = result.choices?.[0]?.message?.content || "";
+          if (aiText.length > extractedText.length) {
+            extractedText = aiText;
+            console.log("AI extraction got more text:", extractedText.length, "chars");
+          }
+        }
+      }
     }
 
-    const extractResult = await extractResponse.json();
-    const extractedText = extractResult.choices?.[0]?.message?.content || "";
-
-    if (!extractedText) {
-      throw new Error("No text extracted from document");
+    if (!extractedText || extractedText.length < 10) {
+      throw new Error("Could not extract text from document");
     }
 
-    console.log("Extracted", extractedText.length, "characters from document");
-
-    // Save extracted text to the document record using user's client (respects RLS)
+    // Save extracted text
     const { error: updateError } = await supabaseClient
       .from('property_documents')
       .update({ extracted_text: extractedText })
@@ -154,6 +231,8 @@ Deno.serve(async (req) => {
       console.error("Error saving extracted text:", updateError);
       throw updateError;
     }
+
+    console.log("Successfully extracted", extractedText.length, "characters");
 
     return new Response(
       JSON.stringify({ 
