@@ -122,7 +122,7 @@ export const SmartAddressAutocomplete = ({
       } else {
         url.searchParams.set('$where', `house__ LIKE '%${houseNumber}%'`);
       }
-      url.searchParams.set('$limit', '10');
+      url.searchParams.set('$limit', '25'); // Fetch more to dedupe
 
       const response = await fetch(url.toString());
       
@@ -130,7 +130,16 @@ export const SmartAddressAutocomplete = ({
 
       const data: NYCBuildingData[] = await response.json();
 
-      return data.map(building => ({
+      // Deduplicate by BIN - keep only one result per unique building
+      const seenBins = new Set<string>();
+      const uniqueBuildings = data.filter(building => {
+        const bin = building.bin__ || '';
+        if (!bin || seenBins.has(bin)) return false;
+        seenBins.add(bin);
+        return true;
+      });
+
+      return uniqueBuildings.slice(0, 10).map(building => ({
         bin: building.bin__ || '',
         address: `${building.house__} ${building.street_name}`.trim(),
         borough: building.borough || '',

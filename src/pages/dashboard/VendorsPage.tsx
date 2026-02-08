@@ -11,6 +11,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   Users, 
   Plus, 
@@ -21,7 +28,9 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  ClipboardList,
+  X
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -29,6 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 interface Vendor {
@@ -40,13 +50,43 @@ interface Vendor {
   status: string;
 }
 
+interface WorkOrder {
+  id: string;
+  scope: string;
+  status: string;
+  created_at: string;
+  property?: {
+    address: string;
+  };
+}
+
+const TRADE_TYPES = [
+  'Plumber',
+  'Electrician',
+  'HVAC',
+  'General Contractor',
+  'Roofer',
+  'Mason',
+  'Painter',
+  'Carpenter',
+  'Elevator',
+  'Fire Safety',
+  'Other'
+];
+
 const VendorsPage = () => {
   const { user } = useAuth();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [selectedVendorHistory, setSelectedVendorHistory] = useState<Vendor | null>(null);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -74,6 +114,38 @@ const VendorsPage = () => {
     }
   };
 
+  const fetchWorkOrderHistory = async (vendorId: string) => {
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select(`
+          id,
+          scope,
+          status,
+          created_at,
+          properties:property_id (address)
+        `)
+        .eq('vendor_id', vendorId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      setWorkOrders((data || []).map(wo => ({
+        id: wo.id,
+        scope: wo.scope,
+        status: wo.status,
+        created_at: wo.created_at,
+        property: wo.properties as unknown as { address: string } | undefined
+      })));
+    } catch (error) {
+      console.error('Error fetching work orders:', error);
+      toast.error('Failed to load work order history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
   useEffect(() => {
     fetchVendors();
   }, [user]);
@@ -97,16 +169,43 @@ const VendorsPage = () => {
 
       toast.success('Vendor added successfully');
       setIsDialogOpen(false);
-      setFormData({
-        name: '',
-        phone_number: '',
-        trade_type: '',
-        coi_expiration_date: '',
-      });
+      resetForm();
       fetchVendors();
     } catch (error) {
       console.error('Error adding vendor:', error);
       toast.error('Failed to add vendor');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVendor) return;
+
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from('vendors')
+        .update({
+          name: formData.name,
+          phone_number: formData.phone_number || null,
+          trade_type: formData.trade_type || null,
+          coi_expiration_date: formData.coi_expiration_date || null,
+        })
+        .eq('id', editingVendor.id);
+
+      if (error) throw error;
+
+      toast.success('Vendor updated successfully');
+      setIsEditDialogOpen(false);
+      setEditingVendor(null);
+      resetForm();
+      fetchVendors();
+    } catch (error) {
+      console.error('Error updating vendor:', error);
+      toast.error('Failed to update vendor');
     } finally {
       setIsSubmitting(false);
     }
@@ -127,6 +226,32 @@ const VendorsPage = () => {
     }
   };
 
+  const openEditDialog = (vendor: Vendor) => {
+    setEditingVendor(vendor);
+    setFormData({
+      name: vendor.name,
+      phone_number: vendor.phone_number || '',
+      trade_type: vendor.trade_type || '',
+      coi_expiration_date: vendor.coi_expiration_date || '',
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const openHistoryDialog = (vendor: Vendor) => {
+    setSelectedVendorHistory(vendor);
+    setIsHistoryDialogOpen(true);
+    fetchWorkOrderHistory(vendor.id);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      phone_number: '',
+      trade_type: '',
+      coi_expiration_date: '',
+    });
+  };
+
   const isCoiExpiringSoon = (date: string | null) => {
     if (!date) return false;
     const expiryDate = new Date(date);
@@ -138,6 +263,21 @@ const VendorsPage = () => {
   const isCoiExpired = (date: string | null) => {
     if (!date) return false;
     return new Date(date) < new Date();
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'open':
+        return <Badge variant="outline" className="bg-blue-500/10 text-blue-700 border-blue-500/20">Open</Badge>;
+      case 'in_progress':
+        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20">In Progress</Badge>;
+      case 'awaiting_docs':
+        return <Badge variant="outline" className="bg-purple-500/10 text-purple-700 border-purple-500/20">Awaiting Docs</Badge>;
+      case 'completed':
+        return <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-500/20">Completed</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
   };
 
   const filteredVendors = vendors.filter(v =>
@@ -153,6 +293,81 @@ const VendorsPage = () => {
     );
   }
 
+  const VendorForm = ({ onSubmit, isEdit = false }: { onSubmit: (e: React.FormEvent) => void, isEdit?: boolean }) => (
+    <form onSubmit={onSubmit} className="space-y-5 mt-4">
+      <div className="space-y-2">
+        <Label htmlFor="name">Company Name *</Label>
+        <Input
+          id="name"
+          placeholder="ABC Plumbing Corp"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="phone">Phone Number</Label>
+          <Input
+            id="phone"
+            type="tel"
+            placeholder="(555) 123-4567"
+            value={formData.phone_number}
+            onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="trade">Trade Type</Label>
+          <Select 
+            value={formData.trade_type} 
+            onValueChange={(value) => setFormData({ ...formData, trade_type: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select trade..." />
+            </SelectTrigger>
+            <SelectContent>
+              {TRADE_TYPES.map(trade => (
+                <SelectItem key={trade} value={trade}>{trade}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="coi">COI Expiration Date</Label>
+        <Input
+          id="coi"
+          type="date"
+          value={formData.coi_expiration_date}
+          onChange={(e) => setFormData({ ...formData, coi_expiration_date: e.target.value })}
+        />
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={() => {
+            if (isEdit) {
+              setIsEditDialogOpen(false);
+              setEditingVendor(null);
+            } else {
+              setIsDialogOpen(false);
+            }
+            resetForm();
+          }}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" variant="hero" disabled={isSubmitting}>
+          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : isEdit ? 'Save Changes' : 'Add Vendor'}
+        </Button>
+      </div>
+    </form>
+  );
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -163,7 +378,10 @@ const VendorsPage = () => {
             Manage your contractors and track COI compliance
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) resetForm();
+        }}>
           <DialogTrigger asChild>
             <Button variant="hero">
               <Plus className="w-4 h-4" />
@@ -174,59 +392,7 @@ const VendorsPage = () => {
             <DialogHeader>
               <DialogTitle className="font-display text-xl">Add New Vendor</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-5 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Company Name *</Label>
-                <Input
-                  id="name"
-                  placeholder="ABC Plumbing Corp"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="(555) 123-4567"
-                    value={formData.phone_number}
-                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="trade">Trade Type</Label>
-                  <Input
-                    id="trade"
-                    placeholder="Plumbing, HVAC, Electric..."
-                    value={formData.trade_type}
-                    onChange={(e) => setFormData({ ...formData, trade_type: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="coi">COI Expiration Date</Label>
-                <Input
-                  id="coi"
-                  type="date"
-                  value={formData.coi_expiration_date}
-                  onChange={(e) => setFormData({ ...formData, coi_expiration_date: e.target.value })}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="hero" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Vendor'}
-                </Button>
-              </div>
-            </form>
+            <VendorForm onSubmit={handleSubmit} />
           </DialogContent>
         </Dialog>
       </div>
@@ -261,7 +427,11 @@ const VendorsPage = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openHistoryDialog(vendor)}>
+                      <ClipboardList className="w-4 h-4 mr-2" />
+                      Work Order History
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openEditDialog(vendor)}>
                       <Pencil className="w-4 h-4 mr-2" />
                       Edit
                     </DropdownMenuItem>
@@ -336,6 +506,73 @@ const VendorsPage = () => {
           </Button>
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open);
+        if (!open) {
+          setEditingVendor(null);
+          resetForm();
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl">Edit Vendor</DialogTitle>
+          </DialogHeader>
+          <VendorForm onSubmit={handleEdit} isEdit />
+        </DialogContent>
+      </Dialog>
+
+      {/* Work Order History Dialog */}
+      <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl flex items-center gap-2">
+              <ClipboardList className="w-5 h-5" />
+              Work Order History - {selectedVendorHistory?.name}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto mt-4">
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : workOrders.length > 0 ? (
+              <div className="space-y-3">
+                {workOrders.map((wo) => (
+                  <div 
+                    key={wo.id} 
+                    className="p-4 rounded-lg border border-border bg-muted/30"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground line-clamp-2">
+                          {wo.scope}
+                        </p>
+                        {wo.property?.address && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {wo.property.address}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Created {new Date(wo.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {getStatusBadge(wo.status)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No work orders assigned to this vendor yet.</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
