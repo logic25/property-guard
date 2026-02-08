@@ -63,7 +63,8 @@ import { toast } from 'sonner';
 import { 
   getAgencyLookupUrl, 
   getAgencyColor, 
-  getStatusColor
+  getStatusColor,
+  isActiveViolation
 } from '@/lib/violation-utils';
 import { CreateWorkOrderDialog } from '@/components/violations/CreateWorkOrderDialog';
 
@@ -233,8 +234,9 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
     return result;
   }, [violations, searchQuery, statusFilter, agencyFilter, dateFrom, dateTo, sortField, sortDirection]);
 
-  // Calculate open count for display
-  const openCount = violations.filter(v => v.status === 'open').length;
+  // Calculate counts using proper active violation filtering
+  const activeViolations = violations.filter(isActiveViolation);
+  const openCount = activeViolations.filter(v => v.status === 'open').length;
 
   return (
     <div className="space-y-4">

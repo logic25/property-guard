@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Plus, FolderOpen, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PortfolioCard } from '@/components/portfolios/PortfolioCard';
+import { isActiveViolation } from '@/lib/violation-utils';
 import { CreatePortfolioDialog } from '@/components/portfolios/CreatePortfolioDialog';
 import type { PortfolioWithStats } from '@/types/portfolio';
 import {
@@ -16,7 +16,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useNavigate } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
+import { ChevronRight, ChevronDown, MoreVertical, Pencil, Trash2, AlertTriangle, Building2 } from 'lucide-react';
 
 const PortfoliosPage = () => {
   const navigate = useNavigate();
@@ -25,7 +46,19 @@ const PortfoliosPage = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editPortfolio, setEditPortfolio] = useState<{ id: string; name: string; description: string | null } | null>(null);
   const [deletePortfolioId, setDeletePortfolioId] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
   const fetchPortfolios = async () => {
     try {
       const { data: portfolioData, error: portfolioError } = await supabase
@@ -53,12 +86,14 @@ const PortfoliosPage = () => {
           if (propertyIds.length > 0) {
             const { data: violations } = await supabase
               .from('violations')
-              .select('status, is_stop_work_order, is_vacate_order')
+              .select('status, oath_status, is_stop_work_order, is_vacate_order')
               .in('property_id', propertyIds);
 
+            // Filter using proper resolved status check
+            const activeViolations = (violations || []).filter(isActiveViolation);
             totalViolations = violations?.length || 0;
-            openViolations = violations?.filter(v => v.status === 'open').length || 0;
-            criticalViolations = violations?.filter(v => v.is_stop_work_order || v.is_vacate_order).length || 0;
+            openViolations = activeViolations.length;
+            criticalViolations = activeViolations.filter(v => v.is_stop_work_order || v.is_vacate_order).length;
           }
 
           return {
@@ -136,18 +171,136 @@ const PortfoliosPage = () => {
         </Button>
       </div>
 
-      {/* Portfolio Grid */}
+      {/* Portfolio Table */}
       {portfolios.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {portfolios.map((portfolio) => (
-            <PortfolioCard
-              key={portfolio.id}
-              portfolio={portfolio}
-              onClick={() => navigate(`/dashboard/portfolios/${portfolio.id}`)}
-              onEdit={() => setEditPortfolio(portfolio)}
-              onDelete={() => setDeletePortfolioId(portfolio.id)}
-            />
-          ))}
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="w-10"></TableHead>
+                <TableHead className="font-semibold">Portfolio Name</TableHead>
+                <TableHead className="font-semibold">Properties</TableHead>
+                <TableHead className="font-semibold">Open Violations</TableHead>
+                <TableHead className="font-semibold">Critical</TableHead>
+                <TableHead className="w-10"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {portfolios.map((portfolio) => (
+                <Collapsible key={portfolio.id} asChild open={expandedRows.has(portfolio.id)} onOpenChange={() => toggleRow(portfolio.id)}>
+                  <>
+                    <TableRow 
+                      className="hover:bg-muted/30 cursor-pointer"
+                      onClick={() => navigate(`/dashboard/portfolios/${portfolio.id}`)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                            {expandedRows.has(portfolio.id) ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <FolderOpen className="w-4 h-4 text-primary" />
+                          </div>
+                          <div>
+                            <span className="font-medium">{portfolio.name}</span>
+                            {portfolio.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-1">{portfolio.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Building2 className="w-4 h-4 text-muted-foreground" />
+                          <span>{portfolio.property_count}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {portfolio.open_violations > 0 ? (
+                          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
+                            {portfolio.open_violations}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-success/10 text-success border-success/20">
+                            0
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {portfolio.critical_violations > 0 ? (
+                          <div className="flex items-center gap-1 text-orange-600">
+                            <AlertTriangle className="w-4 h-4" />
+                            <span className="font-medium">{portfolio.critical_violations}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditPortfolio(portfolio)}>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => setDeletePortfolioId(portfolio.id)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                    <CollapsibleContent asChild>
+                      <tr className="bg-muted/20">
+                        <td colSpan={6} className="p-4 border-t border-border">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Description:</span>
+                              <p className="font-medium">{portfolio.description || 'No description'}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Total Violations:</span>
+                              <p className="font-medium">{portfolio.total_violations}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Created:</span>
+                              <p className="font-medium">{new Date(portfolio.created_at).toLocaleDateString()}</p>
+                            </div>
+                            <div>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => navigate(`/dashboard/portfolios/${portfolio.id}`)}
+                              >
+                                View Details
+                              </Button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </CollapsibleContent>
+                  </>
+                </Collapsible>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <div className="text-center py-16 bg-card rounded-xl border border-border">

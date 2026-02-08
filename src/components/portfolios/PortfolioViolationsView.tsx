@@ -32,7 +32,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   getAgencyLookupUrl, 
   getAgencyColor, 
-  getStatusColor
+  getStatusColor,
+  isActiveViolation
 } from '@/lib/violation-utils';
 
 interface Violation {
@@ -41,6 +42,7 @@ interface Violation {
   violation_number: string;
   issued_date: string;
   status: string;
+  oath_status?: string | null;
   description_raw: string | null;
   cure_due_date: string | null;
   hearing_date: string | null;
@@ -132,29 +134,35 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
     return result;
   }, [violations, searchQuery, statusFilter, agencyFilter, propertyFilter, sortField, sortDirection]);
 
+  // Calculate active violations using proper filtering
+  const activeViolations = violations.filter(isActiveViolation);
+  const activeOpenCount = activeViolations.filter(v => v.status === 'open').length;
+  const activeInProgressCount = activeViolations.filter(v => v.status === 'in_progress').length;
+  const criticalCount = activeViolations.filter(v => v.is_stop_work_order || v.is_vacate_order).length;
+
   return (
     <div className="space-y-4">
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-card rounded-lg border p-4">
-          <div className="text-2xl font-bold">{violations.length}</div>
-          <div className="text-sm text-muted-foreground">Total Violations</div>
+          <div className="text-2xl font-bold">{activeViolations.length}</div>
+          <div className="text-sm text-muted-foreground">Active Violations</div>
         </div>
         <div className="bg-card rounded-lg border p-4">
           <div className="text-2xl font-bold text-destructive">
-            {violations.filter(v => v.status === 'open').length}
+            {activeOpenCount}
           </div>
           <div className="text-sm text-muted-foreground">Open</div>
         </div>
         <div className="bg-card rounded-lg border p-4">
           <div className="text-2xl font-bold text-warning">
-            {violations.filter(v => v.status === 'in_progress').length}
+            {activeInProgressCount}
           </div>
           <div className="text-sm text-muted-foreground">In Progress</div>
         </div>
         <div className="bg-card rounded-lg border p-4">
           <div className="text-2xl font-bold text-orange-600">
-            {violations.filter(v => v.is_stop_work_order || v.is_vacate_order).length}
+            {criticalCount}
           </div>
           <div className="text-sm text-muted-foreground">Critical</div>
         </div>

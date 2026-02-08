@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import StatsCard from '@/components/dashboard/StatsCard';
 import CriticalViolationsWidget from '@/components/dashboard/CriticalViolationsWidget';
 import { Button } from '@/components/ui/button';
+import { isActiveViolation } from '@/lib/violation-utils';
 import { 
   Building2, 
   AlertTriangle, 
@@ -56,11 +57,12 @@ const DashboardOverview = () => {
           .from('properties')
           .select('*', { count: 'exact', head: true });
 
-        // Fetch active violations count
-        const { count: violationsCount } = await supabase
+        // Fetch violations and filter out resolved ones
+        const { data: violationsData } = await supabase
           .from('violations')
-          .select('*', { count: 'exact', head: true })
-          .neq('status', 'closed');
+          .select('status, oath_status');
+        
+        const activeViolationsCount = (violationsData || []).filter(isActiveViolation).length;
 
         // Fetch vendors count
         const { count: vendorsCount } = await supabase
@@ -73,7 +75,7 @@ const DashboardOverview = () => {
           .select('*', { count: 'exact', head: true })
           .neq('status', 'completed');
 
-        // Fetch recent violations
+        // Fetch recent violations (filter resolved ones)
         const { data: violations } = await supabase
           .from('violations')
           .select(`
@@ -82,20 +84,25 @@ const DashboardOverview = () => {
             violation_number,
             description_raw,
             status,
+            oath_status,
             property:properties(address)
           `)
-          .neq('status', 'closed')
           .order('created_at', { ascending: false })
-          .limit(5);
+          .limit(20);
+
+        // Filter to only active violations
+        const activeViolations = (violations || [])
+          .filter(v => isActiveViolation(v))
+          .slice(0, 5);
 
         setStats({
           totalProperties: propertiesCount || 0,
-          activeViolations: violationsCount || 0,
+          activeViolations: activeViolationsCount,
           totalVendors: vendorsCount || 0,
           openWorkOrders: workOrdersCount || 0,
         });
 
-        setRecentViolations(violations as unknown as RecentViolation[] || []);
+        setRecentViolations(activeViolations as unknown as RecentViolation[] || []);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {

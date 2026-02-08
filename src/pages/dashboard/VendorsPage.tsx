@@ -18,6 +18,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { 
   Users, 
   Plus, 
@@ -30,7 +43,9 @@ import {
   Trash2,
   AlertCircle,
   ClipboardList,
-  X
+  X,
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -87,7 +102,19 @@ const VendorsPage = () => {
   const [selectedVendorHistory, setSelectedVendorHistory] = useState<Vendor | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
   const [formData, setFormData] = useState({
     name: '',
     phone_number: '',
@@ -408,88 +435,142 @@ const VendorsPage = () => {
         />
       </div>
 
-      {/* Vendors Grid */}
+      {/* Vendors Table */}
       {filteredVendors.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredVendors.map((vendor) => (
-            <div
-              key={vendor.id}
-              className="bg-card rounded-xl border border-border p-6 shadow-card hover:shadow-card-hover transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Users className="w-6 h-6 text-primary" />
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => openHistoryDialog(vendor)}>
-                      <ClipboardList className="w-4 h-4 mr-2" />
-                      Work Order History
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => openEditDialog(vendor)}>
-                      <Pencil className="w-4 h-4 mr-2" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      className="text-destructive"
-                      onClick={() => handleDelete(vendor.id)}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <h3 className="font-display font-semibold text-foreground mb-1">
-                {vendor.name}
-              </h3>
-              
-              {vendor.trade_type && (
-                <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-secondary text-muted-foreground mb-4">
-                  {vendor.trade_type}
-                </span>
-              )}
-
-              <div className="space-y-3 pt-4 border-t border-border">
-                {vendor.phone_number && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Phone className="w-4 h-4" />
-                    {vendor.phone_number}
-                  </div>
-                )}
-                
-                <div className="flex items-center gap-2 text-sm">
-                  <FileCheck className={`w-4 h-4 ${
-                    isCoiExpired(vendor.coi_expiration_date) ? 'text-destructive' :
-                    isCoiExpiringSoon(vendor.coi_expiration_date) ? 'text-warning' :
-                    vendor.coi_expiration_date ? 'text-success' : 'text-muted-foreground'
-                  }`} />
-                  {vendor.coi_expiration_date ? (
-                    <span className={`font-medium ${
-                      isCoiExpired(vendor.coi_expiration_date) ? 'text-destructive' :
-                      isCoiExpiringSoon(vendor.coi_expiration_date) ? 'text-warning' :
-                      'text-success'
-                    }`}>
-                      {isCoiExpired(vendor.coi_expiration_date) ? 'COI Expired' :
-                       isCoiExpiringSoon(vendor.coi_expiration_date) ? 'COI Expiring Soon' :
-                       `COI Valid until ${new Date(vendor.coi_expiration_date).toLocaleDateString()}`}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      No COI on file
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="w-10"></TableHead>
+                <TableHead className="font-semibold">Company Name</TableHead>
+                <TableHead className="font-semibold">Trade</TableHead>
+                <TableHead className="font-semibold">Phone</TableHead>
+                <TableHead className="font-semibold">COI Status</TableHead>
+                <TableHead className="w-10"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredVendors.map((vendor) => (
+                <Collapsible key={vendor.id} asChild open={expandedRows.has(vendor.id)} onOpenChange={() => toggleRow(vendor.id)}>
+                  <>
+                    <TableRow className="hover:bg-muted/30">
+                      <TableCell>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                            {expandedRows.has(vendor.id) ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Users className="w-4 h-4 text-primary" />
+                          </div>
+                          <span className="font-medium">{vendor.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {vendor.trade_type ? (
+                          <Badge variant="secondary">{vendor.trade_type}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {vendor.phone_number ? (
+                          <div className="flex items-center gap-1 text-sm">
+                            <Phone className="w-3 h-3" />
+                            {vendor.phone_number}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <FileCheck className={`w-4 h-4 ${
+                            isCoiExpired(vendor.coi_expiration_date) ? 'text-destructive' :
+                            isCoiExpiringSoon(vendor.coi_expiration_date) ? 'text-warning' :
+                            vendor.coi_expiration_date ? 'text-success' : 'text-muted-foreground'
+                          }`} />
+                          <span className={`text-sm font-medium ${
+                            isCoiExpired(vendor.coi_expiration_date) ? 'text-destructive' :
+                            isCoiExpiringSoon(vendor.coi_expiration_date) ? 'text-warning' :
+                            vendor.coi_expiration_date ? 'text-success' : 'text-muted-foreground'
+                          }`}>
+                            {isCoiExpired(vendor.coi_expiration_date) ? 'Expired' :
+                             isCoiExpiringSoon(vendor.coi_expiration_date) ? 'Expiring Soon' :
+                             vendor.coi_expiration_date ? new Date(vendor.coi_expiration_date).toLocaleDateString() :
+                             'No COI'}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openHistoryDialog(vendor)}>
+                              <ClipboardList className="w-4 h-4 mr-2" />
+                              Work Order History
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openEditDialog(vendor)}>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => handleDelete(vendor.id)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                    <CollapsibleContent asChild>
+                      <tr className="bg-muted/20">
+                        <td colSpan={6} className="p-4 border-t border-border">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Status:</span>
+                              <p className="font-medium capitalize">{vendor.status || 'Active'}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">COI Expiration:</span>
+                              <p className="font-medium">
+                                {vendor.coi_expiration_date 
+                                  ? new Date(vendor.coi_expiration_date).toLocaleDateString() 
+                                  : 'Not on file'}
+                              </p>
+                            </div>
+                            <div className="col-span-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => openHistoryDialog(vendor)}
+                              >
+                                <ClipboardList className="w-4 h-4 mr-2" />
+                                View Work Order History
+                              </Button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    </CollapsibleContent>
+                  </>
+                </Collapsible>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <div className="text-center py-16 bg-card rounded-xl border border-border">
