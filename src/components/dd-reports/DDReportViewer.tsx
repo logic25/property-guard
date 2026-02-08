@@ -59,6 +59,14 @@ const formatBBL = (bbl: string | null | undefined): string => {
   return `${borough}-${block}-${lot}`;
 };
 
+interface UserProfile {
+  email: string | null;
+  display_name: string | null;
+  company_name: string | null;
+  phone: string | null;
+  license_id: string | null;
+}
+
 interface DDReportViewerProps {
   report: {
     id: string;
@@ -80,9 +88,10 @@ interface DDReportViewerProps {
   };
   onBack: () => void;
   onDelete: () => void;
+  userProfile?: UserProfile;
 }
 
-const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
+const DDReportViewer = ({ report, onBack, onDelete, userProfile }: DDReportViewerProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const printRef = useRef<HTMLDivElement>(null);
@@ -609,7 +618,7 @@ const DDReportViewer = ({ report, onBack, onDelete }: DDReportViewerProps) => {
       {/* Hidden print view for PDF export */}
       <div className="fixed -left-[9999px] -top-[9999px]">
         <div ref={printRef}>
-          <DDReportPrintView report={report} />
+          <DDReportPrintView report={report} userProfile={userProfile} />
         </div>
       </div>
     </div>
