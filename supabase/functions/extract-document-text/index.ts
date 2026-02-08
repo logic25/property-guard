@@ -98,7 +98,8 @@ Deno.serve(async (req) => {
     
     console.log("File size:", fileBuffer.byteLength, "bytes, base64 length:", base64File.length);
 
-    // Use Gemini to extract text from the PDF
+    // Use Gemini to extract text from the PDF (use flash-lite for speed on large docs)
+    console.log("Sending to AI for extraction...");
     const extractResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -106,14 +107,14 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-flash-lite",
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: `Extract ALL text content from this PDF document. Preserve the structure, headings, sections, and formatting as much as possible. Include article numbers, section numbers, dates, amounts, and all important details. Output ONLY the extracted text, nothing else.`,
+                text: `Extract the text from this PDF. Include all sections, articles, dates, dollar amounts, party names. Output only the extracted text.`,
               },
               {
                 type: "image_url",
@@ -126,6 +127,7 @@ Deno.serve(async (req) => {
         ],
       }),
     });
+    console.log("AI response status:", extractResponse.status);
 
     if (!extractResponse.ok) {
       const errorText = await extractResponse.text();
