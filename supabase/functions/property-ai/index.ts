@@ -83,9 +83,16 @@ WORK ORDERS:
 - Active: ${workOrdersSummary?.active || 0}
 `;
 
-    // Build document content section
+    // Build document content section - include more content for lease documents
     let documentContext = "\nDOCUMENTS ON FILE:\n";
     const docs = documentContents || [];
+    
+    // Calculate available space per document (aim for ~80k total chars for docs)
+    const maxTotalChars = 80000;
+    const docsWithContent = docs.filter((d: any) => d.content);
+    const charsPerDoc = docsWithContent.length > 0 
+      ? Math.floor(maxTotalChars / docsWithContent.length) 
+      : 30000;
     
     if (docs.length === 0) {
       documentContext += "No documents uploaded.\n";
@@ -93,13 +100,14 @@ WORK ORDERS:
       for (const doc of docs) {
         documentContext += `\n--- ${doc.type.toUpperCase()}: ${doc.name} ---\n`;
         if (doc.content) {
-          // Limit content to avoid token limits (first 8000 chars per doc)
-          const truncatedContent = doc.content.length > 8000 
-            ? doc.content.substring(0, 8000) + "\n... [content truncated]"
+          // Use dynamic limit based on number of documents
+          const charLimit = Math.max(15000, charsPerDoc);
+          const truncatedContent = doc.content.length > charLimit 
+            ? doc.content.substring(0, charLimit) + `\n... [content truncated, showing first ${Math.round(charLimit/1000)}k of ${Math.round(doc.content.length/1000)}k chars]`
             : doc.content;
           documentContext += truncatedContent + "\n";
         } else {
-          documentContext += "(Document uploaded but text not yet extracted. Ask user to re-upload for AI analysis.)\n";
+          documentContext += "(Document uploaded but text not yet extracted. Click 'Extract for AI' on the document.)\n";
         }
       }
     }
