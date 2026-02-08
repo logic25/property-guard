@@ -114,14 +114,16 @@ Deno.serve(async (req) => {
 
     // Fetch DOB Violations (both old and new datasets)
     if (agenciesToSync.includes("DOB")) {
+      // DOB_OLD uses issue_date, DOB_NEW uses violation_issue_date
       const [dobOldData, dobNewData] = await Promise.all([
         safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_OLD}?bin=${bin}&$limit=100&$order=issue_date DESC`, "DOB_OLD"),
-        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_NEW}?bin=${bin}&$limit=100&$order=issue_date DESC`, "DOB_NEW"),
+        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_NEW}?bin=${bin}&$limit=100&$order=violation_issue_date DESC`, "DOB_NEW"),
       ]);
 
       console.log(`Found ${dobOldData.length} DOB (old) violations, ${dobNewData.length} DOB (new) violations`);
 
-      for (const v of [...dobOldData, ...dobNewData] as Record<string, unknown>[]) {
+      // Process OLD DOB violations
+      for (const v of dobOldData as Record<string, unknown>[]) {
         const violationNum = (v.violation_number || v.ecb_violation_number || v.number) as string;
         const issueDate = v.issue_date as string;
         
@@ -140,6 +142,31 @@ Deno.serve(async (req) => {
             is_vacate_order: String(v.disposition_comments || "").toLowerCase().includes("vacate"),
             penalty_amount: v.penality_imposed ? parseFloat(v.penality_imposed as string) : null,
             respondent_name: (v.respondent_name || v.owner) as string || null,
+            synced_at: now,
+          });
+        }
+      }
+      
+      // Process NEW DOB violations (DOB NOW system)
+      for (const v of dobNewData as Record<string, unknown>[]) {
+        const violationNum = v.violation_number as string;
+        const issueDate = v.violation_issue_date as string;
+        
+        if (violationNum && issueDate) {
+          violations.push({
+            agency: "DOB",
+            violation_number: violationNum,
+            issued_date: issueDate.split("T")[0],
+            hearing_date: null,
+            cure_due_date: v.cure_date ? (v.cure_date as string).split("T")[0] : null,
+            description_raw: (v.violation_description || v.violation_type) as string || null,
+            property_id,
+            severity: v.violation_type as string || null,
+            violation_class: v.violation_category as string || null,
+            is_stop_work_order: String(v.violation_description || "").toLowerCase().includes("stop work"),
+            is_vacate_order: String(v.violation_description || "").toLowerCase().includes("vacate"),
+            penalty_amount: v.penalty_amount ? parseFloat(v.penalty_amount as string) : null,
+            respondent_name: v.respondent_name as string || null,
             synced_at: now,
           });
         }
