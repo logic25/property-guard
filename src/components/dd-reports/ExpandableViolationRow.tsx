@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { TableRow, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { getAgencyLookupUrl, getAgencyColor } from '@/lib/violation-utils';
 
@@ -34,17 +33,15 @@ const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: E
   };
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Fragment>
       <TableRow 
         className="cursor-pointer hover:bg-muted/50"
         onClick={() => setIsOpen(!isOpen)}
       >
         <TableCell className="w-8">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-6 w-6">
-              {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            </Button>
-          </CollapsibleTrigger>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}>
+            {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </Button>
         </TableCell>
         <TableCell className="font-mono text-sm">{violation.violation_number}</TableCell>
         <TableCell>
@@ -67,7 +64,7 @@ const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: E
           </Badge>
         </TableCell>
       </TableRow>
-      <CollapsibleContent asChild>
+      {isOpen && (
         <TableRow className="bg-muted/30 hover:bg-muted/30">
           <TableCell colSpan={7} className="p-4">
             <div className="space-y-4">
@@ -137,8 +134,8 @@ const ExpandableViolationRow = ({ violation, index, note, onNoteChange, bbl }: E
             </div>
           </TableCell>
         </TableRow>
-      </CollapsibleContent>
-    </Collapsible>
+      )}
+    </Fragment>
   );
 };
 
