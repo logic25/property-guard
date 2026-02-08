@@ -558,17 +558,17 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
         </TabsList>
 
         <TabsContent value="violations">
-          <Card>
+          <Card className="border-border/60 shadow-sm">
             <Collapsible open={violationsOpen} onOpenChange={setViolationsOpen}>
-              <CardHeader className="cursor-pointer" onClick={() => setViolationsOpen(!violationsOpen)}>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors rounded-t-lg" onClick={() => setViolationsOpen(!violationsOpen)}>
                 <CollapsibleTrigger asChild>
                   <div className="flex items-center justify-between w-full">
                     <div>
-                      <CardTitle className="flex items-center gap-2">
+                      <CardTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
                         {violationsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         Open Violations ({violations.length})
                       </CardTitle>
-                      <CardDescription className="mt-1">
+                      <CardDescription className="mt-1.5 text-sm font-medium">
                         {dobViolations.length} DOB • {ecbViolations.length} ECB • {hpdViolations.length} HPD
                       </CardDescription>
                     </div>
@@ -618,16 +618,16 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     </div>
                   ) : (
                     <ScrollArea className="h-[500px]">
-                      <Table>
+                      <Table className="text-sm">
                         <TableHeader>
-                          <TableRow>
+                          <TableRow className="bg-muted/40 hover:bg-muted/40">
                             <TableHead className="w-8"></TableHead>
-                            <TableHead>Violation #</TableHead>
-                            <TableHead>Agency</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Severity</TableHead>
-                            <TableHead>Issued</TableHead>
-                            <TableHead>Status</TableHead>
+                            <TableHead className="font-semibold">Violation #</TableHead>
+                            <TableHead className="font-semibold">Agency</TableHead>
+                            <TableHead className="font-semibold">Type</TableHead>
+                            <TableHead className="font-semibold">Severity</TableHead>
+                            <TableHead className="font-semibold">Issued</TableHead>
+                            <TableHead className="font-semibold">Status</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -654,17 +654,17 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
         </TabsContent>
 
         <TabsContent value="applications">
-          <Card>
+          <Card className="border-border/60 shadow-sm">
             <Collapsible open={applicationsOpen} onOpenChange={setApplicationsOpen}>
-              <CardHeader className="cursor-pointer" onClick={() => setApplicationsOpen(!applicationsOpen)}>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors rounded-t-lg" onClick={() => setApplicationsOpen(!applicationsOpen)}>
                 <CollapsibleTrigger asChild>
                   <div className="flex items-center justify-between w-full">
                     <div>
-                      <CardTitle className="flex items-center gap-2">
+                      <CardTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
                         {applicationsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         Permit Applications ({applications.length})
                       </CardTitle>
-                      <CardDescription className="mt-1">
+                      <CardDescription className="mt-1.5 text-sm font-medium">
                         {bisApplications.length} BIS • {dobNowApplications.length} DOB NOW Build
                       </CardDescription>
                     </div>
