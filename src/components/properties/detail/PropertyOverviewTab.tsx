@@ -9,7 +9,11 @@ import {
   Flame,
   Droplets,
   Cog,
-  Shield
+  Shield,
+  User,
+  Ruler,
+  Layers,
+  Home
 } from 'lucide-react';
 import { getBoroughName } from '@/lib/property-utils';
 
@@ -35,6 +39,7 @@ interface Property {
   has_sprinkler: boolean | null;
   compliance_status: string | null;
   last_synced_at: string | null;
+  owner_name?: string | null;
 }
 
 interface Violation {
@@ -87,30 +92,35 @@ export const PropertyOverviewTab = ({
   const criticalIssues = violations.filter(v => v.is_stop_work_order || v.is_vacate_order).length;
   const complianceScore = Math.max(0, 100 - (openViolations * 5) - (criticalIssues * 25));
 
-  const getCOStatusDisplay = (status: string | null | undefined) => {
+  const getCOStatusBadge = (status: string | null | undefined) => {
     switch (status) {
       case 'valid':
-        return { icon: '🟢', label: 'Valid Certificate of Occupancy', sublabel: '', className: 'border-success/30 bg-success/5' };
+        return { icon: '🟢', label: 'Valid CO', className: 'bg-success/10 text-success border-success/20' };
       case 'temporary':
-        return { icon: '🟡', label: 'Temporary Certificate of Occupancy', sublabel: 'Check expiration date', className: 'border-warning/30 bg-warning/5' };
+        return { icon: '🟡', label: 'Temp CO', className: 'bg-warning/10 text-warning border-warning/20' };
       case 'expired_tco':
-        return { icon: '🔴', label: 'Expired Temporary CO', sublabel: 'Immediate action required', className: 'border-destructive/30 bg-destructive/5' };
+        return { icon: '🔴', label: 'Expired TCO', className: 'bg-destructive/10 text-destructive border-destructive/20' };
       case 'missing':
-        return { icon: '🔴', label: 'No Certificate of Occupancy', sublabel: 'Critical compliance issue', className: 'border-destructive/30 bg-destructive/5' };
+        return { icon: '🔴', label: 'No CO', className: 'bg-destructive/10 text-destructive border-destructive/20' };
       case 'pre_1938':
-        return { icon: '🏛️', label: 'Pre-1938 Building', sublabel: 'CO not required', className: 'border-muted bg-muted/30' };
+        return { icon: '🏛️', label: 'Pre-1938', className: 'bg-muted text-muted-foreground border-muted' };
       case 'use_violation':
-        return { icon: '🟡', label: 'Use Violation Detected', sublabel: 'Building use differs from CO', className: 'border-warning/30 bg-warning/5' };
+        return { icon: '🟡', label: 'Use Violation', className: 'bg-warning/10 text-warning border-warning/20' };
       default:
-        return { icon: '❔', label: 'CO Status Unknown', sublabel: 'Sync to fetch CO data', className: 'border-muted bg-muted/30' };
+        return { icon: '❔', label: 'Unknown', className: 'bg-muted text-muted-foreground border-muted' };
     }
   };
 
-  const coStatus = getCOStatusDisplay(property.co_status);
+  const coStatus = getCOStatusBadge(property.co_status);
+
+  const formatNumber = (num: number | null) => {
+    if (!num) return '-';
+    return num.toLocaleString();
+  };
 
   return (
     <div className="space-y-6">
-      {/* Quick Stats */}
+      {/* Quick Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
@@ -171,131 +181,121 @@ export const PropertyOverviewTab = ({
         </Card>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* CO Status Card */}
-        <Card className={`border-2 ${coStatus.className}`}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <span className="text-2xl">{coStatus.icon}</span>
-              Certificate of Occupancy
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="font-medium text-foreground">{coStatus.label}</p>
-            {coStatus.sublabel && (
-              <p className="text-sm text-muted-foreground mt-1">{coStatus.sublabel}</p>
-            )}
-            {property.co_data && (
-              <div className="mt-4 space-y-2 text-sm">
-                {property.co_data.co_number && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">CO Number:</span>
-                    <span className="font-medium">{property.co_data.co_number as string}</span>
-                  </div>
-                )}
-                {property.co_data.occupancy_classification && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Occupancy:</span>
-                    <span className="font-medium">{property.co_data.occupancy_classification as string}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Building Info Card */}
-        <Card>
-          <CardHeader className="pb-3">
+      {/* Building Details Card - Consolidated */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
               <Building2 className="w-5 h-5" />
-              Building Information
+              Building Details
             </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              {property.borough && (
-                <div>
-                  <p className="text-muted-foreground">Borough</p>
-                  <p className="font-medium">{getBoroughName(property.borough)}</p>
-                </div>
-              )}
-              {property.bin && (
-                <div>
-                  <p className="text-muted-foreground">BIN</p>
-                  <p className="font-medium">{property.bin}</p>
-                </div>
-              )}
-              {property.bbl && (
-                <div>
-                  <p className="text-muted-foreground">BBL</p>
-                  <p className="font-medium">{property.bbl}</p>
-                </div>
-              )}
-              {property.stories && (
-                <div>
-                  <p className="text-muted-foreground">Stories</p>
-                  <p className="font-medium">{property.stories}</p>
-                </div>
-              )}
-              {property.height_ft && (
-                <div>
-                  <p className="text-muted-foreground">Height</p>
-                  <p className="font-medium">{property.height_ft} ft</p>
-                </div>
-              )}
-              {property.gross_sqft && (
-                <div>
-                  <p className="text-muted-foreground">Gross Sqft</p>
-                  <p className="font-medium">{property.gross_sqft.toLocaleString()}</p>
-                </div>
-              )}
-              {property.dwelling_units && (
-                <div>
-                  <p className="text-muted-foreground">Dwelling Units</p>
-                  <p className="font-medium">{property.dwelling_units}</p>
-                </div>
-              )}
-              {property.primary_use_group && (
-                <div>
-                  <p className="text-muted-foreground">Use Group</p>
-                  <p className="font-medium">{property.primary_use_group}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Building Features */}
-            <div className="pt-3 border-t border-border">
-              <p className="text-sm text-muted-foreground mb-2">Building Features</p>
-              <div className="flex flex-wrap gap-2">
-                {property.has_gas && (
-                  <Badge variant="outline" className="text-xs gap-1">
-                    <Flame className="w-3 h-3" /> Gas
-                  </Badge>
-                )}
-                {property.has_boiler && (
-                  <Badge variant="outline" className="text-xs gap-1">
-                    <Droplets className="w-3 h-3" /> Boiler
-                  </Badge>
-                )}
-                {property.has_elevator && (
-                  <Badge variant="outline" className="text-xs gap-1">
-                    <Cog className="w-3 h-3" /> Elevator
-                  </Badge>
-                )}
-                {property.has_sprinkler && (
-                  <Badge variant="outline" className="text-xs gap-1">
-                    <Shield className="w-3 h-3" /> Sprinkler
-                  </Badge>
-                )}
-                {!property.has_gas && !property.has_boiler && !property.has_elevator && !property.has_sprinkler && (
-                  <span className="text-sm text-muted-foreground">None specified</span>
-                )}
+            {/* Compact CO Status Badge */}
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium border ${coStatus.className}`}>
+              <span>{coStatus.icon}</span>
+              {coStatus.label}
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+            {/* Owner */}
+            <div className="flex items-start gap-2">
+              <User className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground">Owner / Entity</p>
+                <p className="font-medium text-sm">{property.owner_name || 'Not specified'}</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+
+            {/* Total SF */}
+            <div className="flex items-start gap-2">
+              <Layers className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground">Total SF</p>
+                <p className="font-medium text-sm">{formatNumber(property.gross_sqft)} sf</p>
+              </div>
+            </div>
+
+            {/* Height */}
+            <div className="flex items-start gap-2">
+              <Ruler className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground">Height</p>
+                <p className="font-medium text-sm">{property.height_ft ? `${property.height_ft} ft` : '-'}</p>
+              </div>
+            </div>
+
+            {/* Stories */}
+            <div className="flex items-start gap-2">
+              <Building2 className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground">Stories</p>
+                <p className="font-medium text-sm">{property.stories || '-'}</p>
+              </div>
+            </div>
+
+            {/* Units */}
+            <div className="flex items-start gap-2">
+              <Home className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground">Dwelling Units</p>
+                <p className="font-medium text-sm">{property.dwelling_units || '-'}</p>
+              </div>
+            </div>
+
+            {/* Use Group */}
+            <div className="flex items-start gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground">Use Group</p>
+                <p className="font-medium text-sm">{property.primary_use_group || '-'}</p>
+              </div>
+            </div>
+
+            {/* BIN */}
+            <div>
+              <p className="text-xs text-muted-foreground">BIN</p>
+              <p className="font-medium text-sm font-mono">{property.bin || '-'}</p>
+            </div>
+
+            {/* BBL */}
+            <div>
+              <p className="text-xs text-muted-foreground">BBL</p>
+              <p className="font-medium text-sm font-mono">{property.bbl || '-'}</p>
+            </div>
+          </div>
+
+          {/* Building Features */}
+          <div className="pt-4 mt-4 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-2">Building Features</p>
+            <div className="flex flex-wrap gap-2">
+              {property.has_gas && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Flame className="w-3 h-3" /> Gas
+                </Badge>
+              )}
+              {property.has_boiler && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Droplets className="w-3 h-3" /> Boiler
+                </Badge>
+              )}
+              {property.has_elevator && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Cog className="w-3 h-3" /> Elevator
+                </Badge>
+              )}
+              {property.has_sprinkler && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Shield className="w-3 h-3" /> Sprinkler
+                </Badge>
+              )}
+              {!property.has_gas && !property.has_boiler && !property.has_elevator && !property.has_sprinkler && (
+                <span className="text-sm text-muted-foreground">None specified</span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Activity Summary */}
       <Card>
