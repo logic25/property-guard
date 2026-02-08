@@ -159,8 +159,23 @@ const DDReportViewer = ({ report, onBack, onDelete, userProfile }: DDReportViewe
 
   const violations = report.violations_data || [];
   const applications = report.applications_data || [];
-  const orders = report.orders_data || { stop_work: [], vacate: [] };
+  const orders = report.orders_data || { stop_work: [], partial_stop_work: [], vacate: [] };
   const building = report.building_data || {};
+
+  // Calculate application stats by source
+  const bisApplications = applications.filter((a: any) => a.source === 'BIS');
+  const dobNowApplications = applications.filter((a: any) => a.source === 'DOB_NOW');
+  
+  // Calculate violation stats by agency
+  const dobViolations = violations.filter((v: any) => v.agency === 'DOB');
+  const ecbViolations = violations.filter((v: any) => v.agency === 'ECB');
+  const hpdViolations = violations.filter((v: any) => v.agency === 'HPD');
+  
+  // Check for critical orders
+  const hasStopWorkOrder = (orders.stop_work?.length || 0) > 0;
+  const hasPartialStopWork = (orders.partial_stop_work?.length || 0) > 0;
+  const hasVacateOrder = (orders.vacate?.length || 0) > 0;
+  const hasCriticalOrders = hasStopWorkOrder || hasPartialStopWork || hasVacateOrder;
 
   const getSeverityVariant = (severity: string) => {
     switch (severity?.toLowerCase()) {
@@ -282,6 +297,70 @@ const DDReportViewer = ({ report, onBack, onDelete, userProfile }: DDReportViewe
             <div>
               <p className="text-sm text-muted-foreground">Building Area</p>
               <p>{building.building_area_sqft ? `${building.building_area_sqft.toLocaleString()} sqft` : '—'}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Compliance Summary Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileStack className="w-5 h-5" />
+            Compliance Summary
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {/* Violations Summary */}
+            <div className="p-4 rounded-lg bg-secondary/50 border border-border">
+              <p className="text-2xl font-bold text-foreground">{violations.length}</p>
+              <p className="text-sm text-muted-foreground">Open Violations</p>
+              <div className="text-xs text-muted-foreground mt-1">
+                <span>DOB: {dobViolations.length}</span>
+                <span className="mx-1">•</span>
+                <span>ECB: {ecbViolations.length}</span>
+                <span className="mx-1">•</span>
+                <span>HPD: {hpdViolations.length}</span>
+              </div>
+            </div>
+            
+            {/* Applications Summary */}
+            <div className="p-4 rounded-lg bg-secondary/50 border border-border">
+              <p className="text-2xl font-bold text-foreground">{applications.length}</p>
+              <p className="text-sm text-muted-foreground">Active Applications</p>
+              <div className="text-xs text-muted-foreground mt-1">
+                <span>BIS: {bisApplications.length}</span>
+                <span className="mx-1">•</span>
+                <span>DOB NOW: {dobNowApplications.length}</span>
+              </div>
+            </div>
+            
+            {/* Stop Work Orders */}
+            <div className={`p-4 rounded-lg border ${hasStopWorkOrder ? 'bg-destructive/10 border-destructive/30' : 'bg-secondary/50 border-border'}`}>
+              <p className={`text-2xl font-bold ${hasStopWorkOrder ? 'text-destructive' : 'text-foreground'}`}>
+                {orders.stop_work?.length || 0}
+              </p>
+              <p className="text-sm text-muted-foreground">Stop Work Orders</p>
+              {hasStopWorkOrder && <p className="text-xs text-destructive mt-1">⚠ Active</p>}
+            </div>
+            
+            {/* Partial Stop Work */}
+            <div className={`p-4 rounded-lg border ${hasPartialStopWork ? 'bg-accent/20 border-accent' : 'bg-secondary/50 border-border'}`}>
+              <p className={`text-2xl font-bold ${hasPartialStopWork ? 'text-accent-foreground' : 'text-foreground'}`}>
+                {orders.partial_stop_work?.length || 0}
+              </p>
+              <p className="text-sm text-muted-foreground">Partial SWO</p>
+              {hasPartialStopWork && <p className="text-xs text-accent-foreground mt-1">⚠ Active</p>}
+            </div>
+            
+            {/* Vacate Orders */}
+            <div className={`p-4 rounded-lg border ${hasVacateOrder ? 'bg-destructive/10 border-destructive/30' : 'bg-secondary/50 border-border'}`}>
+              <p className={`text-2xl font-bold ${hasVacateOrder ? 'text-destructive' : 'text-foreground'}`}>
+                {orders.vacate?.length || 0}
+              </p>
+              <p className="text-sm text-muted-foreground">Vacate Orders</p>
+              {hasVacateOrder && <p className="text-xs text-destructive mt-1">⚠ Active</p>}
             </div>
           </div>
         </CardContent>
