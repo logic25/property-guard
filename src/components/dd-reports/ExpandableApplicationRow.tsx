@@ -29,15 +29,21 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
 
   const getStatusColor = (status: string) => {
     const s = (status || '').toLowerCase();
-    if (s.includes('approved') || s.includes('complete') || s === 'x' || s.includes('sign-off')) return 'bg-green-500/10 text-green-600 border-green-200';
-    if (s.includes('pending') || s.includes('review') || s === 'p' || s.includes('filed')) return 'bg-yellow-500/10 text-yellow-600 border-yellow-200';
-    if (s.includes('rejected') || s.includes('denied') || s.includes('withdrawn')) return 'bg-red-500/10 text-red-600 border-red-200';
+    if (s.includes('sign-off') || s.includes('signoff') || s === 'x') return 'bg-green-500/10 text-green-600 border-green-200';
+    if (s.includes('permit entire') || s.includes('permit issued')) return 'bg-green-500/10 text-green-600 border-green-200';
+    if (s.includes('permit partial')) return 'bg-blue-500/10 text-blue-600 border-blue-200';
+    if (s.includes('approv') && !s.includes('disapprov')) return 'bg-green-500/10 text-green-600 border-green-200';
+    if (s.includes('disapprov') || s.includes('denied') || s.includes('withdraw')) return 'bg-red-500/10 text-red-600 border-red-200';
+    if (s.includes('file') || s.includes('plan') || s.includes('review') || s === 'p' || s === 'q') return 'bg-yellow-500/10 text-yellow-600 border-yellow-200';
     return '';
   };
 
   const getBISJobUrl = (jobNumber: string) => {
     return `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${jobNumber}`;
   };
+
+  // Build floor/apt display
+  const floorApt = [application.floor, application.apartment].filter(Boolean).join(' / ') || '—';
 
   return (
     <Fragment>
@@ -52,16 +58,19 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
         </TableCell>
         <TableCell className="font-mono text-sm">{application.application_number || application.job_number}</TableCell>
         <TableCell>
-          <Badge variant="outline">{application.source || 'BIS'}</Badge>
+          <Badge variant="outline">{application.application_type || application.job_type || '—'}</Badge>
         </TableCell>
-        <TableCell>{application.application_type || application.job_type || '—'}</TableCell>
         <TableCell>
           <Badge variant="outline" className={getStatusColor(application.status)}>
             {application.status || '—'}
           </Badge>
         </TableCell>
         <TableCell>{formatDate(application.filing_date)}</TableCell>
-        <TableCell>{formatDate(application.latest_action_date)}</TableCell>
+        <TableCell className="max-w-[200px] truncate" title={application.job_description || ''}>
+          {application.job_description?.slice(0, 40) || '—'}
+          {application.job_description?.length > 40 ? '...' : ''}
+        </TableCell>
+        <TableCell>{floorApt}</TableCell>
       </TableRow>
       {isOpen && (
         <TableRow className="bg-muted/30 hover:bg-muted/30">
@@ -77,6 +86,10 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
               
               {/* Details Grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Source</p>
+                  <p className="font-medium">{application.source || 'BIS'}</p>
+                </div>
                 {application.work_type && (
                   <div>
                     <p className="text-muted-foreground">Work Type</p>
@@ -87,6 +100,12 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
                   <div>
                     <p className="text-muted-foreground">Estimated Cost</p>
                     <p className="font-medium">${Number(application.estimated_cost).toLocaleString()}</p>
+                  </div>
+                )}
+                {application.latest_action_date && (
+                  <div>
+                    <p className="text-muted-foreground">Last Action</p>
+                    <p className="font-medium">{formatDate(application.latest_action_date)}</p>
                   </div>
                 )}
                 {application.approval_date && (
@@ -101,36 +120,30 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
                     <p className="font-medium">{formatDate(application.expiration_date)}</p>
                   </div>
                 )}
-                {application.floor && (
-                  <div>
-                    <p className="text-muted-foreground">Floor</p>
-                    <p className="font-medium">{application.floor}</p>
-                  </div>
-                )}
-                {application.apartment && (
-                  <div>
-                    <p className="text-muted-foreground">Apt/Unit</p>
-                    <p className="font-medium">{application.apartment}</p>
-                  </div>
-                )}
-                {application.owner_name && (
-                  <div>
-                    <p className="text-muted-foreground">Owner</p>
-                    <p className="font-medium">{application.owner_name}</p>
-                  </div>
-                )}
-                {application.applicant_name && (
-                  <div>
-                    <p className="text-muted-foreground">Applicant</p>
-                    <p className="font-medium">{application.applicant_name}</p>
-                  </div>
-                )}
                 {application.signoff_date && (
                   <div>
                     <p className="text-muted-foreground">Sign-Off Date</p>
                     <p className="font-medium">{formatDate(application.signoff_date)}</p>
                   </div>
                 )}
+                {application.fully_permitted && (
+                  <div>
+                    <p className="text-muted-foreground">Fully Permitted</p>
+                    <p className="font-medium">{application.fully_permitted}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Owner & Applicant Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm border-t pt-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Owner Information</p>
+                  <p className="font-medium">{application.owner_name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Applicant Information</p>
+                  <p className="font-medium">{application.applicant_name || '—'}</p>
+                </div>
               </div>
 
               {/* Note Input */}
