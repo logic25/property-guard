@@ -16,6 +16,7 @@ import { PropertyViolationsTab } from '@/components/properties/detail/PropertyVi
 import { PropertyDocumentsTab } from '@/components/properties/detail/PropertyDocumentsTab';
 import { PropertyWorkOrdersTab } from '@/components/properties/detail/PropertyWorkOrdersTab';
 import { PropertyActivityTab } from '@/components/properties/detail/PropertyActivityTab';
+import { PropertySettingsTab } from '@/components/properties/PropertySettingsTab';
 import { EditPropertyDialog } from '@/components/properties/EditPropertyDialog';
 import { getBoroughName } from '@/lib/property-utils';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +45,8 @@ interface Property {
   last_synced_at: string | null;
   created_at: string;
   owner_name?: string | null;
+  owner_phone?: string | null;
+  sms_enabled?: boolean | null;
 }
 
 interface Violation {
@@ -308,7 +311,7 @@ const PropertyDetailPage = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+        <TabsList className="grid w-full grid-cols-6 max-w-3xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="violations">
             Violations {openViolations > 0 && `(${openViolations})`}
@@ -320,6 +323,7 @@ const PropertyDetailPage = () => {
             Work Orders {workOrders.length > 0 && `(${workOrders.length})`}
           </TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -357,6 +361,16 @@ const PropertyDetailPage = () => {
 
         <TabsContent value="activity" className="mt-6">
           <PropertyActivityTab propertyId={property.id} />
+        </TabsContent>
+
+        <TabsContent value="settings" className="mt-6">
+          <PropertySettingsTab
+            propertyId={property.id}
+            ownerName={property.owner_name ?? null}
+            ownerPhone={property.owner_phone ?? null}
+            smsEnabled={property.sms_enabled ?? null}
+            onUpdate={fetchPropertyData}
+          />
         </TabsContent>
       </Tabs>
 
