@@ -48,6 +48,7 @@ interface Violation {
   hearing_date: string | null;
   is_stop_work_order: boolean;
   is_vacate_order: boolean;
+  violation_type?: string | null;
   property_id: string;
   property_address?: string;
   property_bbl?: string | null;
@@ -58,8 +59,31 @@ interface PortfolioViolationsViewProps {
   portfolioName: string;
 }
 
-type SortField = 'issued_date' | 'agency' | 'status' | 'property_address';
+type SortField = 'issued_date' | 'agency' | 'status' | 'property_address' | 'violation_type';
 type SortDirection = 'asc' | 'desc';
+
+// Display-friendly violation type labels
+const VIOLATION_TYPE_LABELS: Record<string, string> = {
+  elevator: 'Elevator',
+  plumbing: 'Plumbing',
+  electrical: 'Electrical',
+  fire_safety: 'Fire Safety',
+  structural: 'Structural',
+  construction: 'Construction',
+  hvac: 'HVAC/Boiler',
+  housing: 'Housing',
+  sanitation: 'Sanitation',
+  landmarks: 'Landmarks',
+  environmental: 'Environmental',
+  signage: 'Signage',
+  zoning: 'Zoning',
+  other: 'Other',
+};
+
+const getViolationTypeLabel = (type: string | null | undefined): string => {
+  if (!type) return '—';
+  return VIOLATION_TYPE_LABELS[type] || type;
+};
 
 export const PortfolioViolationsView = ({ violations, portfolioName }: PortfolioViolationsViewProps) => {
   const navigate = useNavigate();
@@ -67,10 +91,12 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [agencyFilter, setAgencyFilter] = useState<string>('all');
   const [propertyFilter, setPropertyFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('issued_date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))].sort(), [violations]);
+  const violationTypes = useMemo(() => [...new Set(violations.map(v => v.violation_type).filter(Boolean))].sort() as string[], [violations]);
   const properties = useMemo(() => {
     const map = new Map<string, string>();
     violations.forEach(v => {
@@ -107,8 +133,9 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
       const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
       const matchesAgency = agencyFilter === 'all' || v.agency === agencyFilter;
       const matchesProperty = propertyFilter === 'all' || v.property_id === propertyFilter;
+      const matchesType = typeFilter === 'all' || v.violation_type === typeFilter;
       
-      return matchesSearch && matchesStatus && matchesAgency && matchesProperty;
+      return matchesSearch && matchesStatus && matchesAgency && matchesProperty && matchesType;
     });
 
     // Sort
@@ -127,12 +154,15 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
         case 'property_address':
           comparison = (a.property_address || '').localeCompare(b.property_address || '');
           break;
+        case 'violation_type':
+          comparison = (a.violation_type || '').localeCompare(b.violation_type || '');
+          break;
       }
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
     return result;
-  }, [violations, searchQuery, statusFilter, agencyFilter, propertyFilter, sortField, sortDirection]);
+  }, [violations, searchQuery, statusFilter, agencyFilter, propertyFilter, typeFilter, sortField, sortDirection]);
 
   // Calculate active violations using proper filtering
   const activeViolations = violations.filter(isActiveViolation);
@@ -212,6 +242,17 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
             ))}
           </SelectContent>
         </Select>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            {violationTypes.map(type => (
+              <SelectItem key={type} value={type}>{getViolationTypeLabel(type)}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Table */}
@@ -246,6 +287,14 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
                   </div>
                 </TableHead>
                 <TableHead className="font-semibold">Deadline</TableHead>
+                <TableHead 
+                  className="font-semibold cursor-pointer hover:bg-muted/80"
+                  onClick={() => handleSort('violation_type')}
+                >
+                  <div className="flex items-center">
+                    Type {getSortIcon('violation_type')}
+                  </div>
+                </TableHead>
                 <TableHead 
                   className="font-semibold cursor-pointer hover:bg-muted/80"
                   onClick={() => handleSort('status')}
@@ -303,6 +352,15 @@ export const PortfolioViolationsView = ({ violations, portfolioName }: Portfolio
                     ) : (
                       <span className="text-muted-foreground text-sm">-</span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs cursor-pointer"
+                      onClick={() => setTypeFilter(violation.violation_type || 'other')}
+                    >
+                      {getViolationTypeLabel(violation.violation_type)}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge className={`text-xs ${getStatusColor(violation.status)}`}>
