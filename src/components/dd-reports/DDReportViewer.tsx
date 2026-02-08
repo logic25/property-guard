@@ -302,82 +302,79 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
       </div>
 
       {/* Building Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="w-5 h-5" />
+      <Card className="border-border/60 shadow-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+            <Building2 className="w-5 h-5 text-primary" />
             Building Information
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">BIN</p>
-              <p className="font-mono">{report.bin || building.bin || '—'}</p>
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">BIN</p>
+              <p className="font-mono text-sm font-medium">{report.bin || building.bin || '—'}</p>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">BBL (Borough-Block-Lot)</p>
-              <p className="font-mono">{formatBBL(report.bbl || building.bbl)}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">BBL</p>
+              <p className="font-mono text-sm font-medium">{formatBBL(report.bbl || building.bbl)}</p>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Year Built</p>
-              <p>{building.year_built || '—'}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Year Built</p>
+              <p className="text-sm font-medium">{building.year_built || '—'}</p>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Dwelling Units</p>
-              <p>{building.dwelling_units || '—'}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Dwelling Units</p>
+              <p className="text-sm font-medium">{building.dwelling_units || '—'}</p>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Zoning</p>
-              <p>{building.zoning_district || '—'}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Zoning</p>
+              <p className="text-sm font-medium">{building.zoning_district || '—'}</p>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Landmark Status</p>
-              <p>{building.is_landmark ? 'Yes - Landmarked' : building.historic_district ? `Historic District: ${building.historic_district}` : 'No'}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Landmark Status</p>
+              <p className="text-sm font-medium">{building.is_landmark ? 'Yes - Landmarked' : building.historic_district ? `Historic: ${building.historic_district}` : 'No'}</p>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Owner</p>
-              <p className="truncate">{building.owner_name || '—'}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Owner</p>
+              <p className="text-sm font-medium truncate">{building.owner_name || '—'}</p>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Building Area</p>
-              <p>{building.building_area_sqft ? `${building.building_area_sqft.toLocaleString()} sqft` : '—'}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Building Area</p>
+              <p className="text-sm font-medium">{building.building_area_sqft ? `${building.building_area_sqft.toLocaleString()} sqft` : '—'}</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Compliance Summary Stats */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileStack className="w-5 h-5" />
+      <Card className="border-border/60 shadow-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+            <FileStack className="w-5 h-5 text-primary" />
             Compliance Summary
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Violations Summary */}
-            <div className="p-4 rounded-lg bg-secondary/50 border border-border">
-              <p className="text-2xl font-bold text-foreground">{violations.length}</p>
-              <p className="text-sm text-muted-foreground">Open Violations</p>
-              <div className="text-xs text-muted-foreground mt-1">
-                <span>DOB: {dobViolations.length}</span>
-                <span className="mx-1">•</span>
-                <span>ECB: {ecbViolations.length}</span>
-                <span className="mx-1">•</span>
-                <span>HPD: {hpdViolations.length}</span>
+            <div className="p-5 rounded-xl bg-muted/50 border border-border/60">
+              <p className="text-3xl font-bold text-foreground tracking-tight">{violations.length}</p>
+              <p className="text-sm font-medium text-muted-foreground mt-1">Open Violations</p>
+              <div className="text-xs text-muted-foreground mt-2 space-x-2">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-600">DOB {dobViolations.length}</Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 text-blue-600">ECB {ecbViolations.length}</Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-purple-300 text-purple-600">HPD {hpdViolations.length}</Badge>
               </div>
             </div>
             
             {/* Applications Summary */}
-            <div className="p-4 rounded-lg bg-secondary/50 border border-border">
-              <p className="text-2xl font-bold text-foreground">{applications.length}</p>
-              <p className="text-sm text-muted-foreground">Active Applications</p>
-              <div className="text-xs text-muted-foreground mt-1">
-                <span>BIS: {bisApplications.length}</span>
-                <span className="mx-1">•</span>
-                <span>DOB NOW: {dobNowApplications.length}</span>
+            <div className="p-5 rounded-xl bg-muted/50 border border-border/60">
+              <p className="text-3xl font-bold text-foreground tracking-tight">{applications.length}</p>
+              <p className="text-sm font-medium text-muted-foreground mt-1">Active Applications</p>
+              <div className="text-xs text-muted-foreground mt-2 space-x-2">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">BIS {bisApplications.length}</Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Build {dobNowApplications.length}</Badge>
               </div>
             </div>
             
@@ -535,25 +532,21 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
       )}
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="violations" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="violations" className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            <span className="hidden sm:inline">Violations</span>
-            <span className="text-xs text-muted-foreground">
-              ({dobViolations.length} DOB, {ecbViolations.length} ECB, {hpdViolations.length} HPD)
-            </span>
+      <Tabs defaultValue="violations" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3 h-12">
+          <TabsTrigger value="violations" className="flex items-center gap-2 text-sm font-medium">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>Violations</span>
+            <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">{violations.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="applications" className="flex items-center gap-2">
-            <FileStack className="w-4 h-4" />
-            <span className="hidden sm:inline">Applications</span>
-            <span className="text-xs text-muted-foreground">
-              ({bisApplications.length} BIS, {dobNowApplications.length} Build)
-            </span>
+          <TabsTrigger value="applications" className="flex items-center gap-2 text-sm font-medium">
+            <FileStack className="w-4 h-4 shrink-0" />
+            <span>Applications</span>
+            <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">{applications.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="ai-analysis" className="flex items-center gap-2">
-            <StickyNote className="w-4 h-4" />
-            AI Analysis
+          <TabsTrigger value="ai-analysis" className="flex items-center gap-2 text-sm font-medium">
+            <StickyNote className="w-4 h-4 shrink-0" />
+            <span>AI Analysis</span>
           </TabsTrigger>
         </TabsList>
 
