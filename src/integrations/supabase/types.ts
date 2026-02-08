@@ -48,6 +48,7 @@ export type Database = {
         Row: {
           address: string
           assigned_phone_number: string | null
+          bin: string | null
           created_at: string
           gross_sqft: number | null
           has_boiler: boolean | null
@@ -65,6 +66,7 @@ export type Database = {
         Insert: {
           address: string
           assigned_phone_number?: string | null
+          bin?: string | null
           created_at?: string
           gross_sqft?: number | null
           has_boiler?: boolean | null
@@ -82,6 +84,7 @@ export type Database = {
         Update: {
           address?: string
           assigned_phone_number?: string | null
+          bin?: string | null
           created_at?: string
           gross_sqft?: number | null
           has_boiler?: boolean | null
