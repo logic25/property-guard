@@ -51,8 +51,19 @@ const ExpandableApplicationRow = ({ application, index, note, onNoteChange }: Ex
     return `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${jobNumber}`;
   };
 
-  // Build floor/apt display
-  const floorApt = [application.floor, application.apartment].filter(Boolean).join(' / ') || '—';
+  // Build floor/apt display - filter out nonsensical values like single letters
+  const cleanValue = (val: string | null | undefined): string | null => {
+    if (!val) return null;
+    const trimmed = val.trim();
+    // Filter out single letter codes, empty values, or common placeholder values
+    if (trimmed.length <= 2 && !/^\d+$/.test(trimmed)) return null;
+    if (['N/A', 'NA', '-', '--', 'ER', 'NONE'].includes(trimmed.toUpperCase())) return null;
+    return trimmed;
+  };
+  
+  const cleanFloor = cleanValue(application.floor);
+  const cleanApt = cleanValue(application.apartment);
+  const floorApt = [cleanFloor, cleanApt].filter(Boolean).join(' / ') || '—';
 
   return (
     <Fragment>

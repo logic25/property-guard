@@ -536,14 +536,20 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="violations" className="space-y-4">
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="violations" className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
-            Violations ({violations.length})
+            <span className="hidden sm:inline">Violations</span>
+            <span className="text-xs text-muted-foreground">
+              ({dobViolations.length} DOB, {ecbViolations.length} ECB, {hpdViolations.length} HPD)
+            </span>
           </TabsTrigger>
           <TabsTrigger value="applications" className="flex items-center gap-2">
             <FileStack className="w-4 h-4" />
-            Applications ({bisApplications.length} BIS, {dobNowApplications.length} Build)
+            <span className="hidden sm:inline">Applications</span>
+            <span className="text-xs text-muted-foreground">
+              ({bisApplications.length} BIS, {dobNowApplications.length} Build)
+            </span>
           </TabsTrigger>
           <TabsTrigger value="ai-analysis" className="flex items-center gap-2">
             <StickyNote className="w-4 h-4" />
@@ -563,7 +569,7 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                         Open Violations ({violations.length})
                       </CardTitle>
                       <CardDescription className="mt-1">
-                        All open violations from DOB, ECB, HPD, FDNY, and other agencies
+                        {dobViolations.length} DOB • {ecbViolations.length} ECB • {hpdViolations.length} HPD
                       </CardDescription>
                     </div>
                   </div>
@@ -656,10 +662,10 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating
                     <div>
                       <CardTitle className="flex items-center gap-2">
                         {applicationsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        Permit Applications ({bisApplications.length} BIS, {dobNowApplications.length} Build)
+                        Permit Applications ({applications.length})
                       </CardTitle>
                       <CardDescription className="mt-1">
-                        {bisApplications.length} legacy BIS applications, {dobNowApplications.length} DOB NOW Build applications
+                        {bisApplications.length} BIS • {dobNowApplications.length} DOB NOW Build
                       </CardDescription>
                     </div>
                   </div>
