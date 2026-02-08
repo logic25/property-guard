@@ -110,6 +110,8 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
   const [savingNotes, setSavingNotes] = useState<Set<string>>(new Set());
+  // Active vs All toggle
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
 
   const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))].sort(), [violations]);
 
@@ -195,7 +197,10 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
   };
 
   const filteredAndSortedViolations = useMemo(() => {
-    let result = violations.filter(v => {
+    // First filter by active vs all
+    let base = showActiveOnly ? violations.filter(isActiveViolation) : violations;
+
+    let result = base.filter(v => {
       const matchesSearch = 
         v.violation_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         v.description_raw?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -232,7 +237,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
     });
 
     return result;
-  }, [violations, searchQuery, statusFilter, agencyFilter, dateFrom, dateTo, sortField, sortDirection]);
+  }, [violations, showActiveOnly, searchQuery, statusFilter, agencyFilter, dateFrom, dateTo, sortField, sortDirection]);
 
   // Calculate counts using proper active violation filtering
   const activeViolations = violations.filter(isActiveViolation);
@@ -240,12 +245,40 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
 
   return (
     <div className="space-y-4">
-      {/* Summary - show total vs active */}
-      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <span><strong>{activeViolations.length}</strong> active</span>
-        <span><strong>{openCount}</strong> open</span>
-        <span><strong>{activeViolations.filter(v => v.status === 'in_progress').length}</strong> in progress</span>
-        <span className="text-muted-foreground/60"><strong>{violations.length - activeViolations.length}</strong> resolved</span>
+      {/* Active / All Toggle + Summary */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <span><strong>{activeViolations.length}</strong> active</span>
+          <span><strong>{openCount}</strong> open</span>
+          <span><strong>{activeViolations.filter(v => v.status === 'in_progress').length}</strong> in progress</span>
+          <span className="text-muted-foreground/60"><strong>{violations.length - activeViolations.length}</strong> resolved</span>
+        </div>
+
+        {/* Toggle: Active / All */}
+        <div className="flex items-center rounded-full border border-border p-0.5 text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => setShowActiveOnly(true)}
+            className={`px-3 py-1.5 rounded-full transition-colors ${
+              showActiveOnly
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Active
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowActiveOnly(false)}
+            className={`px-3 py-1.5 rounded-full transition-colors ${
+              !showActiveOnly
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            All ({violations.length})
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
