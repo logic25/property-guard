@@ -90,15 +90,15 @@ interface DDReportViewerProps {
   onBack: () => void;
   onDelete: () => void;
   onRegenerate?: (reportId: string, address: string) => void;
+  isRegenerating?: boolean;
   userProfile?: UserProfile;
 }
 
-const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, userProfile }: DDReportViewerProps) => {
+const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, isRegenerating = false, userProfile }: DDReportViewerProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const printRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const [generalNotes, setGeneralNotes] = useState(report.general_notes || '');
   const [lineItemNotes, setLineItemNotes] = useState<Record<string, string>>(
     (report.line_item_notes || []).reduce((acc: Record<string, string>, item: any) => {
@@ -234,11 +234,16 @@ const DDReportViewer = ({ report, onBack, onDelete, onRegenerate, userProfile }:
             disabled={isRegenerating || !onRegenerate}
           >
             {isRegenerating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Regenerating...
+              </>
             ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
+              <>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Regenerate
+              </>
             )}
-            Regenerate
           </Button>
           <Button variant="outline" onClick={handleExportPDF} disabled={isExporting}>
             {isExporting ? (

@@ -203,6 +203,7 @@ const DDReportsPage = () => {
         onBack={() => setSelectedReportId(null)}
         onDelete={() => deleteReport.mutate(selectedReport.id)}
         onRegenerate={(reportId, address) => regenerateReport.mutate({ reportId, address })}
+        isRegenerating={regenerateReport.isPending}
         userProfile={{
           email: user?.email || null,
           display_name: userProfile?.display_name || null,
