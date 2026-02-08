@@ -34,7 +34,10 @@ const CreateDDReportDialog = ({ open, onOpenChange, onSuccess }: CreateDDReportD
 
   const createReport = useMutation({
     mutationFn: async () => {
-      // First create the report record
+      // First create the report record with today's date in local timezone
+      const today = new Date();
+      const reportDate = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
       const { data: report, error: insertError } = await supabase
         .from('dd_reports')
         .insert({
@@ -43,6 +46,7 @@ const CreateDDReportDialog = ({ open, onOpenChange, onSuccess }: CreateDDReportD
           prepared_for: preparedFor.trim(),
           prepared_by: preparedBy.trim() || null,
           status: 'generating',
+          report_date: reportDate,
         })
         .select()
         .single();
