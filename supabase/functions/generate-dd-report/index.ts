@@ -285,7 +285,24 @@ async function fetchViolations(bin: string, bbl: string): Promise<any[]> {
   return violations;
 }
 
-// Fetch applications/permits for property
+// Status codes to exclude (completed/signed-off jobs)
+const EXCLUDED_STATUS_CODES = ['X', 'U', 'I']; // X=SIGNED-OFF, U=COMPLETED, I=SIGNOFF(ARA)
+const EXCLUDED_STATUS_NAMES = ['signed-off', 'completed', 'signoff', 'sign-off'];
+
+// Check if status should be excluded
+function shouldExcludeApplication(status: string | null): boolean {
+  if (!status) return false;
+  const statusUpper = status.toUpperCase().trim();
+  const statusLower = status.toLowerCase().trim();
+  
+  // Check single-letter codes
+  if (EXCLUDED_STATUS_CODES.includes(statusUpper)) return true;
+  
+  // Check status names
+  return EXCLUDED_STATUS_NAMES.some(excluded => statusLower.includes(excluded));
+}
+
+// Fetch applications/permits for property (excludes completed/signed-off)
 async function fetchApplications(bin: string): Promise<any[]> {
   const applications: any[] = [];
   
@@ -294,56 +311,68 @@ async function fetchApplications(bin: string): Promise<any[]> {
   // DOB BIS Jobs - include more detail fields
   const dobJobs = await fetchNYCData(NYC_ENDPOINTS.DOB_JOBS, {
     "bin__": bin,
-    "$limit": "100",
+    "$limit": "200",
     "$order": "latest_action_date DESC",
   });
   
-  applications.push(...dobJobs.map((j: any) => ({
-    id: j.job__,
-    source: "BIS",
-    application_number: j.job__,
-    application_type: j.job_type || null,
-    job_type: j.job_doc_type || null,
-    work_type: j.work_type || null,
-    job_description: j.job_description || null,
-    status: j.job_status || null,
-    filing_date: j.pre__filing_date || j.filing_date || null,
-    latest_action_date: j.latest_action_date || null,
-    approval_date: j.approved_date || null,
-    expiration_date: j.permit_expiration_date || null,
-    estimated_cost: j.initial_cost ? parseFloat(j.initial_cost) : null,
-    floor: j.bldg_floor || null,
-    apartment: j.apt_condonos || null,
-    owner_name: j.owner_s_first_name && j.owner_s_last_name 
-      ? `${j.owner_s_first_name} ${j.owner_s_last_name}` 
-      : j.owner_s_business_name || null,
-    applicant_name: j.applicant_s_first_name && j.applicant_s_last_name
-      ? `${j.applicant_s_first_name} ${j.applicant_s_last_name}`
-      : null,
-    fully_permitted: j.fully_permitted || null,
-    signoff_date: j.signoff_date || null,
-  })));
+  // Map and filter out completed/signed-off applications
+  const bisApps = dobJobs
+    .map((j: any) => ({
+      id: j.job__,
+      source: "BIS",
+      application_number: j.job__,
+      application_type: j.job_type || null,
+      job_type: j.job_doc_type || null,
+      work_type: j.work_type || null,
+      job_description: j.job_description || null,
+      status: j.job_status || null,
+      status_code: j.job_status_code || null,
+      filing_date: j.pre__filing_date || j.filing_date || null,
+      latest_action_date: j.latest_action_date || null,
+      approval_date: j.approved_date || null,
+      expiration_date: j.permit_expiration_date || null,
+      estimated_cost: j.initial_cost ? parseFloat(j.initial_cost) : null,
+      floor: j.bldg_floor || null,
+      apartment: j.apt_condonos || null,
+      owner_name: j.owner_s_first_name && j.owner_s_last_name 
+        ? `${j.owner_s_first_name} ${j.owner_s_last_name}` 
+        : j.owner_s_business_name || null,
+      applicant_name: j.applicant_s_first_name && j.applicant_s_last_name
+        ? `${j.applicant_s_first_name} ${j.applicant_s_last_name}`
+        : null,
+      fully_permitted: j.fully_permitted || null,
+      signoff_date: j.signoff_date || null,
+    }))
+    .filter((app: any) => !shouldExcludeApplication(app.status));
   
-  // DOB NOW Applications - note: filing_date column doesn't exist, use job_filing_number order
+  applications.push(...bisApps);
+  
+  // DOB NOW Applications
   const dobNowApps = await fetchNYCData(NYC_ENDPOINTS.DOB_NOW, {
     "bin": bin,
-    "$limit": "100",
+    "$limit": "200",
   });
   
-  applications.push(...dobNowApps.map((a: any) => ({
-    id: a.job_filing_number || a.filing_number,
-    source: "DOB_NOW",
-    application_number: a.job_filing_number || a.filing_number,
-    application_type: a.job_type || a.filing_type || null,
-    work_type: a.work_type || null,
-    job_description: a.job_description || a.work_on_floor || null,
-    status: a.filing_status || a.current_status || null,
-    filing_date: a.filing_date || null,
-    latest_action_date: a.latest_action_date || null,
-    estimated_cost: a.estimated_job_cost ? parseFloat(a.estimated_job_cost) : null,
-    floor: a.work_on_floor || null,
-    applicant_name: a.applicant_business_name || a.applicant_name || null,
-  })));
+  const nowApps = dobNowApps
+    .map((a: any) => ({
+      id: a.job_filing_number || a.filing_number,
+      source: "DOB_NOW",
+      application_number: a.job_filing_number || a.filing_number,
+      application_type: a.job_type || a.filing_type || null,
+      work_type: a.work_type || null,
+      job_description: a.job_description || a.work_on_floor || null,
+      status: a.filing_status || a.current_status || null,
+      filing_date: a.filing_date || null,
+      latest_action_date: a.latest_action_date || null,
+      estimated_cost: a.estimated_job_cost ? parseFloat(a.estimated_job_cost) : null,
+      floor: a.work_on_floor || null,
+      applicant_name: a.applicant_business_name || a.applicant_name || null,
+    }))
+    .filter((app: any) => !shouldExcludeApplication(app.status));
+  
+  applications.push(...nowApps);
+  
+  console.log(`Filtered to ${applications.length} active applications (excluded completed/signed-off)`);
   
   return applications;
 }
