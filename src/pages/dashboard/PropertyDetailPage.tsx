@@ -146,8 +146,8 @@ const PropertyDetailPage = () => {
   }, [id]);
 
   const syncViolations = async () => {
-    if (!property?.bin) {
-      toast.error('Property needs a BIN to sync violations');
+    if (!property?.bin && !property?.bbl) {
+      toast.error('Property needs a BIN or BBL to sync violations');
       return;
     }
 
@@ -157,8 +157,9 @@ const PropertyDetailPage = () => {
       const { data, error } = await supabase.functions.invoke('fetch-nyc-violations', {
         body: { 
           bin: property.bin, 
+          bbl: property.bbl,
           property_id: property.id,
-          applicable_agencies: property.applicable_agencies || ['DOB', 'ECB']
+          applicable_agencies: property.applicable_agencies || ['DOB', 'ECB', 'FDNY']
         }
       });
 
