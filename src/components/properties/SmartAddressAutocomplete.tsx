@@ -7,17 +7,17 @@ import { cn } from '@/lib/utils';
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
 interface NYCBuildingData {
-  bin_: string;
-  house_: string;
+  bin__: string;
+  house__: string;
   street_name: string;
   borough: string;
   block: string;
   lot: string;
-  existingstories: string;
-  existingheight: string;
-  existingzoningsqft: string;
+  existingno_of_stories: string;
+  existing_height: string;
+  existing_zoning_sqft: string;
   existing_occupancy: string;
-  existingdwellingunits: string;
+  existing_dwelling_units: string;
 }
 
 interface PlacePrediction {
@@ -116,11 +116,11 @@ export const SmartAddressAutocomplete = ({
       const streetQuery = parts.slice(1).join(' ').toUpperCase();
 
       const url = new URL('https://data.cityofnewyork.us/resource/ic3t-wcy2.json');
-      
+
       if (streetQuery) {
-        url.searchParams.set('$where', `house_ LIKE '%${houseNumber}%' AND upper(street_name) LIKE '%${streetQuery}%'`);
+        url.searchParams.set('$where', `house__ LIKE '%${houseNumber}%' AND upper(street_name) LIKE '%${streetQuery}%'`);
       } else {
-        url.searchParams.set('$where', `house_ LIKE '%${houseNumber}%'`);
+        url.searchParams.set('$where', `house__ LIKE '%${houseNumber}%'`);
       }
       url.searchParams.set('$limit', '10');
 
@@ -131,17 +131,17 @@ export const SmartAddressAutocomplete = ({
       const data: NYCBuildingData[] = await response.json();
 
       return data.map(building => ({
-        bin: building.bin_ || '',
-        address: `${building.house_} ${building.street_name}`.trim(),
+        bin: building.bin__ || '',
+        address: `${building.house__} ${building.street_name}`.trim(),
         borough: building.borough || '',
         bbl: building.block && building.lot 
           ? `${building.borough || ''}${building.block.padStart(5, '0')}${building.lot.padStart(4, '0')}` 
           : '',
-        stories: building.existingstories ? parseInt(building.existingstories) : null,
-        heightFt: building.existingheight ? parseFloat(building.existingheight) : null,
-        grossSqft: building.existingzoningsqft ? parseFloat(building.existingzoningsqft) : null,
+        stories: building.existingno_of_stories ? parseInt(building.existingno_of_stories) : null,
+        heightFt: building.existing_height ? parseFloat(building.existing_height) : null,
+        grossSqft: building.existing_zoning_sqft ? parseFloat(building.existing_zoning_sqft) : null,
         primaryUseGroup: building.existing_occupancy || null,
-        dwellingUnits: building.existingdwellingunits ? parseInt(building.existingdwellingunits) : null,
+        dwellingUnits: building.existing_dwelling_units ? parseInt(building.existing_dwelling_units) : null,
       }));
     } catch (error) {
       console.error('Error searching NYC buildings:', error);
