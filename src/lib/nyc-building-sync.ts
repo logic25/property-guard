@@ -662,8 +662,38 @@ export async function syncNYCBuildingData(address: string): Promise<NYCBuildingD
   return result;
 }
 
+// Infer building features from characteristics when not explicitly set
+export function inferBuildingFeatures(data: NYCBuildingData): {
+  has_gas: boolean;
+  has_boiler: boolean;
+  has_elevator: boolean;
+  has_sprinkler: boolean;
+} {
+  const stories = data.stories ?? 0;
+  const dwellingUnits = data.dwellingUnits ?? 0;
+  const grossSqft = data.grossSqft ?? 0;
+  const buildingClass = (data.buildingClass || '').toUpperCase();
+  const isResidential = dwellingUnits > 0 || buildingClass.startsWith('R') || buildingClass.startsWith('D') || buildingClass.startsWith('C');
+
+  // Elevator: required in NYC for buildings 6+ stories (Multiple Dwelling Law §35)
+  const has_elevator = stories >= 6;
+
+  // Gas: virtually all residential buildings in NYC have gas service
+  const has_gas = isResidential || dwellingUnits > 0 || grossSqft > 10000;
+
+  // Boiler: standard for multi-unit residential, or any large building
+  const has_boiler = dwellingUnits >= 6 || stories >= 3 || grossSqft > 25000;
+
+  // Sprinkler: required in NYC for buildings 100+ ft or certain occupancies
+  const has_sprinkler = stories >= 7 || grossSqft > 50000;
+
+  return { has_gas, has_boiler, has_elevator, has_sprinkler };
+}
+
 // Convert sync result to database update format
 export function toPropertyUpdate(data: NYCBuildingData): Record<string, any> {
+  const inferredFeatures = inferBuildingFeatures(data);
+
   return {
     bin: data.bin || null,
     bbl: data.bbl || null,
@@ -672,6 +702,12 @@ export function toPropertyUpdate(data: NYCBuildingData): Record<string, any> {
     height_ft: data.heightFt,
     gross_sqft: data.grossSqft,
     dwelling_units: data.dwellingUnits,
+
+    // Inferred building features
+    has_gas: inferredFeatures.has_gas,
+    has_boiler: inferredFeatures.has_boiler,
+    has_elevator: inferredFeatures.has_elevator,
+    has_sprinkler: inferredFeatures.has_sprinkler,
     
     // Zoning
     zoning_district: data.zoningDistrict,
