@@ -101,6 +101,7 @@ const PropertyDetailPage = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [activeAppCount, setActiveAppCount] = useState(0);
 
   const fetchPropertyData = async () => {
     if (!id) return;
@@ -117,7 +118,7 @@ const PropertyDetailPage = () => {
       setProperty(propertyData as Property);
 
       // Fetch related data in parallel
-      const [violationsRes, workOrdersRes, documentsRes] = await Promise.all([
+      const [violationsRes, workOrdersRes, documentsRes, applicationsRes] = await Promise.all([
         supabase
           .from('violations')
           .select('*')
@@ -133,11 +134,28 @@ const PropertyDetailPage = () => {
           .select('*')
           .eq('property_id', id)
           .order('uploaded_at', { ascending: false }),
+        supabase
+          .from('applications')
+          .select('status, source')
+          .eq('property_id', id),
       ]);
 
       if (!violationsRes.error) setViolations(violationsRes.data as Violation[] || []);
       if (!workOrdersRes.error) setWorkOrders(workOrdersRes.data as WorkOrder[] || []);
       if (!documentsRes.error) setDocuments(documentsRes.data as Document[] || []);
+      if (!applicationsRes.error) {
+        const COMPLETED = ['signed off', 'completed', 'co issued', 'letter of completion'];
+        const active = (applicationsRes.data || []).filter((a: { status: string | null; source: string }) => {
+          const s = (a.status || '').toLowerCase();
+          // For BIS single-char codes, decode
+          if (a.source === 'DOB BIS' && s.length <= 2) {
+            const decoded = ({ h: 'completed', i: 'signed off', k: 'co issued', j: 'letter of completion', l: 'withdrawn', m: 'disapproved' } as Record<string, string>)[s] || '';
+            return !COMPLETED.some(c => decoded.includes(c));
+          }
+          return !COMPLETED.some(c => s.includes(c));
+        });
+        setActiveAppCount(active.length);
+      }
 
     } catch (error) {
       console.error('Error fetching property:', error);
@@ -356,7 +374,9 @@ const PropertyDetailPage = () => {
           <TabsTrigger value="violations">
             Violations {openViolations > 0 && `(${openViolations})`}
           </TabsTrigger>
-          <TabsTrigger value="applications">Applications</TabsTrigger>
+          <TabsTrigger value="applications">
+            Applications {activeAppCount > 0 && `(${activeAppCount})`}
+          </TabsTrigger>
           <TabsTrigger value="documents">
             Docs {documents.length > 0 && `(${documents.length})`}
           </TabsTrigger>

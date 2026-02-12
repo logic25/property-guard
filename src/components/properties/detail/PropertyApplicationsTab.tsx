@@ -8,9 +8,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { FileStack, Search, ExternalLink, ChevronRight, ChevronDown, Calendar, User, DollarSign, Building2, FileText, ShieldCheck, Wrench, Filter } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { FileStack, Search, ExternalLink, ChevronRight, ChevronDown, Calendar, User, DollarSign, Building2, FileText, ShieldCheck, Filter, StickyNote, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 interface PropertyApplicationsTabProps {
   propertyId: string;
@@ -35,6 +38,7 @@ interface Application {
   stories: number | null;
   dwelling_units: number | null;
   floor_area: number | null;
+  notes: string | null;
   raw_data: Record<string, unknown> | null;
 }
 
@@ -59,6 +63,8 @@ const BIS_STATUS_CODES: Record<string, string> = {
   'R': 'Plan Exam - Incomplete',
   'X': 'Signed Off / Completed',
 };
+
+const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'CO Issued', 'Letter of Completion'];
 
 const decodeStatus = (status: string | null, source: string): string => {
   if (!status) return 'Unknown';
@@ -99,11 +105,74 @@ const getDOBNowBuildUrl = (appNumber: string) =>
 const getDOBBisUrl = (appNumber: string) =>
   `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${appNumber}`;
 
+/** Parse filing suffix: X08023336-I1 → { prefix: 'X08023336', suffix: 'I1' } */
+const parseFilingNumber = (appNumber: string) => {
+  const match = appNumber.match(/^(.+)-(I\d+|P\d+)$/i);
+  if (match) return { prefix: match[1], suffix: match[2].toUpperCase() };
+  return { prefix: appNumber, suffix: null };
+};
+
+const isActiveApplication = (status: string | null, source: string): boolean => {
+  const decoded = decodeStatus(status, source);
+  return !COMPLETED_STATUSES.some(cs => decoded.toLowerCase().includes(cs.toLowerCase()));
+};
+
+// ─── Notes Inline Editor ───
+const NotesEditor = ({ appId, initialNotes }: { appId: string; initialNotes: string | null }) => {
+  const [notes, setNotes] = useState(initialNotes || '');
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('applications')
+      .update({ notes })
+      .eq('id', appId);
+    setSaving(false);
+    if (error) {
+      toast.error('Failed to save notes');
+    } else {
+      setDirty(false);
+      toast.success('Notes saved');
+    }
+  };
+
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="text-xs gap-1.5 px-2 h-7">
+          <StickyNote className="w-3 h-3" />
+          Notes {initialNotes ? '•' : ''}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2">
+        <div className="space-y-2">
+          <Textarea
+            placeholder="Add notes about this application..."
+            value={notes}
+            onChange={(e) => { setNotes(e.target.value); setDirty(true); }}
+            className="min-h-[60px] text-sm"
+          />
+          {dirty && (
+            <Button size="sm" className="h-7 text-xs" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+              Save
+            </Button>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
 export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [agencyFilter, setAgencyFilter] = useState('all');
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set());
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
   const [statusFilterInit, setStatusFilterInit] = useState(false);
+  const [sourceFilterInit, setSourceFilterInit] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const { data: applications, isLoading } = useQuery({
@@ -131,11 +200,14 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
 
   const agencies = useMemo(() => [...new Set(applications?.map(a => a.agency) || [])].sort(), [applications]);
   const statuses = useMemo(() => [...new Set(applications?.map(a => decodeStatus(a.status, a.source)).filter(Boolean) || [])].sort() as string[], [applications]);
+  const sources = useMemo(() => [...new Set(applications?.map(a => a.source) || [])].sort(), [applications]);
 
-  // Closed/completed statuses to exclude by default
-  const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'CO Issued', 'Letter of Completion'];
+  // Active count for the parent to display
+  const activeCount = useMemo(() => {
+    return (applications || []).filter(a => isActiveApplication(a.status, a.source)).length;
+  }, [applications]);
 
-  // Initialize default filter: exclude completed statuses
+  // Initialize default status filter: exclude completed
   useEffect(() => {
     if (statuses.length > 0 && !statusFilterInit) {
       const defaults = new Set(
@@ -146,6 +218,14 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     }
   }, [statuses, statusFilterInit]);
 
+  // Initialize source filter: all selected
+  useEffect(() => {
+    if (sources.length > 0 && !sourceFilterInit) {
+      setSelectedSources(new Set(sources));
+      setSourceFilterInit(true);
+    }
+  }, [sources, sourceFilterInit]);
+
   const toggleStatus = (status: string) => {
     setSelectedStatuses(prev => {
       const next = new Set(prev);
@@ -155,8 +235,19 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     });
   };
 
+  const toggleSource = (source: string) => {
+    setSelectedSources(prev => {
+      const next = new Set(prev);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return next;
+    });
+  };
+
   const selectAllStatuses = () => setSelectedStatuses(new Set(statuses));
   const clearAllStatuses = () => setSelectedStatuses(new Set());
+  const selectAllSources = () => setSelectedSources(new Set(sources));
+  const clearAllSources = () => setSelectedSources(new Set());
 
   const filtered = useMemo(() => {
     return (applications || []).filter(app => {
@@ -167,9 +258,77 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
       const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
       const decodedStatus = decodeStatus(app.status, app.source);
       const matchesStatus = selectedStatuses.size === 0 || selectedStatuses.has(decodedStatus);
-      return matchesSearch && matchesAgency && matchesStatus;
+      const matchesSource = selectedSources.size === 0 || selectedSources.has(app.source);
+      return matchesSearch && matchesAgency && matchesStatus && matchesSource;
     });
-  }, [applications, searchQuery, agencyFilter, selectedStatuses]);
+  }, [applications, searchQuery, agencyFilter, selectedStatuses, selectedSources]);
+
+  // Group related filings by prefix (I1/P1/P2...)
+  const groupedFiltered = useMemo(() => {
+    const groups: Map<string, { parent: Application | null; children: Application[] }> = new Map();
+    const standalone: Application[] = [];
+
+    filtered.forEach(app => {
+      const { prefix, suffix } = parseFilingNumber(app.application_number);
+      if (!suffix) {
+        standalone.push(app);
+        return;
+      }
+      if (!groups.has(prefix)) {
+        groups.set(prefix, { parent: null, children: [] });
+      }
+      const group = groups.get(prefix)!;
+      if (suffix.startsWith('I')) {
+        group.parent = app;
+      } else {
+        group.children.push(app);
+      }
+    });
+
+    // Build final ordered list with filing relationship badges
+    const result: { app: Application; filingLabel: string | null; isSubFiling: boolean }[] = [];
+
+    // Add grouped items
+    groups.forEach((group, prefix) => {
+      if (group.parent) {
+        result.push({ app: group.parent, filingLabel: 'Initial Filing', isSubFiling: false });
+      }
+      // Sort children by suffix
+      group.children.sort((a, b) => a.application_number.localeCompare(b.application_number));
+      group.children.forEach(child => {
+        const { suffix } = parseFilingNumber(child.application_number);
+        result.push({ app: child, filingLabel: `Subsequent (${suffix})`, isSubFiling: true });
+      });
+      // If no parent but has children, they're standalone-ish
+      if (!group.parent && group.children.length === 1) {
+        // Single item with suffix but no siblings — treat as standalone
+      }
+    });
+
+    // Add standalone items
+    standalone.forEach(app => {
+      result.push({ app, filingLabel: null, isSubFiling: false });
+    });
+
+    // Sort by filing date descending
+    result.sort((a, b) => {
+      // Keep grouped items together
+      const prefixA = parseFilingNumber(a.app.application_number).prefix;
+      const prefixB = parseFilingNumber(b.app.application_number).prefix;
+      if (prefixA === prefixB) {
+        // Parent first, then children sorted
+        if (a.filingLabel === 'Initial Filing') return -1;
+        if (b.filingLabel === 'Initial Filing') return 1;
+        return a.app.application_number.localeCompare(b.app.application_number);
+      }
+      // Otherwise sort by date
+      const dateA = a.app.filing_date || '';
+      const dateB = b.app.filing_date || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    return result;
+  }, [filtered]);
 
   if (isLoading) {
     return (
@@ -424,11 +583,13 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <span><strong>{applications?.length || 0}</strong> applications</span>
+        <span><strong>{applications?.length || 0}</strong> total applications</span>
+        <span>•</span>
+        <span><strong>{activeCount}</strong> active</span>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -449,6 +610,38 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             ))}
           </SelectContent>
         </Select>
+
+        {/* Source Filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-48 justify-start text-sm">
+              <Filter className="w-4 h-4 mr-2" />
+              Source ({selectedSources.size}/{sources.length})
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-3" align="start">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium">Filter by source</p>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={selectAllSources}>All</Button>
+                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={clearAllSources}>None</Button>
+              </div>
+            </div>
+            <div className="space-y-1.5 max-h-60 overflow-y-auto">
+              {sources.map(source => (
+                <label key={source} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1">
+                  <Checkbox
+                    checked={selectedSources.has(source)}
+                    onCheckedChange={() => toggleSource(source)}
+                  />
+                  <span className="text-sm">{source}</span>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Status Filter */}
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" className="w-48 justify-start text-sm">
@@ -480,7 +673,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
       </div>
 
       {/* Table */}
-      {filtered.length > 0 ? (
+      {groupedFiltered.length > 0 ? (
         <div className="rounded-xl border border-border overflow-hidden bg-card">
           <Table>
             <TableHeader>
@@ -497,7 +690,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((app) => {
+              {groupedFiltered.map(({ app, filingLabel, isSubFiling }) => {
                 const isExpanded = expandedRows.has(app.id);
                 const decodedStatus = decodeStatus(app.status, app.source);
                 const isBuild = app.source.startsWith('DOB NOW');
@@ -506,7 +699,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                   <>
                     <TableRow
                       key={app.id}
-                      className="cursor-pointer hover:bg-muted/30 transition-colors"
+                      className={`cursor-pointer hover:bg-muted/30 transition-colors ${isSubFiling ? 'bg-muted/10' : ''}`}
                       onClick={() => toggleRow(app.id)}
                     >
                       <TableCell className="w-8 px-2">
@@ -516,7 +709,17 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                           <ChevronRight className="w-4 h-4 text-muted-foreground" />
                         )}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{app.application_number}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        <div className="flex items-center gap-2">
+                          {isSubFiling && <span className="text-muted-foreground">↳</span>}
+                          {app.application_number}
+                          {filingLabel && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              {filingLabel}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-sm">
                         {app.application_type}
                         {app.work_type && app.work_type !== app.application_type && (
@@ -553,12 +756,13 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                         <TableCell colSpan={9} className="py-4 px-6">
                           {isBuild ? renderBuildDetails(app) : renderBisDetails(app)}
 
-                          {/* External link */}
-                          <div className="mt-3 pt-3 border-t border-border">
+                          {/* Notes + External link */}
+                          <div className="mt-3 pt-3 border-t border-border flex items-start justify-between gap-4">
+                            <NotesEditor appId={app.id} initialNotes={app.notes} />
                             <Button
                               variant="outline"
                               size="sm"
-                              className="text-xs"
+                              className="text-xs shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const url = isBuild
