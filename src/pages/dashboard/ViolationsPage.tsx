@@ -30,6 +30,8 @@ import {
 import { toast } from 'sonner';
 import { isActiveViolation, getAgencyColor, getAgencyLookupUrl, getStatusColor } from '@/lib/violation-utils';
 import { calculateViolationSeverity } from '@/lib/violation-severity';
+import { decodeComplaintCategory, getComplaintSeverityColor } from '@/lib/complaint-category-decoder';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Property {
   id: string;
@@ -50,12 +52,15 @@ interface Violation {
   oath_status: string | null;
   violation_class: string | null;
   violation_type: string | null;
+  complaint_category: string | null;
   severity: string | null;
   penalty_amount: number | null;
   respondent_name: string | null;
   is_stop_work_order: boolean | null;
   is_vacate_order: boolean | null;
   notes: string | null;
+  suppressed: boolean | null;
+  suppression_reason: string | null;
   property: Property | null;
 }
 
@@ -439,7 +444,7 @@ const ViolationsPage = () => {
                 return (
                   <Collapsible key={v.id} asChild open={isExpanded} onOpenChange={() => toggleRow(v.id)}>
                     <>
-                      <TableRow className={`${getRowColor(v)} transition-colors cursor-pointer`} onClick={() => toggleRow(v.id)}>
+                      <TableRow className={`${getRowColor(v)} transition-colors cursor-pointer ${v.suppressed ? 'opacity-60' : ''}`} onClick={() => toggleRow(v.id)}>
                         <TableCell className="px-2">
                           {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                         </TableCell>
@@ -458,6 +463,18 @@ const ViolationsPage = () => {
                               {sev.level}
                             </span>
                             <span className="text-sm font-mono whitespace-nowrap">{v.violation_number}</span>
+                            {v.suppressed && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">Suppressed</Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs max-w-[250px]">{v.suppression_reason || 'Age-based suppression'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -541,6 +558,28 @@ const ViolationsPage = () => {
                                         <span>{v.violation_class}</span>
                                       </div>
                                     )}
+                                    {/* Complaint Category Decoding */}
+                                    {v.complaint_category && (() => {
+                                      const decoded = decodeComplaintCategory(v.complaint_category);
+                                      return (
+                                        <div className="flex gap-2">
+                                          <span className="text-muted-foreground w-28 shrink-0">Complaint:</span>
+                                          <div className="flex-1">
+                                            {decoded ? (
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <Badge variant="outline" className={`text-xs ${getComplaintSeverityColor(decoded.severity)}`}>
+                                                  {v.complaint_category}
+                                                </Badge>
+                                                <span className="text-sm font-medium">{decoded.name}</span>
+                                                <span className="text-xs text-muted-foreground">— {decoded.description}</span>
+                                              </div>
+                                            ) : (
+                                              <span className="text-sm">Category {v.complaint_category}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
                                     {v.oath_status && (
                                       <div className="flex gap-2">
                                         <span className="text-muted-foreground w-28 shrink-0">OATH Status:</span>
