@@ -132,7 +132,7 @@ const getDOBBisUrl = (appNumber: string) =>
 
 /** Parse filing suffix: X08023336-I1 → { prefix: 'X08023336', suffix: 'I1' } */
 const parseFilingNumber = (appNumber: string) => {
-  const match = appNumber.match(/^(.+)-(I\d+|P\d+)$/i);
+  const match = appNumber.match(/^(.+)-(I\d+|P\d+|S\d+)$/i);
   if (match) return { prefix: match[1], suffix: match[2].toUpperCase() };
   return { prefix: appNumber, suffix: null };
 };
@@ -335,12 +335,12 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             Dates & Permit
           </h4>
           <div className="space-y-1 text-muted-foreground">
-            <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}</span></p>
-            <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MMM d, yyyy') : '—'}</span></p>
+            <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}</span></p>
+            <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MM/dd/yy') : '—'}</span></p>
             {raw.first_permit_date && (
-              <p>First Permit: <span className="text-foreground">{format(new Date(raw.first_permit_date as string), 'MMM d, yyyy')}</span></p>
+              <p>First Permit: <span className="text-foreground">{format(new Date(raw.first_permit_date as string), 'MM/dd/yy')}</span></p>
             )}
-            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MMM d, yyyy') : '—'}</span></p>
+            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MM/dd/yy') : '—'}</span></p>
             {raw.signoff_date && (
               <p>Sign-Off: <span className="text-foreground">{raw.signoff_date as string}</span></p>
             )}
@@ -509,9 +509,9 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             Dates
           </h4>
           <div className="space-y-1 text-muted-foreground">
-            <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}</span></p>
-            <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MMM d, yyyy') : '—'}</span></p>
-            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MMM d, yyyy') : '—'}</span></p>
+            <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}</span></p>
+            <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MM/dd/yy') : '—'}</span></p>
+            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MM/dd/yy') : '—'}</span></p>
           </div>
         </div>
 
@@ -605,7 +605,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             </Badge>
           </TableCell>
           <TableCell className="text-sm text-muted-foreground">
-            {app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}
+            {app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}
           </TableCell>
           <TableCell className="text-sm">
             {app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}
@@ -659,7 +659,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                               {relStatus}
                             </Badge>
                             <span className="text-muted-foreground text-xs">
-                              {related.filing_date ? format(new Date(related.filing_date), 'MMM d, yyyy') : '—'}
+                              {related.filing_date ? format(new Date(related.filing_date), 'MM/dd/yy') : '—'}
                             </span>
                             {related.estimated_cost && (
                               <span className="text-xs">${related.estimated_cost.toLocaleString()}</span>
