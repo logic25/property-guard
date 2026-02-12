@@ -46,6 +46,8 @@ interface Property {
   has_elevator: boolean;
   has_sprinkler: boolean;
   violations_count?: number;
+  has_swo?: boolean;
+  has_vacate?: boolean;
   last_synced_at?: string | null;
 }
 
@@ -79,18 +81,21 @@ const PropertiesPage = () => {
       const propertyIds = propertiesData?.map(p => p.id) || [];
       
       let violationCounts: Record<string, number> = {};
-      
+      const swoFlags = new Set<string>();
+      const vacateFlags = new Set<string>();
       if (propertyIds.length > 0) {
         const { data: violationsData, error: violationsError } = await supabase
           .from('violations')
-          .select('property_id')
+          .select('property_id, is_stop_work_order, is_vacate_order')
           .in('property_id', propertyIds)
           .neq('status', 'closed'); // Only count non-closed violations
         
         if (!violationsError && violationsData) {
-          // Count violations per property
+          // Count violations per property + detect SWO/Vacate
           violationsData.forEach(v => {
             violationCounts[v.property_id] = (violationCounts[v.property_id] || 0) + 1;
+            if (v.is_stop_work_order) swoFlags.add(v.property_id);
+            if (v.is_vacate_order) vacateFlags.add(v.property_id);
           });
         }
       }
@@ -98,6 +103,8 @@ const PropertiesPage = () => {
       const propertiesWithCount = propertiesData?.map(p => ({
         ...p,
         violations_count: violationCounts[p.id] || 0,
+        has_swo: swoFlags.has(p.id),
+        has_vacate: vacateFlags.has(p.id),
       })) || [];
 
       setProperties(propertiesWithCount as unknown as Property[]);
@@ -398,7 +405,11 @@ const PropertiesPage = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        {violationsCount > 0 ? (
+                        {property.has_swo || property.has_vacate ? (
+                          <Badge variant="destructive" className="text-xs">
+                            {property.has_vacate ? '⚠ Vacate' : property.has_swo ? '⛔ SWO' : 'Issues'}
+                          </Badge>
+                        ) : violationsCount > 0 ? (
                           <Badge variant="destructive" className="text-xs">
                             Issues
                           </Badge>

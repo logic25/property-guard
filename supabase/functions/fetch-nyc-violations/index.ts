@@ -1128,6 +1128,99 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== CERTIFICATE OF OCCUPANCY SYNC =====
+    let coFound = false;
+    if (bin) {
+      try {
+        const coData = await safeFetch(
+          `${NYC_OPEN_DATA_ENDPOINTS.CO}?bin=${bin}&$limit=10&$order=issuance_dd DESC`,
+          "CO"
+        );
+
+        console.log(`Found ${coData.length} CO records for BIN ${bin}`);
+
+        if (coData.length > 0) {
+          const latest = coData[0] as Record<string, unknown>;
+          const coType = (latest.certificatetype || latest.certificate_type || '') as string;
+          const issuanceDate = (latest.issuance_dd || latest.issuance_date) as string;
+          const jobNumber = (latest.job_number || latest.job__) as string;
+          
+          let coStatus = 'valid';
+          if (coType.toLowerCase().includes('temporary') || coType.toLowerCase().includes('tco')) {
+            // Check if TCO is expired
+            const expDate = latest.expiration_dd || latest.expiration_date;
+            if (expDate && new Date(expDate as string) < new Date()) {
+              coStatus = 'expired_tco';
+            } else {
+              coStatus = 'temporary';
+            }
+          }
+
+          const coMetadata = {
+            type: coType,
+            issuance_date: issuanceDate ? (issuanceDate as string).split('T')[0] : null,
+            job_number: jobNumber || null,
+            total_records: coData.length,
+            latest_raw: latest,
+          };
+
+          // Update property with CO data
+          await supabase
+            .from('properties')
+            .update({ co_status: coStatus, co_data: coMetadata })
+            .eq('id', property_id);
+
+          coFound = true;
+          console.log(`CO status updated: ${coStatus} (type: ${coType})`);
+
+          // Check if a CO document already exists for this property
+          const { data: existingCODoc } = await supabase
+            .from('property_documents')
+            .select('id')
+            .eq('property_id', property_id)
+            .eq('document_type', 'certificate_of_occupancy')
+            .limit(1);
+
+          if (!existingCODoc || existingCODoc.length === 0) {
+            // Create a document reference for the CO
+            const coDescription = `${coType || 'Certificate of Occupancy'} — Issued ${issuanceDate ? new Date(issuanceDate as string).toLocaleDateString() : 'N/A'}${jobNumber ? ` (Job #${jobNumber})` : ''}`;
+            const dobNowUrl = `https://a810-dobnow.nyc.gov/Publish/#!/certificate/${jobNumber || bin}`;
+
+            await supabase.from('property_documents').insert({
+              property_id,
+              document_name: `Certificate of Occupancy${coType ? ` (${coType})` : ''}`,
+              document_type: 'certificate_of_occupancy',
+              description: coDescription,
+              file_url: dobNowUrl,
+              file_type: 'link',
+              metadata: coMetadata,
+            });
+
+            console.log(`CO document reference created`);
+          }
+        } else {
+          // No CO found — check if pre-1938
+          const { data: propData } = await supabase
+            .from('properties')
+            .select('year_built, co_status')
+            .eq('id', property_id)
+            .single();
+
+          if (propData && (!propData.co_status || propData.co_status === 'unknown')) {
+            const yearBuilt = propData.year_built;
+            const newStatus = yearBuilt && yearBuilt < 1938 ? 'pre_1938' : 'missing';
+            await supabase
+              .from('properties')
+              .update({ co_status: newStatus })
+              .eq('id', property_id);
+            console.log(`No CO found, status set to: ${newStatus}`);
+          }
+        }
+      } catch (coError) {
+        console.error('Error fetching CO data:', coError);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -1138,6 +1231,7 @@ Deno.serve(async (req) => {
         sms_sent: newViolationsCount > 0 && ownerPhone ? true : false,
         applications_found: uniqueApps.length,
         new_applications: newAppsCount,
+        co_found: coFound,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
