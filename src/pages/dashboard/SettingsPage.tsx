@@ -8,8 +8,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Loader2, User, Bell, Shield, CreditCard } from 'lucide-react';
+import { Loader2, User, Bell, Shield, CreditCard, MessageCircle } from 'lucide-react';
 import EmailPreferencesTab from '@/components/settings/EmailPreferencesTab';
+import TelegramTab from '@/components/settings/TelegramTab';
 
 const SettingsPage = () => {
   const { user } = useAuth();
@@ -106,6 +107,10 @@ const SettingsPage = () => {
           <TabsTrigger value="security" className="gap-2">
             <Shield className="w-4 h-4" />
             Security
+          </TabsTrigger>
+          <TabsTrigger value="telegram" className="gap-2">
+            <MessageCircle className="w-4 h-4" />
+            Telegram
           </TabsTrigger>
           <TabsTrigger value="billing" className="gap-2">
             <CreditCard className="w-4 h-4" />
@@ -231,6 +236,10 @@ const SettingsPage = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="telegram">
+          <TelegramTab />
         </TabsContent>
 
         <TabsContent value="billing">
