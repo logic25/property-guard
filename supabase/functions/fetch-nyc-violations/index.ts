@@ -1315,13 +1315,17 @@ Deno.serve(async (req) => {
             'u': 'completed',
           };
 
-          // Find CO job: must have a CO-indicating status AND be a real job type (not PA/DM)
+          // Find CO job: must have a CO-indicating status AND be a real job type
+          // NB = New Building, A1 = Major Alteration, A2 = Minor Alteration with CO impact, A3 = Minor Alteration
           const coJob = (bisJobs as Record<string, unknown>[]).find(j => {
             const status = ((j.job_status || '') as string).toLowerCase();
             const jobType = ((j.job_type || '') as string).toUpperCase();
-            // Only count NB (new building) or A1 (major alteration) as CO-bearing jobs
-            const isCOJobType = ['NB', 'A1'].includes(jobType);
+            const isCOJobType = ['NB', 'A1', 'A2'].includes(jobType);
             return (status in BIS_CO_STATUSES) && isCOJobType;
+          }) || (bisJobs as Record<string, unknown>[]).find(j => {
+            // Fallback: any job type with signed-off status (x or i) indicates a CO exists
+            const status = ((j.job_status || '') as string).toLowerCase();
+            return status === 'x' || status === 'i';
           });
 
           if (coJob) {
@@ -1469,15 +1473,17 @@ Deno.serve(async (req) => {
             'v': { isSWO: false, isVacate: true, label: 'Full Vacate Order' },
           };
 
-          // Job statuses that indicate the job is terminal/closed — SWO is no longer active
-          const TERMINAL_JOB_STATUSES = new Set(['j', 'x', 'i', 'g']); // J=Disapproved, X=Withdrawn, I=Signed-off, G=Permit Entire Job
+          // Only flag SWOs on jobs with ACTIVE permit statuses — jobs still under plan exam,
+          // pre-filing, or completed/signed-off should NOT generate SWO records.
+          // Active statuses: D=Partial Permit, E=Permit Issued/Entire, F=Job Closeout in Progress
+          const ACTIVE_JOB_STATUSES = new Set(['d', 'e', 'f']);
 
           const swoJobs = (bisJobs as Record<string, unknown>[]).filter(j => {
             const sas = ((j.special_action_status || '') as string).toLowerCase();
             if (!(sas in SWO_CODES) || sas === 'n') return false;
-            // Skip jobs with terminal statuses — SWO is likely rescinded or moot
+            // ONLY include jobs with active construction permits
             const jobStatus = ((j.job_status || '') as string).toLowerCase();
-            if (TERMINAL_JOB_STATUSES.has(jobStatus)) return false;
+            if (!ACTIVE_JOB_STATUSES.has(jobStatus)) return false;
             return true;
           });
 
