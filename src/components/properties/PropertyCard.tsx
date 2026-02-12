@@ -30,6 +30,8 @@ interface PropertyCardProps {
     co_status?: string | null;
     applicable_agencies?: string[] | null;
     violations_count?: number;
+    has_swo?: boolean;
+    has_vacate?: boolean;
   };
   onEdit?: (id: string) => void;
   onDelete: (id: string) => void;
@@ -152,14 +154,22 @@ export const PropertyCard = ({ property, onEdit, onDelete }: PropertyCardProps) 
             {property.stories ? `${property.stories} stories` : 'N/A'}
           </span>
         </div>
-        {property.violations_count && property.violations_count > 0 ? (
-          <div className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/10 text-destructive text-xs font-medium">
-            <AlertTriangle className="w-3 h-3" />
-            {property.violations_count} violation{property.violations_count > 1 ? 's' : ''}
-          </div>
-        ) : (
-          <span className="text-xs text-success font-medium">Compliant</span>
-        )}
+        <div className="flex items-center gap-2">
+          {(property.has_swo || property.has_vacate) && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/20 text-destructive text-xs font-bold">
+              <AlertTriangle className="w-3 h-3" />
+              {property.has_vacate ? 'VACATE' : 'SWO'}
+            </div>
+          )}
+          {property.violations_count && property.violations_count > 0 ? (
+            <div className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/10 text-destructive text-xs font-medium">
+              <AlertTriangle className="w-3 h-3" />
+              {property.violations_count} violation{property.violations_count > 1 ? 's' : ''}
+            </div>
+          ) : (
+            <span className="text-xs text-success font-medium">Compliant</span>
+          )}
+        </div>
       </div>
     </div>
   );
