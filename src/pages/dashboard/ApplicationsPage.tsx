@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { FileStack, Search, RefreshCw, Building2, ExternalLink, Filter } from 'lucide-react';
 import { format } from 'date-fns';
+import { getSourceBadge } from '@/lib/application-utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -295,9 +296,14 @@ const ApplicationsPage = () => {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs w-[120px] justify-center">
-                          {app.source}
-                        </Badge>
+                        {(() => {
+                          const sb = getSourceBadge(app.source);
+                          return (
+                            <span className={`inline-flex items-center justify-center w-[90px] px-2 py-0.5 rounded text-xs font-semibold ${sb.bgColor} ${sb.color}`}>
+                              {sb.label}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(app.status)}>
