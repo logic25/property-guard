@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     }
 
     // AI-powered query: fetch property context and ask AI
-    const propertyContext = await getPropertyContext(supabase, userId);
+    const { context: propertyContext, properties: userProperties } = await getPropertyContext(supabase, userId);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -193,6 +193,17 @@ RULES:
     // Telegram max message length is 4096
     const truncatedReply = reply.length > 4000 ? reply.slice(0, 4000) + "\n\n_...truncated_" : reply;
     await sendTelegram(TELEGRAM_BOT_TOKEN, chatId, truncatedReply, "Markdown");
+
+    // Log Q&A to property AI conversation if we can identify the property
+    try {
+      const matchedProperty = findMentionedProperty(text, userProperties);
+      if (matchedProperty) {
+        await logToPropertyChat(supabase, userId, matchedProperty.id, 
+          `[via Telegram] ${text}`, `[via Telegram] ${reply}`);
+      }
+    } catch (logErr) {
+      console.error("Error logging to property chat:", logErr);
+    }
 
     return new Response("OK", { status: 200 });
   } catch (error) {
@@ -273,13 +284,13 @@ async function getPortfolioSummary(supabase: any, userId: string): string {
   return msg;
 }
 
-async function getPropertyContext(supabase: any, userId: string): string {
+async function getPropertyContext(supabase: any, userId: string): Promise<{ context: string; properties: any[] }> {
   const { data: properties } = await supabase
     .from("properties")
     .select("id, address, borough, bin, bbl, stories, dwelling_units, year_built, zoning_district, compliance_status")
     .eq("user_id", userId);
 
-  if (!properties || properties.length === 0) return "No properties found.";
+  if (!properties || properties.length === 0) return { context: "No properties found.", properties: [] };
 
   let context = "";
 
@@ -354,13 +365,62 @@ async function getPropertyContext(supabase: any, userId: string): string {
         if (d.expiration_date) context += ` | Expires: ${d.expiration_date}`;
         context += "\n";
         if (d.extracted_text) {
-          // Include first 2000 chars of lease text for AI context
-          const excerpt = d.extracted_text.slice(0, 2000);
-          context += `    Content: ${excerpt}${d.extracted_text.length > 2000 ? "..." : ""}\n`;
+          // Include first 8000 chars of document text for AI context
+          const excerpt = d.extracted_text.slice(0, 8000);
+          context += `    Content: ${excerpt}${d.extracted_text.length > 8000 ? "..." : ""}\n`;
         }
       }
     }
   }
 
-  return context;
+  return { context, properties };
+}
+
+function findMentionedProperty(text: string, properties: any[]): any | null {
+  if (!properties || properties.length === 0) return null;
+  const lowerText = text.toLowerCase();
+  
+  for (const prop of properties) {
+    const addr = prop.address.toLowerCase();
+    const parts = addr.split(/\s+/);
+    const streetNumber = parts[0];
+    
+    if (streetNumber && parts[1] && lowerText.includes(streetNumber) && lowerText.includes(parts[1].toLowerCase().replace(",", ""))) {
+      return prop;
+    }
+  }
+  
+  if (properties.length === 1) return properties[0];
+  return null;
+}
+
+async function logToPropertyChat(supabase: any, userId: string, propertyId: string, userMsg: string, aiMsg: string) {
+  let { data: conversation } = await supabase
+    .from("property_ai_conversations")
+    .select("id")
+    .eq("property_id", propertyId)
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!conversation) {
+    const { data: newConv, error } = await supabase
+      .from("property_ai_conversations")
+      .insert({ property_id: propertyId, user_id: userId })
+      .select("id")
+      .single();
+    if (error) throw error;
+    conversation = newConv;
+  }
+
+  await supabase.from("property_ai_messages").insert([
+    { conversation_id: conversation.id, role: "user", content: userMsg },
+    { conversation_id: conversation.id, role: "assistant", content: aiMsg },
+  ]);
+
+  await supabase
+    .from("property_ai_conversations")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", conversation.id);
 }
