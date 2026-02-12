@@ -6,23 +6,102 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-function severityColor(severity: string): string {
-  switch (severity?.toLowerCase()) {
-    case "critical": return "#dc2626";
-    case "high": return "#ea580c";
-    case "medium": return "#ca8a04";
-    default: return "#2563eb";
-  }
+// ─── Severity Calculation (mirrors client-side violation-severity.ts) ───
+
+const CRITICAL_KEYWORDS = [
+  'vacate', 'stop work', 'swo', 'unsafe', 'work without permit',
+  'illegal conversion', 'imminent danger', 'collapse', 'emergency',
+  'no permit', 'cease', 'life safety', 'fire escape'
+];
+const HIGH_KEYWORDS = [
+  'safety', 'structural', 'facade', 'll11', 'local law 11',
+  'll196', 'local law 196', 'scaffold', 'sidewalk shed',
+  'parapet', 'exterior wall', 'retaining wall', 'failure to maintain',
+  'gas', 'boiler', 'elevator', 'sprinkler', 'standpipe',
+  'means of egress', 'fire alarm', 'fire suppression'
+];
+const MEDIUM_KEYWORDS = [
+  'complaint', 'quality of life', 'permit', 'noise',
+  'construction fence', 'signage', 'certificate of occupancy',
+  'plumbing', 'electrical', 'hvac', 'maintenance',
+  'zoning', 'alteration', 'administrative'
+];
+
+interface SeverityInfo {
+  level: string;
+  color: string;
+  bgColor: string;
+  explanation: string;
+  action: string;
 }
 
-function severityBg(severity: string): string {
-  switch (severity?.toLowerCase()) {
-    case "critical": return "#fef2f2";
-    case "high": return "#fff7ed";
-    case "medium": return "#fefce8";
-    default: return "#eff6ff";
+function calculateSeverity(v: {
+  description_raw?: string | null;
+  violation_type?: string | null;
+  violation_class?: string | null;
+  agency?: string;
+  is_stop_work_order?: boolean;
+  is_vacate_order?: boolean;
+  penalty_amount?: number | null;
+  severity?: string | null;
+}): SeverityInfo {
+  if (v.is_stop_work_order || v.is_vacate_order) {
+    return {
+      level: 'Critical',
+      color: '#dc2626',
+      bgColor: '#fef2f2',
+      explanation: v.is_stop_work_order
+        ? 'Stop Work Order — all construction activity must halt immediately. Continuing risks criminal charges.'
+        : 'Vacate Order — the building or area is deemed unsafe. Immediate evacuation required.',
+      action: v.is_stop_work_order
+        ? 'File permit correction within 48 hours. Schedule DOB inspection to lift order. Do NOT resume work.'
+        : 'Evacuate affected area. Engage licensed engineer for assessment. File for re-occupancy after DOB inspection.'
+    };
   }
+
+  const text = [v.description_raw || '', v.violation_type || '', v.violation_class || '', v.severity || ''].join(' ').toLowerCase();
+
+  if (CRITICAL_KEYWORDS.some(k => text.includes(k))) {
+    return {
+      level: 'Critical',
+      color: '#dc2626', bgColor: '#fef2f2',
+      explanation: 'Serious safety concern or unauthorized work requiring immediate attention.',
+      action: 'Address within 48 hours. File corrective documents with the issuing agency. Failure to act may result in escalated penalties.'
+    };
+  }
+  if (HIGH_KEYWORDS.some(k => text.includes(k)) || v.agency === 'FDNY') {
+    return {
+      level: 'High',
+      color: '#ea580c', bgColor: '#fff7ed',
+      explanation: 'Relates to building safety systems, structural integrity, or fire safety — typically carries significant penalties.',
+      action: 'Schedule inspection or corrective action within 1–2 weeks. Engage a licensed PE/RA if structural or facade-related.'
+    };
+  }
+  if (MEDIUM_KEYWORDS.some(k => text.includes(k))) {
+    return {
+      level: 'Medium',
+      color: '#ca8a04', bgColor: '#fefce8',
+      explanation: 'Involves permits, complaints, or maintenance. Not immediately dangerous, but may escalate if unresolved.',
+      action: 'Prepare response before hearing date. File necessary permits or corrections.'
+    };
+  }
+  if (v.penalty_amount && v.penalty_amount >= 5000) {
+    return {
+      level: 'Medium',
+      color: '#ca8a04', bgColor: '#fefce8',
+      explanation: `Carries a significant penalty of $${v.penalty_amount.toLocaleString()}. Prompt resolution may reduce exposure.`,
+      action: 'Review penalty and consider filing for hearing to negotiate reduction.'
+    };
+  }
+  return {
+    level: 'Low',
+    color: '#2563eb', bgColor: '#eff6ff',
+    explanation: 'Lower-priority violation. Should still be addressed but poses minimal immediate risk.',
+    action: 'Add to compliance queue. Address during next scheduled maintenance or before permit renewals.'
+  };
 }
+
+// ─── Email Helpers ───
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "N/A";
@@ -35,7 +114,14 @@ function buildEmailHtml(data: {
   userName: string;
   properties: Array<{
     address: string;
-    violations: Array<{ violation_number: string; description_raw: string; severity: string; agency: string; issued_date: string; hearing_date: string | null }>;
+    violations: Array<{
+      violation_number: string;
+      description_raw: string;
+      severity_info: SeverityInfo;
+      agency: string;
+      issued_date: string;
+      hearing_date: string | null;
+    }>;
     upcomingHearings: Array<{ violation_number: string; hearing_date: string; agency: string; description_raw: string }>;
     expiringDocs: Array<{ document_name: string; expiration_date: string; document_type: string }>;
     applications: Array<{ application_number: string; application_type: string; status: string; agency: string }>;
@@ -53,16 +139,34 @@ function buildEmailHtml(data: {
     const hasContent = prop.violations.length > 0 || prop.upcomingHearings.length > 0 || prop.expiringDocs.length > 0 || prop.applications.length > 0;
     if (!hasContent) return "";
 
-    const violationCards = prop.violations.map(v => `
-      <div style="background:${severityBg(v.severity)};border-left:4px solid ${severityColor(v.severity)};border-radius:8px;padding:14px 16px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span style="font-weight:600;color:#1e293b;font-size:14px;">${v.agency} — ${v.violation_number}</span>
-          <span style="background:${severityColor(v.severity)};color:white;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase;">${v.severity || "info"}</span>
+    const violationCards = prop.violations.map(v => {
+      const s = v.severity_info;
+      return `
+      <div style="background:${s.bgColor};border-left:4px solid ${s.color};border-radius:8px;padding:16px 18px;margin-bottom:12px;">
+        <div style="margin-bottom:8px;">
+          <table width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td><span style="font-weight:700;color:#1e293b;font-size:14px;">${v.agency} — ${v.violation_number}</span></td>
+            <td style="text-align:right;"><span style="background:${s.color};color:white;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase;">${s.level}</span></td>
+          </tr></table>
         </div>
-        <p style="color:#475569;font-size:13px;margin:0 0 6px 0;line-height:1.4;">${(v.description_raw || "No description").substring(0, 150)}</p>
-        <div style="color:#94a3b8;font-size:12px;">Issued: ${formatDate(v.issued_date)}${v.hearing_date ? ` · Hearing: ${formatDate(v.hearing_date)}` : ""}</div>
+        <p style="color:#475569;font-size:13px;margin:0 0 10px 0;line-height:1.5;">${(v.description_raw || "No description").substring(0, 200)}</p>
+        
+        <!-- What This Means -->
+        <div style="background:rgba(255,255,255,0.6);border-radius:6px;padding:10px 14px;margin-bottom:8px;">
+          <p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 4px 0;">What This Means</p>
+          <p style="color:#334155;font-size:12px;margin:0;line-height:1.5;">${s.explanation}</p>
+        </div>
+        
+        <!-- Recommended Action -->
+        <div style="background:rgba(255,255,255,0.6);border-radius:6px;padding:10px 14px;margin-bottom:8px;">
+          <p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 4px 0;">Recommended Action</p>
+          <p style="color:#334155;font-size:12px;margin:0;line-height:1.5;">${s.action}</p>
+        </div>
+        
+        <div style="color:#94a3b8;font-size:12px;margin-top:6px;">Issued: ${formatDate(v.issued_date)}${v.hearing_date ? ` · Hearing: <strong style="color:#ea580c;">${formatDate(v.hearing_date)}</strong>` : ""}</div>
       </div>
-    `).join("");
+    `;
+    }).join("");
 
     const hearingCards = prop.upcomingHearings.map(h => `
       <div style="background:#fef3c7;border-left:4px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:10px;">
@@ -86,7 +190,7 @@ function buildEmailHtml(data: {
     `).join("");
 
     return `
-      <div style="background:#ffffff;border-radius:12px;padding:24px;margin-bottom:20px;border:1px solid #e2e8f0;">
+      <div style="background:#ffffff;border-radius:12px;padding:28px;margin-bottom:20px;border:1px solid #e2e8f0;">
         <h2 style="color:#0f172a;font-size:18px;font-weight:700;margin:0 0 16px 0;padding-bottom:12px;border-bottom:2px solid #f1f5f9;">
           🏢 ${prop.address}
         </h2>
@@ -107,17 +211,17 @@ function buildEmailHtml(data: {
   <title>Property Guard Weekly Digest</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;">
-  <div style="max-width:640px;margin:0 auto;padding:32px 16px;">
+  <div style="max-width:720px;margin:0 auto;padding:32px 16px;">
     
     <!-- Header -->
-    <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px 16px 0 0;padding:32px 28px;text-align:center;">
+    <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px 16px 0 0;padding:32px 32px;text-align:center;">
       <div style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">🛡️ Property Guard</div>
       <div style="color:#94a3b8;font-size:14px;margin-top:6px;">Weekly Compliance Digest</div>
       <div style="color:#64748b;font-size:12px;margin-top:4px;">${digestDate}</div>
     </div>
 
     <!-- Stats Bar -->
-    <div style="background:#ffffff;padding:20px 28px;display:flex;border-bottom:1px solid #e2e8f0;">
+    <div style="background:#ffffff;padding:20px 32px;border-bottom:1px solid #e2e8f0;">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td style="text-align:center;padding:8px;">
@@ -141,25 +245,49 @@ function buildEmailHtml(data: {
     </div>
 
     <!-- Greeting -->
-    <div style="background:#ffffff;padding:24px 28px 16px;border-bottom:1px solid #f1f5f9;">
+    <div style="background:#ffffff;padding:24px 32px 16px;border-bottom:1px solid #f1f5f9;">
       <p style="color:#1e293b;font-size:16px;margin:0;">Hi ${userName || "there"},</p>
       <p style="color:#64748b;font-size:14px;margin:8px 0 0;">Here's your weekly compliance summary across all properties.</p>
     </div>
 
     <!-- Property Sections -->
-    <div style="background:#f1f5f9;padding:24px 20px;">
+    <div style="background:#f1f5f9;padding:28px 24px;">
       ${propertySections || '<div style="text-align:center;padding:40px;color:#94a3b8;font-size:14px;">✅ All clear — no active issues this week!</div>'}
     </div>
 
-    <!-- CTA -->
-    <div style="background:#ffffff;padding:28px;text-align:center;border-top:1px solid #e2e8f0;">
-      <a href="${appUrl}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#0f172a,#334155);color:#ffffff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;">
+    <!-- Dashboard CTA -->
+    <div style="background:#ffffff;padding:28px 32px;text-align:center;border-top:1px solid #e2e8f0;">
+      <a href="${appUrl}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#0f172a,#334155);color:#ffffff;padding:14px 36px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;">
         View Full Dashboard →
       </a>
     </div>
 
+    <!-- GLE Help CTA -->
+    <div style="background:linear-gradient(135deg,#fef3c7,#fff7ed);padding:28px 32px;text-align:center;border-top:1px solid #fde68a;">
+      <p style="color:#92400e;font-size:16px;font-weight:700;margin:0 0 8px 0;">Need help resolving violations?</p>
+      <p style="color:#78350f;font-size:13px;margin:0 0 16px 0;line-height:1.5;">
+        GLE Expediting specializes in NYC DOB violations, permits, and compliance. 
+        Our team can handle hearings, file corrections, and clear violations fast.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="text-align:center;">
+            <a href="tel:+17186127171" style="display:inline-block;background:#0f172a;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin:0 6px;">
+              📞 Call (718) 612-7171
+            </a>
+            <a href="mailto:info@gleexpediting.com?subject=Violation%20Help%20Request" style="display:inline-block;background:#ea580c;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;margin:0 6px;">
+              ✉️ Email GLE
+            </a>
+          </td>
+        </tr>
+      </table>
+      <p style="color:#b45309;font-size:11px;margin:12px 0 0;">
+        GLE Expediting · Licensed NYC Expediter · <a href="https://gleexpediting.com" style="color:#b45309;text-decoration:underline;">gleexpediting.com</a>
+      </p>
+    </div>
+
     <!-- Footer -->
-    <div style="padding:24px 28px;text-align:center;border-radius:0 0 16px 16px;background:#ffffff;border-top:1px solid #f1f5f9;">
+    <div style="padding:24px 32px;text-align:center;border-radius:0 0 16px 16px;background:#ffffff;border-top:1px solid #f1f5f9;">
       <p style="color:#94a3b8;font-size:12px;margin:0;">
         You're receiving this because you subscribed to Property Guard digest emails.
       </p>
@@ -174,6 +302,8 @@ function buildEmailHtml(data: {
 </body>
 </html>`;
 }
+
+// ─── Main Handler ───
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -258,7 +388,7 @@ Deno.serve(async (req) => {
     const allDocs = docsRes.data || [];
     const allApps = applicationsRes.data || [];
 
-    // Group by property
+    // Group by property with calculated severity
     const propertyData = properties.map(prop => {
       const violations = allViolations.filter((v: any) => v.property_id === prop.id);
       const upcomingHearings = violations.filter((v: any) => v.hearing_date && new Date(v.hearing_date) <= sevenDaysFromNow && new Date(v.hearing_date) >= now);
@@ -267,7 +397,14 @@ Deno.serve(async (req) => {
 
       return {
         address: prop.address,
-        violations: violations.slice(0, 10),
+        violations: violations.slice(0, 10).map((v: any) => ({
+          violation_number: v.violation_number,
+          description_raw: v.description_raw,
+          severity_info: calculateSeverity(v),
+          agency: v.agency,
+          issued_date: v.issued_date,
+          hearing_date: v.hearing_date,
+        })),
         upcomingHearings,
         expiringDocs,
         applications,

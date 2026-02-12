@@ -14,6 +14,7 @@ import { FileStack, Search, ExternalLink, ChevronRight, ChevronDown, Calendar, U
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { getSourceBadge } from '@/lib/application-utils';
 
 interface PropertyApplicationsTabProps {
   propertyId: string;
@@ -597,7 +598,14 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             </span>
           </TableCell>
           <TableCell>
-            <Badge variant="outline" className="text-xs whitespace-nowrap">{app.source}</Badge>
+            {(() => {
+              const sb = getSourceBadge(app.source);
+              return (
+                <span className={`inline-flex items-center justify-center w-[90px] px-2 py-0.5 rounded text-xs font-semibold ${sb.bgColor} ${sb.color}`}>
+                  {sb.label}
+                </span>
+              );
+            })()}
           </TableCell>
           <TableCell>
             <Badge variant={getStatusVariant(app.status, app.source)} className="whitespace-nowrap">
