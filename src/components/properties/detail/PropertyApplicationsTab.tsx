@@ -833,19 +833,18 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                     {/* Parent row (I1) or first child if no parent */}
                     {group.parent ? (
                       <>
-                        {renderAppRow(group.parent, `Initial (${group.children.length} related)`, false, () => toggleGroup(group.prefix), isGroupOpen)}
+                        {renderAppRow(group.parent, group.children.length > 0 ? `${group.children.length + 1} filings` : null, false, group.children.length > 0 ? () => toggleGroup(group.prefix) : undefined, isGroupOpen)}
                       </>
                     ) : (
                       <>
-                        {renderAppRow(group.children[0], `Group ${group.prefix} (${group.children.length})`, false, () => toggleGroup(group.prefix), isGroupOpen)}
+                        {renderAppRow(group.children[0], `${group.children.length} filings`, false, () => toggleGroup(group.prefix), isGroupOpen)}
                       </>
                     )}
                     {/* Collapsible children */}
                     {isGroupOpen && group.children.map((child) => {
-                      // Skip first child if no parent (already rendered above)
                       if (!group.parent && child === group.children[0]) return null;
                       const { suffix } = parseFilingNumber(child.application_number);
-                      return renderAppRow(child, `Subsequent (${suffix})`, true);
+                      return renderAppRow(child, suffix || null, true);
                     })}
                   </>
                 );
