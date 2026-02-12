@@ -144,7 +144,7 @@ NYC building applications follow a family structure:
 ### Status Decoding
 - BIS single-letter codes are decoded (e.g., `E` → "Permit Issued - Entire")
 - DOB NOW statuses are normalized and title-cased
-- Completed statuses: Signed Off, Completed, CO Issued, Letter of Completion, LOC Issued
+- Completed statuses: Signed Off, Completed, CO Issued (LOC Issued and Letter of Completion are normalized to "Signed Off")
 
 ### Active Count
 - The header badge shows count of **non-completed** applications
@@ -177,7 +177,7 @@ NYC building applications follow a family structure:
 | N | Suspended | No |
 | P | Permit Expired | No |
 | Q | Partial Permit | ❓ TBD |
-| R | Plan Exam - Incomplete | No |
+| R | Permit Entire | ✅ Yes |
 | X | Signed Off / Completed | No |
 
 ---

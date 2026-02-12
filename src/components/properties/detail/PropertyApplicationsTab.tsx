@@ -57,18 +57,25 @@ const BIS_STATUS_CODES: Record<string, string> = {
   'G': 'Permit Renewed',
   'H': 'Completed',
   'I': 'Signed Off',
-  'J': 'Letter of Completion',
+  'J': 'Signed Off',
   'K': 'CO Issued',
   'L': 'Withdrawn',
   'M': 'Disapproved',
   'N': 'Suspended',
   'P': 'Permit Expired',
   'Q': 'Partial Permit',
-  'R': 'Plan Exam - Incomplete',
+  'R': 'Permit Entire',
   'X': 'Signed Off / Completed',
 };
 
-const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'Complete', 'CO Issued', 'Letter of Completion', 'LOC Issued'];
+const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'Complete', 'CO Issued'];
+
+// Normalize "LOC Issued" and "Letter of Completion" to "Signed Off"
+const normalizeCompletionLabel = (label: string): string => {
+  const lower = label.toLowerCase();
+  if (lower === 'loc issued' || lower === 'letter of completion') return 'Signed Off';
+  return label;
+};
 
 const normalizeStatusLabel = (status: string): string => {
   // Clean up verbose/redundant status labels from API
@@ -86,10 +93,13 @@ const normalizeStatusLabel = (status: string): string => {
 
 const decodeStatus = (status: string | null, source: string): string => {
   if (!status) return 'Unknown';
+  let decoded: string;
   if (source === 'DOB BIS' && status.length <= 2) {
-    return BIS_STATUS_CODES[status.toUpperCase()] || status;
+    decoded = BIS_STATUS_CODES[status.toUpperCase()] || status;
+  } else {
+    decoded = normalizeStatusLabel(status);
   }
-  return normalizeStatusLabel(status);
+  return normalizeCompletionLabel(decoded);
 };
 
 const getStatusVariant = (status: string | null, source: string) => {
