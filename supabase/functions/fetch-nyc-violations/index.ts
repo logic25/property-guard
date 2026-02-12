@@ -1247,7 +1247,7 @@ Deno.serve(async (req) => {
             coFound = true;
             console.log(`CO status updated from BIS Jobs: valid (${statusLabel}, Job #${jobNumber}, signoff: ${signoffDate})`);
 
-            // Create document reference linking to BIS
+            // Try to download actual CO PDF from BIS
             const { data: existingCODoc } = await supabase
               .from('property_documents')
               .select('id')
@@ -1256,19 +1256,85 @@ Deno.serve(async (req) => {
               .limit(1);
 
             if (!existingCODoc || existingCODoc.length === 0) {
-              const bisUrl = `http://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?allbin=${bin}`;
+              let fileUrl = `http://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?allbin=${bin}`;
+              let fileType = 'link';
+              let fileSizeBytes: number | null = null;
               const coDescription = `BIS Certificate of Occupancy — Job #${jobNumber} (${jobType}), ${statusLabel} on ${signoffDate}`;
+
+              // Attempt to fetch the CO PDF listing page and download the PDF
+              try {
+                const borough = ((coJob.borough || '') as string).toUpperCase();
+                const boroughNum = borough === 'MANHATTAN' ? '1' : borough === 'BRONX' ? '2' : borough === 'BROOKLYN' ? '3' : borough === 'QUEENS' ? '4' : borough === 'STATEN ISLAND' ? '5' : '0';
+                const pdfListUrl = `http://a810-bisweb.nyc.gov/bisweb/COPdfListingServlet?requestid=1&key=${jobNumber}&borough=${boroughNum}&bin=${bin}`;
+                
+                const pdfListResp = await fetch(pdfListUrl, {
+                  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PropertyMonitor/1.0)' },
+                });
+                
+                if (pdfListResp.ok) {
+                  const html = await pdfListResp.text();
+                  // Parse out PDF filename - pattern like "K000310206577.PDF" or similar
+                  const pdfMatch = html.match(/href="[^"]*?([A-Z]\d+\.PDF)"/i) || html.match(/([A-Z]\d+\.PDF)/i);
+                  
+                  if (pdfMatch) {
+                    const pdfFilename = pdfMatch[1];
+                    const pdfUrl = `http://a810-bisweb.nyc.gov/bisweb/CosbyImage?cofession=${pdfFilename}`;
+                    
+                    console.log(`Attempting to download CO PDF: ${pdfFilename}`);
+                    
+                    const pdfResp = await fetch(pdfUrl, {
+                      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PropertyMonitor/1.0)' },
+                    });
+                    
+                    if (pdfResp.ok) {
+                      const pdfBuffer = await pdfResp.arrayBuffer();
+                      const pdfBytes = new Uint8Array(pdfBuffer);
+                      
+                      if (pdfBytes.length > 1000) { // Sanity check - real PDFs are > 1KB
+                        const storagePath = `${property_id}/co_${jobNumber}.pdf`;
+                        
+                        const { error: uploadError } = await supabase.storage
+                          .from('property-documents')
+                          .upload(storagePath, pdfBytes, {
+                            contentType: 'application/pdf',
+                            upsert: true,
+                          });
+                        
+                        if (!uploadError) {
+                          const { data: urlData } = supabase.storage
+                            .from('property-documents')
+                            .getPublicUrl(storagePath);
+                          
+                          fileUrl = urlData.publicUrl || fileUrl;
+                          fileType = 'application/pdf';
+                          fileSizeBytes = pdfBytes.length;
+                          console.log(`CO PDF uploaded to storage: ${storagePath} (${pdfBytes.length} bytes)`);
+                        } else {
+                          console.error('Failed to upload CO PDF:', uploadError);
+                        }
+                      } else {
+                        console.log(`PDF response too small (${pdfBytes.length} bytes), likely not a real PDF`);
+                      }
+                    }
+                  } else {
+                    console.log('No PDF link found in CO listing page');
+                  }
+                }
+              } catch (pdfError) {
+                console.error('Error downloading CO PDF (falling back to link):', pdfError);
+              }
 
               await supabase.from('property_documents').insert({
                 property_id,
                 document_name: `Certificate of Occupancy (BIS)`,
                 document_type: 'certificate_of_occupancy',
                 description: coDescription,
-                file_url: bisUrl,
-                file_type: 'link',
+                file_url: fileUrl,
+                file_type: fileType,
+                file_size_bytes: fileSizeBytes,
                 metadata: coMetadata,
               });
-              console.log(`CO document reference created (BIS)`);
+              console.log(`CO document created (type: ${fileType})`);
             }
           }
 
