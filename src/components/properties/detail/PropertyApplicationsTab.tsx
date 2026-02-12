@@ -316,32 +316,14 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
   // Deduplicate: for job families, only show the primary (I1) row in the table.
   // Subsequent filings (P1, P2, S1, etc.) are nested inside the expanded detail.
   const sortedFiltered = useMemo(() => {
-    // Identify which prefixes have an I-filing (initial) present in the filtered set
-    const prefixInitialMap = new Map<string, Application>();
-    const subsequentPrefixes = new Set<string>();
-
-    filtered.forEach(app => {
-      const { prefix, suffix } = parseFilingNumber(app.application_number);
-      if (!suffix) return; // no suffix = standalone app, always show
-      const suffixUpper = suffix.replace(/-[A-Z]+$/, '').toUpperCase(); // strip agency tag
-      if (suffixUpper.startsWith('I')) {
-        prefixInitialMap.set(prefix, app);
-      } else {
-        subsequentPrefixes.add(prefix);
-      }
-    });
-
-    // Filter: keep apps that are either:
-    // 1. Standalone (no suffix)
-    // 2. Initial filings (I1, I1-EL, etc.)
-    // 3. Subsequent filings whose family has NO initial filing in the filtered set
+    // S (Subsequent) and P (Post-Approval) filings are ALWAYS nested under their
+    // parent I (Initial) filing. They should never appear as standalone rows.
     const deduped = filtered.filter(app => {
-      const { prefix, suffix } = parseFilingNumber(app.application_number);
-      if (!suffix) return true; // standalone
-      const suffixUpper = suffix.replace(/-[A-Z]+$/, '').toUpperCase();
-      if (suffixUpper.startsWith('I')) return true; // initial filing
-      // Subsequent filing: only show if no initial filing exists for this family
-      return !prefixInitialMap.has(prefix);
+      const { suffix } = parseFilingNumber(app.application_number);
+      if (!suffix) return true; // standalone app, always show
+      const suffixLetter = suffix.replace(/-[A-Z]+$/, '').charAt(0).toUpperCase();
+      // Only show I (Initial) filings as top-level rows
+      return suffixLetter === 'I';
     });
 
     return deduped.sort((a, b) => {
