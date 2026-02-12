@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string
+          admin_user_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          admin_user_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          admin_user_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       ai_usage: {
         Row: {
           created_at: string
@@ -40,6 +67,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      api_call_logs: {
+        Row: {
+          created_at: string
+          endpoint: string
+          error_message: string | null
+          id: string
+          property_id: string | null
+          response_time_ms: number | null
+          status_code: number | null
+          url: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          error_message?: string | null
+          id?: string
+          property_id?: string | null
+          response_time_ms?: number | null
+          status_code?: number | null
+          url: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          error_message?: string | null
+          id?: string
+          property_id?: string | null
+          response_time_ms?: number | null
+          status_code?: number | null
+          url?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_call_logs_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       applications: {
         Row: {
@@ -1330,6 +1401,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       vendors: {
         Row: {
           coi_expiration_date: string | null
@@ -1559,6 +1651,13 @@ export type Database = {
         Returns: Json
       }
       generate_deadline_reminders: { Args: never; Returns: undefined }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       agency_type:
@@ -1571,6 +1670,7 @@ export type Database = {
         | "DSNY"
         | "LPC"
         | "DOF"
+      app_role: "admin" | "user"
       jurisdiction_type: "NYC" | "NON_NYC"
       notification_priority: "critical" | "high" | "normal" | "low"
       violation_status: "open" | "in_progress" | "closed"
@@ -1713,6 +1813,7 @@ export const Constants = {
         "LPC",
         "DOF",
       ],
+      app_role: ["admin", "user"],
       jurisdiction_type: ["NYC", "NON_NYC"],
       notification_priority: ["critical", "high", "normal", "low"],
       violation_status: ["open", "in_progress", "closed"],
