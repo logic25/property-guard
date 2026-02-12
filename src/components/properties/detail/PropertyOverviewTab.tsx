@@ -29,6 +29,7 @@ import {
 import { getBoroughName } from '@/lib/property-utils';
 import { isActiveViolation } from '@/lib/violation-utils';
 import { PropertyAIWidget } from '@/components/properties/PropertyAIWidget';
+import { LocalLawComplianceGrid } from '@/components/properties/detail/LocalLawComplianceGrid';
 
 interface Property {
   id: string;
@@ -576,6 +577,9 @@ export const PropertyOverviewTab = ({
           </Collapsible>
         </CardContent>
       </Card>
+
+      {/* Local Law Compliance Grid */}
+      <LocalLawComplianceGrid property={property} />
 
       {/* Property AI Widget */}
       <PropertyAIWidget 

@@ -156,6 +156,74 @@ export type Database = {
           },
         ]
       }
+      compliance_requirements: {
+        Row: {
+          applicability_reason: string | null
+          created_at: string
+          cycle_year: number | null
+          description: string | null
+          due_date: string | null
+          filing_deadline: string | null
+          id: string
+          last_filed_date: string | null
+          local_law: string
+          next_due_date: string | null
+          notes: string | null
+          penalty_amount: number | null
+          penalty_description: string | null
+          property_id: string
+          requirement_name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          applicability_reason?: string | null
+          created_at?: string
+          cycle_year?: number | null
+          description?: string | null
+          due_date?: string | null
+          filing_deadline?: string | null
+          id?: string
+          last_filed_date?: string | null
+          local_law: string
+          next_due_date?: string | null
+          notes?: string | null
+          penalty_amount?: number | null
+          penalty_description?: string | null
+          property_id: string
+          requirement_name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          applicability_reason?: string | null
+          created_at?: string
+          cycle_year?: number | null
+          description?: string | null
+          due_date?: string | null
+          filing_deadline?: string | null
+          id?: string
+          last_filed_date?: string | null
+          local_law?: string
+          next_due_date?: string | null
+          notes?: string | null
+          penalty_amount?: number | null
+          penalty_description?: string | null
+          property_id?: string
+          requirement_name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compliance_requirements_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dd_reports: {
         Row: {
           address: string
