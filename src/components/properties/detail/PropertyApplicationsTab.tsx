@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FileStack, Search, ExternalLink, ChevronRight, ChevronDown, Calendar, User, DollarSign, Building2, FileText, ShieldCheck, Wrench } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { FileStack, Search, ExternalLink, ChevronRight, ChevronDown, Calendar, User, DollarSign, Building2, FileText, ShieldCheck, Wrench, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 
@@ -100,7 +102,8 @@ const getDOBBisUrl = (appNumber: string) =>
 export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [agencyFilter, setAgencyFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set());
+  const [statusFilterInit, setStatusFilterInit] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const { data: applications, isLoading } = useQuery({
@@ -129,6 +132,32 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
   const agencies = useMemo(() => [...new Set(applications?.map(a => a.agency) || [])].sort(), [applications]);
   const statuses = useMemo(() => [...new Set(applications?.map(a => decodeStatus(a.status, a.source)).filter(Boolean) || [])].sort() as string[], [applications]);
 
+  // Closed/completed statuses to exclude by default
+  const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'CO Issued', 'Letter of Completion'];
+
+  // Initialize default filter: exclude completed statuses
+  useEffect(() => {
+    if (statuses.length > 0 && !statusFilterInit) {
+      const defaults = new Set(
+        statuses.filter(s => !COMPLETED_STATUSES.some(cs => s.toLowerCase().includes(cs.toLowerCase())))
+      );
+      setSelectedStatuses(defaults);
+      setStatusFilterInit(true);
+    }
+  }, [statuses, statusFilterInit]);
+
+  const toggleStatus = (status: string) => {
+    setSelectedStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  };
+
+  const selectAllStatuses = () => setSelectedStatuses(new Set(statuses));
+  const clearAllStatuses = () => setSelectedStatuses(new Set());
+
   const filtered = useMemo(() => {
     return (applications || []).filter(app => {
       const matchesSearch = !searchQuery ||
@@ -137,10 +166,10 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
         app.applicant_name?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
       const decodedStatus = decodeStatus(app.status, app.source);
-      const matchesStatus = statusFilter === 'all' || decodedStatus === statusFilter;
+      const matchesStatus = selectedStatuses.size === 0 || selectedStatuses.has(decodedStatus);
       return matchesSearch && matchesAgency && matchesStatus;
     });
-  }, [applications, searchQuery, agencyFilter, statusFilter]);
+  }, [applications, searchQuery, agencyFilter, selectedStatuses]);
 
   if (isLoading) {
     return (
@@ -374,17 +403,34 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             ))}
           </SelectContent>
         </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {statuses.map(status => (
-              <SelectItem key={status} value={status}>{status}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="w-48 justify-start text-sm">
+              <Filter className="w-4 h-4 mr-2" />
+              Status ({selectedStatuses.size}/{statuses.length})
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-3" align="start">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium">Filter by status</p>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={selectAllStatuses}>All</Button>
+                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={clearAllStatuses}>None</Button>
+              </div>
+            </div>
+            <div className="space-y-1.5 max-h-60 overflow-y-auto">
+              {statuses.map(status => (
+                <label key={status} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1">
+                  <Checkbox
+                    checked={selectedStatuses.has(status)}
+                    onCheckedChange={() => toggleStatus(status)}
+                  />
+                  <span className="text-sm">{status}</span>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Table */}
