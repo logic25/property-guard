@@ -1,208 +1,223 @@
-# Property Guard: Prioritized Build Plan
+# Phase 3-5 Implementation Plan: Intelligence, Notifications, and Analytics
 
-This plan consolidates everything you've asked for -- the master prompt features, email digest, calendar enhancements, team chat, contractor monitoring, and application sync notifications -- into a single prioritized roadmap. Each phase builds on the previous one so nothing breaks.
+## Parked Items (for later)
 
----
-
-## Priority Order (Why This Sequence)
-
-1. **Email System + Notifications** -- Immediate user value; every other feature benefits from having email infrastructure in place
-2. **Application Sync + Change Detection** -- Critical data gap; applications don't auto-sync like violations do
-3. **Calendar Enhancements + Follow-up Tracking** -- Builds on existing calendar; adds actionable follow-up with saved messages
-4. **Team Chat (PropertyAI upgrade)** -- Transforms PropertyAI into collaborative tool with @mentions and AI toggle
-5. **FDNY Compliance System** -- New data domain; database + detection + UI tab
-6. **Tax Tracking** -- Simple CRUD feature; low complexity
-7. **Contractor Monitoring** -- Requires cross-referencing DOB data; most complex new data pipeline
-8. **Telegram Bot** -- External integration; requires bot token setup; lowest priority per "don't build until users ask"
+- **Properties page styling**: Tone down the aggressive header/table styling to something more balanced
+- **CO PDF download**: BIS blocks server-side requests with 403; investigate Firecrawl or browser-based scraping alternatives
 
 ---
 
-## Phase 1: Email Digest + Notification System
+## Phase 3: Smarter Violation Intelligence
 
-### Database Changes
+### 3A. Age-Based Suppression - yes but add to roadmap to revisit later as we may have to modify
 
-- `email_preferences` table: user_id, digest_frequency (weekly/daily/none), digest_day (Monday default), notify_new_violations, notify_status_changes, notify_expirations, notify_new_applications, email (from auth)
-- `email_log` table: id, user_id, email_type, subject, sent_at, metadata (jsonb)
+**Database migration:**
 
-### Edge Function: `send-email-digest`
+- Add `suppressed` (boolean, default false) and `suppression_reason` (text) columns to `violations` table
 
-- Query all properties for the user
-- Gather: new violations since last digest, upcoming hearings/deadlines (7 days), expiring permits/documents, application status changes
-- Format into a beautiful HTML email using inline CSS (clean, card-based layout with color-coded severity)
-- Send via Resend API (will need RESEND_API_KEY secret)
-- Log to email_log table
+**New file:** `src/lib/violation-aging.ts`
 
-### Edge Function: `send-notification-email`
+- Aging rules: ECB > 2 years, DOB > 3 years, HPD > 3 years
+- `shouldSuppressViolation()` function checking issue date against rules
+- Only applies to violations with status "open"
 
-- Triggered by sync functions when changes detected
-- Sends immediate alert emails for critical items (stop work orders, vacate orders, new violations)
-- Batches non-critical changes into a summary
+**Edge function update:** `scheduled-sync/index.ts`
 
-### UI: Email Preferences (Settings page)
+- After sync completes, run suppression check on all open violations for the property
 
-- Toggle: Weekly digest on/off
-- Checkboxes: What to include (violations, applications, expirations, hearings)
-- "Send Test Email" button so you can preview the template
-- Email preview modal showing exactly what the digest looks like
+**UI updates:**
 
-### Email Template Design
+- `PropertyViolationsTab.tsx`: Add "Show suppressed" toggle alongside the Active/All toggle
+- Suppressed violations shown with muted styling + "Suppressed" badge with tooltip explaining why
+- `ViolationsPage.tsx`: Same toggle treatment
+- Update `isActiveViolation()` in `violation-utils.ts` to exclude suppressed violations
 
-- Header: Property Guard logo + "Weekly Compliance Digest"
-- Section per property with active issues
-- Color-coded cards: red (critical), orange (high), yellow (medium), blue (info)
-- Action links back to the app for each item
-- Footer with unsubscribe link
+### 3B. OATH Disposition Reconciliation
 
----
+**Database migration:**
 
-## Phase 2: Application Sync + Change Notifications
+- Create `oath_hearings` table: id, summons_number (unique), hearing_date, hearing_status, disposition, disposition_date, penalty_amount, penalty_paid, violation_id (FK), property_id (FK), last_synced_at, created_at, updated_at
+- RLS: SELECT/INSERT/UPDATE through properties.user_id join; service role INSERT/UPDATE for sync
+- Indexes on summons_number, violation_id, property_id
 
-### Update `scheduled-sync` edge function
+**Edge function update:** `fetch-nyc-violations/index.ts`
 
-- Add application syncing alongside violation syncing
-- Track previous status in `applications.raw_data` to detect changes
-- When status changes detected, call `send-notification-email` with change details
+- The OATH dataset is already queried for FDNY/DEP/DOT/DSNY/LPC/DOF violations
+- Add a post-sync step: for each ECB violation, query OATH API by violation_number
+- Upsert into `oath_hearings`
+- If disposition is "Dismissed" or "Not Guilty", auto-update violation status to "closed" and log to `change_log`
 
-### Update `fetch-nyc-violations` edge function
+**UI updates:**
 
-- Already fetches applications; enhance to compare old vs new status
-- Return `changed_applications` count alongside `new_applications`
-- Store previous status snapshot for diff comparison
+- `PropertyViolationsTab.tsx` expanded row: Show OATH hearing card when available (hearing date, status, disposition, penalty)
+- Color-coded disposition badges (green for dismissed, red for guilty, yellow for default)
 
-### Auto-attach permits and COs
+### 3C. Violation-Specific Guidance (What This Means) - i think our email has this we kist need to refine and can be roadmapped
 
-- When sync finds a new CO or permit status change, create entry in `property_documents` automatically
-- Link document to the application record via metadata - it would be great if we could attach th actual file to the emial
-- Document type: "auto-synced-permit" or "auto-synced-co"
+**New file:** `src/lib/violation-guidance.ts`
 
----
+- Template map keyed by violation pattern (structural, work without permit, illegal conversion, elevator, boiler, facade, complaint)
+- Each template: severity, whatItMeans, immediateActions[], timeline, typicalCost, whoToCall, preventionTips[]
+- `getViolationGuidance()` function matching violation description/category to templates
 
-## Phase 3: Calendar Enhancements + Follow-up Tracking
+**UI updates:**
 
-### Database Changes
+- `PropertyViolationsTab.tsx` expanded row: Add "What To Do" section below existing "What This Means" decode
+- Card layout with immediate actions checklist, timeline, cost estimate, who to call
+- Only shows when guidance match is found
 
-- `calendar_follow_ups` table: id, user_id, event_type, event_id (violation/application/document UUID), property_id, message, created_at, resolved_at, resolved_by
+**Email integration:**
 
-### Calendar UI Updates
+- Update `send-email-digest` edge function to include guidance content for new violations in digest emails
 
-- Click any event card to open a detail panel
-- Detail panel shows: full event info, property link, "Add Follow-up" button
-- Follow-up form: text message saved to `calendar_follow_ups`
-- Show follow-up history on the card
-- Add "Today" button and mini-stats bar (total hearings, expiring permits, overdue items)
-- Include ALL violations, permits, document expirations on the calendar, also work order due dates( need to expand work orders)
-- Filter by property, by type, by urgency
+### 3D. Complaint Category Decoding - yes look at the glossary to decode the complaints
 
----
+**New file:** `src/lib/complaint-category-decoder.ts`
 
-## Phase 4: Team Chat (PropertyAI Upgrade)
+- Map of DOB complaint codes to human-readable names: 4B = Illegal Conversion, 77 = Work Without Permit, 3A = Unsafe Structure, etc.
+- `decodeComplaintCategory()` function
 
-### Database Changes
+**UI updates:**
 
-- Add `mentioned_user_id` (nullable UUID) to `property_ai_messages`
-- Add `is_ai_response` (boolean, default true) to `property_ai_messages`
-- `property_members` table already exists -- reuse for @mention targets
-
-### PropertyAI Widget Changes
-
-- Rename to "Property Chat" in UI
-- Add @mention autocomplete: typing `@` shows list of property members
-- When message has NO @mention: send to AI as before (is_ai_response = true on reply)
-- When message HAS @mention: save as human message (is_ai_response = false), no AI call
-- Mentioned users see notification badge on the property
-- Any user can type `@AI` to explicitly invoke AI in the thread - but they see the full chat history
-- Thread is shared across all property members (already scoped by property_id)
+- `PropertyViolationsTab.tsx`: Where `complaint_category` is displayed, show decoded name + description
+- `ViolationsPage.tsx`: Same treatment in expanded rows
 
 ---
 
-## Phase 5: FDNY Compliance System
+## Phase 4: Notifications and Alerts
 
-### Database Changes (from master prompt)
+### 4A. In-App Notification Center
 
-- `fdny_equipment` table (refrigeration, sprinklers, standpipes, fire alarms)
-- `fire_alarm_incidents` table
-- `fdny_compliance_alerts` table
-- RLS policies scoped through properties.user_id
+**Database migration:**
 
-### New Files
+- Create `notifications` table: id, user_id (uuid, not FK to auth), title, body, notification_type, priority (critical/high/normal/low), property_id, related_entity_type, related_entity_id, action_url, read (default false), read_at, dismissed (default false), dismissed_at, sent_via_email, created_at, expires_at
+- RLS: Users can SELECT/UPDATE their own notifications (user_id = auth.uid()); service role can INSERT
+- Indexes on user_id, read (partial where false), created_at DESC, priority
 
-- `src/lib/fdnyEquipmentDetection.ts` -- rule-based detection from building class/occupancy
-- `src/lib/fdnyComplianceChecker.ts` -- checks equipment records against requirements
-- `src/components/properties/detail/PropertyFDNYTab.tsx` -- equipment list, alerts, compliance check button
+**New file:** `src/components/NotificationBell.tsx`
 
-### Property Detail Page
+- Bell icon with unread count badge in sidebar header
+- Popover dropdown showing latest 10 notifications
+- Priority color dot per notification
+- "Mark all read" button
+- Click notification to navigate to action_url
+- Poll every 30 seconds for new notifications (or use Supabase realtime)
 
-- Add "FDNY" tab (9th tab, between Work Orders and Activity)
-- Show equipment cards with permit status badges
-- "Check Compliance" button runs checker and displays alerts
-- Add FDNY deadlines to Calendar
+**Sidebar update:** `DashboardSidebar.tsx`
 
----
+- Add NotificationBell component next to the logo area
 
-## Phase 6: Tax Tracking
+**New page:** `src/pages/dashboard/NotificationsPage.tsx`
 
-### Database Changes
+- Full notification history with filters (by type, priority, read/unread)
+- Add route to App.tsx
 
-- `property_taxes` table (from master prompt)
-- Add `tenant_name`, `tenant_notes` columns to `applications` table
+### 4B. Priority Routing
 
-### New Files
+**New file:** `src/lib/notification-priority.ts`
 
-- `src/components/properties/detail/PropertyTaxTab.tsx` -- tax year form, payment tracking, protest tracking
-- Tax alerts component showing overdue/unfiled protests
+- `determineNotificationPriority()`: stop work/vacate/emergency = critical; new violations/hearings = high; status changes = normal; informational = low
+- `routeNotification()`: creates notification record; triggers email for critical/high via existing `send-email-digest` infrastructure
 
-### Property Detail Page
+**Edge function update:** `scheduled-sync/index.ts`
 
-- Add "Taxes" tab
-- Tenant tags on application expanded rows
+- After detecting changes, call priority routing to create notifications
+- Critical items trigger immediate email via `send-change-summary`
 
----
+### 4C. Per-Property Alert Settings
 
-## Phase 7: Contractor Monitoring - these are vendors so we need to expand vendors
+**Database migration:**
 
-### Database Changes
+- Create `property_alert_settings` table: id, property_id (FK), user_id, notify_all_violations, notify_only_critical, notify_status_changes, notify_new_applications, notify_compliance_deadlines, days_before_deadline_alert (default 30), quiet_hours_start, quiet_hours_end, created_at, updated_at
+- UNIQUE on (property_id, user_id)
+- RLS through properties.user_id
 
-- `contractors` table: id, user_id, name, license_number, license_type, insurance_expiration, dob_violations_count, last_checked_at
-- `application_contractors` junction table: application_id, contractor_id
+**UI:** Add "Alert Settings" section to `PropertySettingsTab.tsx`
 
-### Edge Function: `check-contractor-compliance`
-
-- Cross-reference contractor license numbers against DOB violation datasets
-- Check insurance expiration dates
-- Generate alerts for expired insurance or contractors with violations
-
-### UI
-
-- Contractor list page (or section in Vendors)
-- Link contractors to applications
-- Alert badges when insurance expiring or DOB violations found
+- Toggle switches for each notification type
+- Days-before-deadline slider
+- Quiet hours time pickers
 
 ---
 
-## Phase 8: Telegram Bot (Future)
+## Phase 5: Analytics and Reporting
 
-### Requirements
+### 5A. Violation Trend Charts - roadmap
 
-- TELEGRAM_BOT_TOKEN secret
-- Edge function: `telegram-webhook`
-- Uses Lovable AI (gemini-2.5-flash) instead of Anthropic for natural language parsing
-- Database tables: `messaging_users`, `message_conversations`, `telegram_groups`
-- Webhook handler for inbound messages, property lookup, data queries
+**UI updates:** `DashboardOverview.tsx`
 
-This phase is deferred until after real user feedback on Phases 1-7.
+- Add a "Violation Trends" card using recharts (already installed)
+- LineChart showing monthly violation counts over last 12 months
+- Lines for total, critical, and resolved
+- Query violations grouped by month from issued_date
+
+**New file:** `src/components/dashboard/ViolationTrendChart.tsx`
+
+- Reusable chart component accepting property_id (optional, for property-level or portfolio-level)
+
+### 5B. Compliance Score - this compliance score should be based on if the property is in compliance with LL and violations. Do you have the LL logic that we need
+
+**Database migration:**
+
+- Create `compliance_scores` table: id, property_id (FK), score (0-100), score_date, violations_score, compliance_score, response_time_score, total_violations, critical_violations, overdue_compliance_count, avg_resolution_days, created_at
+- UNIQUE on (property_id, score_date)
+- RLS through properties.user_id
+
+**New file:** `src/lib/compliance-scoring.ts`
+
+- Score formula: violations (0-40) + compliance (0-40) + response time (0-20)
+- Deductions per critical (-10), high (-5), other (-2)
+- Overdue requirements (-5 each)
+- Slow response time penalties
+
+**Edge function update:** `scheduled-sync/index.ts`
+
+- After sync, calculate and store compliance score for each property
+
+**UI updates:**
+
+- `PropertyOverviewTab.tsx`: Add compliance score card with letter grade (A-F), breakdown bars
+- `DashboardOverview.tsx`: Show average compliance score across portfolio
+- `PropertiesPage.tsx`: Add score column to properties table
+
+### 5C. Hearing Calendar Enhancement
+
+The existing `CalendarPage.tsx` already shows hearings, cure deadlines, certifications, permit expirations, document expirations, and work orders. Enhancements:
+
+**Database migration:**
+
+- Create `hearing_calendar` table: id, property_id, hearing_type, hearing_date, hearing_time, hearing_location, case_number, violation_id (FK), status, outcome, reminder_7_days, reminder_3_days, reminder_1_day, notes, created_at, updated_at
+- RLS through properties.user_id
+
+**Edge function update:** `scheduled-sync/index.ts`
+
+- When violations with hearing_date are synced, upsert into hearing_calendar
+- Check for upcoming hearings and create reminder notifications at 7/3/1 days
+
+**UI updates:**
+
+- `CalendarPage.tsx`: Click event to open detail panel with full info + property link
+- Add "Today" quick-nav button
+- Mini stats bar at top (total hearings this month, expiring permits, overdue items)
 
 ---
+
+## Implementation Sequence
+
+1. **Phase 3A + 3D** (suppression + complaint decoding) -- pure client-side logic, no API calls needed
+2. **Phase 3B** (OATH reconciliation) -- extends existing sync; database + edge function changes
+3. **Phase 3C** (violation guidance) -- new utility file + UI cards
+4. **Phase 4A** (notification center) -- database + new component + sidebar update
+5. **Phase 4B + 4C** (priority routing + per-property settings) -- builds on 4A
+6. **Phase 5A** (trend charts) -- recharts already installed, client-side aggregation
+7. **Phase 5B** (compliance score) -- database + scoring logic + UI cards
+8. **Phase 5C** (hearing calendar enhancement) -- extends existing calendar page
 
 ## Technical Notes
 
-- **Email provider**: Will need a Resend API key (free tier: 100 emails/day, plenty for MVP)
-- **No Next.js**: All backend logic runs as Supabase Edge Functions (Deno), not Next.js API routes as shown in the master prompt
-- **AI model**: Team chat and Telegram will use Lovable AI (gemini-2.5-flash) -- no additional API keys needed
-- **Existing functionality preserved**: All current violations, applications, documents, work orders, PropertyAI continue working unchanged
-- **Property Detail tabs**: Will grow from 7 to 9 tabs (adding FDNY + Taxes); tab bar will need horizontal scroll on mobile
-
----
-
-## First Implementation Step
-
-Once approved, I'll start with **Phase 1**: create the `email_preferences` and `email_log` tables, build the `send-email-digest` edge function with a beautiful HTML template, add email settings to the Settings page, and wire up a "Send Test Email" button so you can see exactly what the digest looks like.
+- All new tables get RLS policies scoped through `properties.user_id` or direct `user_id = auth.uid()`
+- Notifications table needs service role INSERT policy for sync functions
+- OATH API (data.cityofnewyork.us) is free, no API key needed, 1000 req/hr
+- Realtime can be enabled on `notifications` table for instant bell updates (optional, polling works fine for MVP)
+- Compliance scores recalculated during nightly sync to avoid stale data
+- No new secrets required -- all APIs are public NYC Open Data endpoints
