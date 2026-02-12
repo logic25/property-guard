@@ -174,6 +174,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
   const [statusFilterInit, setStatusFilterInit] = useState(false);
   const [sourceFilterInit, setSourceFilterInit] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const { data: applications, isLoading } = useQuery({
     queryKey: ['property-applications', propertyId],
@@ -263,9 +264,15 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     });
   }, [applications, searchQuery, agencyFilter, selectedStatuses, selectedSources]);
 
-  // Group related filings by prefix (I1/P1/P2...)
+  // Group related filings by prefix (I1/P1/P2...) into collapsible trees
+  interface FilingGroup {
+    prefix: string;
+    parent: Application | null;
+    children: Application[];
+  }
+
   const groupedFiltered = useMemo(() => {
-    const groups: Map<string, { parent: Application | null; children: Application[] }> = new Map();
+    const groups: Map<string, FilingGroup> = new Map();
     const standalone: Application[] = [];
 
     filtered.forEach(app => {
@@ -275,7 +282,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
         return;
       }
       if (!groups.has(prefix)) {
-        groups.set(prefix, { parent: null, children: [] });
+        groups.set(prefix, { prefix, parent: null, children: [] });
       }
       const group = groups.get(prefix)!;
       if (suffix.startsWith('I')) {
@@ -285,50 +292,46 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
       }
     });
 
-    // Build final ordered list with filing relationship badges
-    const result: { app: Application; filingLabel: string | null; isSubFiling: boolean }[] = [];
+    // Build final ordered list: each entry is either a standalone app or a group
+    type ListItem =
+      | { type: 'standalone'; app: Application }
+      | { type: 'group'; group: FilingGroup };
 
-    // Add grouped items
-    groups.forEach((group, prefix) => {
-      if (group.parent) {
-        result.push({ app: group.parent, filingLabel: 'Initial Filing', isSubFiling: false });
-      }
-      // Sort children by suffix
-      group.children.sort((a, b) => a.application_number.localeCompare(b.application_number));
-      group.children.forEach(child => {
-        const { suffix } = parseFilingNumber(child.application_number);
-        result.push({ app: child, filingLabel: `Subsequent (${suffix})`, isSubFiling: true });
-      });
-      // If no parent but has children, they're standalone-ish
-      if (!group.parent && group.children.length === 1) {
-        // Single item with suffix but no siblings — treat as standalone
+    const result: ListItem[] = [];
+
+    groups.forEach((group) => {
+      // Only treat as group if there are children
+      if (group.children.length > 0) {
+        group.children.sort((a, b) => a.application_number.localeCompare(b.application_number));
+        result.push({ type: 'group', group });
+      } else if (group.parent) {
+        // Has suffix but no siblings — standalone
+        result.push({ type: 'standalone', app: group.parent });
       }
     });
 
-    // Add standalone items
     standalone.forEach(app => {
-      result.push({ app, filingLabel: null, isSubFiling: false });
+      result.push({ type: 'standalone', app });
     });
 
-    // Sort by filing date descending
+    // Sort by the primary filing date
     result.sort((a, b) => {
-      // Keep grouped items together
-      const prefixA = parseFilingNumber(a.app.application_number).prefix;
-      const prefixB = parseFilingNumber(b.app.application_number).prefix;
-      if (prefixA === prefixB) {
-        // Parent first, then children sorted
-        if (a.filingLabel === 'Initial Filing') return -1;
-        if (b.filingLabel === 'Initial Filing') return 1;
-        return a.app.application_number.localeCompare(b.app.application_number);
-      }
-      // Otherwise sort by date
-      const dateA = a.app.filing_date || '';
-      const dateB = b.app.filing_date || '';
+      const dateA = (a.type === 'group' ? (a.group.parent?.filing_date || a.group.children[0]?.filing_date) : a.app.filing_date) || '';
+      const dateB = (b.type === 'group' ? (b.group.parent?.filing_date || b.group.children[0]?.filing_date) : b.app.filing_date) || '';
       return dateB.localeCompare(dateA);
     });
 
     return result;
   }, [filtered]);
+
+  const toggleGroup = (prefix: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(prefix)) next.delete(prefix);
+      else next.add(prefix);
+      return next;
+    });
+  };
 
   if (isLoading) {
     return (
@@ -580,6 +583,107 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     );
   };
 
+  const renderAppRow = (app: Application, filingLabel: string | null, isSubFiling: boolean, onGroupToggle?: () => void, isGroupOpen?: boolean) => {
+    const isExpanded = expandedRows.has(app.id);
+    const decodedStatus = decodeStatus(app.status, app.source);
+    const isBuild = app.source.startsWith('DOB NOW');
+    const hasGroupToggle = !!onGroupToggle;
+
+    return (
+      <>
+        <TableRow
+          key={app.id}
+          className={`cursor-pointer hover:bg-muted/30 transition-colors ${isSubFiling ? 'bg-muted/10' : ''}`}
+          onClick={() => toggleRow(app.id)}
+        >
+          <TableCell className="w-8 px-2">
+            {hasGroupToggle ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onGroupToggle!(); }}
+                className="p-0.5 hover:bg-muted rounded"
+              >
+                {isGroupOpen ? (
+                  <ChevronDown className="w-4 h-4 text-primary" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-primary" />
+                )}
+              </button>
+            ) : isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
+          </TableCell>
+          <TableCell className="font-mono text-sm">
+            <div className="flex items-center gap-2">
+              {isSubFiling && <span className="text-muted-foreground pl-3">↳</span>}
+              {app.application_number}
+              {filingLabel && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                  {filingLabel}
+                </Badge>
+              )}
+            </div>
+          </TableCell>
+          <TableCell className="text-sm">
+            {app.application_type}
+            {app.work_type && app.work_type !== app.application_type && (
+              <span className="text-muted-foreground ml-1 text-xs">({app.work_type})</span>
+            )}
+          </TableCell>
+          <TableCell>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>
+              {app.agency}
+            </span>
+          </TableCell>
+          <TableCell>
+            <Badge variant="outline" className="text-xs">{app.source}</Badge>
+          </TableCell>
+          <TableCell>
+            <Badge variant={getStatusVariant(app.status, app.source)}>
+              {decodedStatus}
+            </Badge>
+          </TableCell>
+          <TableCell className="text-sm text-muted-foreground">
+            {app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}
+          </TableCell>
+          <TableCell className="text-sm">
+            {app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}
+          </TableCell>
+          <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">
+            {app.applicant_name || '—'}
+          </TableCell>
+        </TableRow>
+
+        {isExpanded && (
+          <TableRow key={`${app.id}-detail`} className="bg-muted/20 hover:bg-muted/20">
+            <TableCell colSpan={9} className="py-4 px-6">
+              {isBuild ? renderBuildDetails(app) : renderBisDetails(app)}
+              <div className="mt-3 pt-3 border-t border-border flex items-start justify-between gap-4">
+                <NotesEditor appId={app.id} initialNotes={app.notes} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const url = isBuild
+                      ? getDOBNowBuildUrl(app.application_number)
+                      : getDOBBisUrl(app.application_number);
+                    window.open(url, '_blank');
+                  }}
+                >
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  {isBuild ? 'View on DOB NOW' : 'View on DOB BIS Web'}
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -690,94 +794,34 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {groupedFiltered.map(({ app, filingLabel, isSubFiling }) => {
-                const isExpanded = expandedRows.has(app.id);
-                const decodedStatus = decodeStatus(app.status, app.source);
-                const isBuild = app.source.startsWith('DOB NOW');
+              {groupedFiltered.map((item) => {
+                if (item.type === 'standalone') {
+                  return renderAppRow(item.app, null, false);
+                }
+                // Group: render parent with toggle, then collapsible children
+                const { group } = item;
+                const isGroupOpen = expandedGroups.has(group.prefix);
+                const allApps = [group.parent, ...group.children].filter(Boolean) as Application[];
 
                 return (
-                  <>
-                    <TableRow
-                      key={app.id}
-                      className={`cursor-pointer hover:bg-muted/30 transition-colors ${isSubFiling ? 'bg-muted/10' : ''}`}
-                      onClick={() => toggleRow(app.id)}
-                    >
-                      <TableCell className="w-8 px-2">
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        <div className="flex items-center gap-2">
-                          {isSubFiling && <span className="text-muted-foreground">↳</span>}
-                          {app.application_number}
-                          {filingLabel && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                              {filingLabel}
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {app.application_type}
-                        {app.work_type && app.work_type !== app.application_type && (
-                          <span className="text-muted-foreground ml-1 text-xs">({app.work_type})</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>
-                          {app.agency}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">{app.source}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusVariant(app.status, app.source)}>
-                          {decodedStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">
-                        {app.applicant_name || '—'}
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Expanded detail row */}
-                    {isExpanded && (
-                      <TableRow key={`${app.id}-detail`} className="bg-muted/20 hover:bg-muted/20">
-                        <TableCell colSpan={9} className="py-4 px-6">
-                          {isBuild ? renderBuildDetails(app) : renderBisDetails(app)}
-
-                          {/* Notes + External link */}
-                          <div className="mt-3 pt-3 border-t border-border flex items-start justify-between gap-4">
-                            <NotesEditor appId={app.id} initialNotes={app.notes} />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const url = isBuild
-                                  ? getDOBNowBuildUrl(app.application_number)
-                                  : getDOBBisUrl(app.application_number);
-                                window.open(url, '_blank');
-                              }}
-                            >
-                              <ExternalLink className="w-3 h-3 mr-1" />
-                              {isBuild ? 'View on DOB NOW' : 'View on DOB BIS Web'}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                  <> 
+                    {/* Parent row (I1) or first child if no parent */}
+                    {group.parent ? (
+                      <>
+                        {renderAppRow(group.parent, `Initial (${group.children.length} related)`, false, () => toggleGroup(group.prefix), isGroupOpen)}
+                      </>
+                    ) : (
+                      <>
+                        {renderAppRow(group.children[0], `Group ${group.prefix} (${group.children.length})`, false, () => toggleGroup(group.prefix), isGroupOpen)}
+                      </>
                     )}
+                    {/* Collapsible children */}
+                    {isGroupOpen && group.children.map((child) => {
+                      // Skip first child if no parent (already rendered above)
+                      if (!group.parent && child === group.children[0]) return null;
+                      const { suffix } = parseFilingNumber(child.application_number);
+                      return renderAppRow(child, `Subsequent (${suffix})`, true);
+                    })}
                   </>
                 );
               })}
