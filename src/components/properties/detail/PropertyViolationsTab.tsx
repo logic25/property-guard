@@ -67,6 +67,7 @@ import {
   getStatusColor,
   isActiveViolation
 } from '@/lib/violation-utils';
+import { calculateViolationSeverity, getSeverityBadgeClasses } from '@/lib/violation-severity';
 import { CreateWorkOrderDialog } from '@/components/violations/CreateWorkOrderDialog';
 
 interface Violation {
@@ -506,6 +507,14 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
+                          {(() => {
+                            const sev = calculateViolationSeverity(violation);
+                            return (
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${getSeverityBadgeClasses(sev.level)}`}>
+                                {sev.icon} {sev.level}
+                              </Badge>
+                            );
+                          })()}
                           {(violation.is_stop_work_order || violation.is_vacate_order) && (
                             <span className="text-destructive">
                               {violation.is_stop_work_order && <AlertOctagon className="w-4 h-4" />}
@@ -598,101 +607,129 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                     </TableRow>
                     <CollapsibleContent asChild>
                       <TableRow className="bg-muted/20 hover:bg-muted/30">
-                        <TableCell colSpan={8} className="py-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-8">
-                            {/* Left Column: Details */}
-                            <div className="space-y-4">
-                              <h4 className="font-semibold text-sm flex items-center gap-2">
-                                <FileText className="w-4 h-4" />
-                                Violation Details
-                              </h4>
-                              
-                              <div className="space-y-2 text-sm">
-                                <div className="flex gap-2">
-                                  <span className="text-muted-foreground w-24">Full Description:</span>
-                                  <span className="flex-1">{violation.description_raw || 'No description available'}</span>
+                        <TableCell colSpan={9} className="py-4">
+                          {(() => {
+                            const sev = calculateViolationSeverity(violation);
+                            return (
+                              <div className="space-y-4 pl-8">
+                                {/* Severity Banner */}
+                                <div className={`rounded-lg border p-4 ${sev.bgColor} ${sev.borderColor}`}>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-lg">{sev.icon}</span>
+                                    <span className={`font-bold text-sm uppercase tracking-wide ${sev.color}`}>{sev.level} Severity</span>
+                                  </div>
+                                  <p className="text-sm text-foreground/80 mb-3">{sev.explanation}</p>
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-xs font-semibold text-muted-foreground shrink-0 mt-0.5">🎯 Recommended:</span>
+                                    <p className="text-xs text-foreground/70">{sev.recommended_action}</p>
+                                  </div>
                                 </div>
-                                
-                                {violation.violation_class && (
-                                  <div className="flex gap-2">
-                                    <span className="text-muted-foreground w-24">Class/Code:</span>
-                                    <span>{violation.violation_class}</span>
-                                  </div>
-                                )}
 
-                                {violation.oath_status && (
-                                  <div className="flex gap-2">
-                                    <span className="text-muted-foreground w-24">OATH Status:</span>
-                                    <Badge variant="outline">{violation.oath_status}</Badge>
-                                  </div>
-                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  {/* Left Column: Details */}
+                                  <div className="space-y-4">
+                                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                                      <FileText className="w-4 h-4" />
+                                      Violation Details
+                                    </h4>
+                                    
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex gap-2">
+                                        <span className="text-muted-foreground w-24">Full Description:</span>
+                                        <span className="flex-1">{violation.description_raw || 'No description available'}</span>
+                                      </div>
+                                      
+                                      {violation.violation_class && (
+                                        <div className="flex gap-2">
+                                          <span className="text-muted-foreground w-24">Class/Code:</span>
+                                          <span>{violation.violation_class}</span>
+                                        </div>
+                                      )}
 
-                                {violation.penalty_amount && violation.penalty_amount > 0 && (
-                                  <div className="flex gap-2 items-center">
-                                    <span className="text-muted-foreground w-24">Penalty:</span>
-                                    <span className="flex items-center text-destructive font-medium">
-                                      <DollarSign className="w-3 h-3" />
-                                      {violation.penalty_amount.toLocaleString()}
-                                    </span>
-                                  </div>
-                                )}
+                                      {violation.oath_status && (
+                                        <div className="flex gap-2">
+                                          <span className="text-muted-foreground w-24">OATH Status:</span>
+                                          <Badge variant="outline">{violation.oath_status}</Badge>
+                                        </div>
+                                      )}
 
-                                {violation.respondent_name && (
-                                  <div className="flex gap-2 items-center">
-                                    <span className="text-muted-foreground w-24">Respondent:</span>
-                                    <span className="flex items-center gap-1">
-                                      <User className="w-3 h-3" />
-                                      {violation.respondent_name}
-                                    </span>
-                                  </div>
-                                )}
+                                      {violation.penalty_amount && violation.penalty_amount > 0 && (
+                                        <div className="flex gap-2 items-center">
+                                          <span className="text-muted-foreground w-24">Penalty:</span>
+                                          <span className="flex items-center text-destructive font-medium">
+                                            <DollarSign className="w-3 h-3" />
+                                            {violation.penalty_amount.toLocaleString()}
+                                          </span>
+                                        </div>
+                                      )}
 
-                                {violation.hearing_date && (
-                                  <div className="flex gap-2 items-center">
-                                    <span className="text-muted-foreground w-24">Hearing Date:</span>
-                                    <span>{new Date(violation.hearing_date).toLocaleDateString()}</span>
-                                  </div>
-                                )}
+                                      {violation.respondent_name && (
+                                        <div className="flex gap-2 items-center">
+                                          <span className="text-muted-foreground w-24">Respondent:</span>
+                                          <span className="flex items-center gap-1">
+                                            <User className="w-3 h-3" />
+                                            {violation.respondent_name}
+                                          </span>
+                                        </div>
+                                      )}
 
-                                <div className="pt-2">
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    onClick={() => window.open(getAgencyLookupUrl(violation.agency, violation.violation_number, bbl), '_blank')}
-                                  >
-                                    <ExternalLink className="w-3 h-3 mr-2" />
-                                    Verify Status on {violation.agency} Portal
-                                  </Button>
+                                      {violation.hearing_date && (
+                                        <div className="flex gap-2 items-center">
+                                          <span className="text-muted-foreground w-24">Hearing Date:</span>
+                                          <span>{new Date(violation.hearing_date).toLocaleDateString()}</span>
+                                        </div>
+                                      )}
+
+                                      <div className="pt-2 flex gap-2">
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          onClick={() => window.open(getAgencyLookupUrl(violation.agency, violation.violation_number, bbl), '_blank')}
+                                        >
+                                          <ExternalLink className="w-3 h-3 mr-2" />
+                                          View on {violation.agency} Portal
+                                        </Button>
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          onClick={() => openWorkOrderDialog(violation)}
+                                        >
+                                          <Wrench className="w-3 h-3 mr-2" />
+                                          Create Work Order
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Right Column: Notes */}
+                                  <div className="space-y-3">
+                                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                                      <MessageSquare className="w-4 h-4" />
+                                      Notes
+                                    </h4>
+                                    <Textarea
+                                      placeholder="Add notes about this violation (e.g., resolution steps, payment info, contractor contact)..."
+                                      value={editingNotes[violation.id] ?? violation.notes ?? ''}
+                                      onChange={(e) => setEditingNotes(prev => ({ ...prev, [violation.id]: e.target.value }))}
+                                      className="min-h-[100px]"
+                                    />
+                                    <Button 
+                                      size="sm" 
+                                      onClick={() => saveNotes(violation.id)}
+                                      disabled={savingNotes.has(violation.id) || (editingNotes[violation.id] ?? violation.notes ?? '') === (violation.notes ?? '')}
+                                    >
+                                      {savingNotes.has(violation.id) ? (
+                                        <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                                      ) : (
+                                        <Save className="w-3 h-3 mr-2" />
+                                      )}
+                                      Save Notes
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-
-                            {/* Right Column: Notes */}
-                            <div className="space-y-3">
-                              <h4 className="font-semibold text-sm flex items-center gap-2">
-                                <MessageSquare className="w-4 h-4" />
-                                Notes
-                              </h4>
-                              <Textarea
-                                placeholder="Add notes about this violation (e.g., resolution steps, payment info, contractor contact)..."
-                                value={editingNotes[violation.id] ?? violation.notes ?? ''}
-                                onChange={(e) => setEditingNotes(prev => ({ ...prev, [violation.id]: e.target.value }))}
-                                className="min-h-[100px]"
-                              />
-                              <Button 
-                                size="sm" 
-                                onClick={() => saveNotes(violation.id)}
-                                disabled={savingNotes.has(violation.id) || (editingNotes[violation.id] ?? violation.notes ?? '') === (violation.notes ?? '')}
-                              >
-                                {savingNotes.has(violation.id) ? (
-                                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                                ) : (
-                                  <Save className="w-3 h-3 mr-2" />
-                                )}
-                                Save Notes
-                              </Button>
-                            </div>
-                          </div>
+                            );
+                          })()}
                         </TableCell>
                       </TableRow>
                     </CollapsibleContent>

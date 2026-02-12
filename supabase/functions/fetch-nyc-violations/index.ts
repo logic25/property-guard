@@ -14,6 +14,8 @@ const NYC_OPEN_DATA_ENDPOINTS = {
   HPD: "https://data.cityofnewyork.us/resource/wvxf-dwi5.json",
   // OATH Hearings Division - main dataset for ALL agency violations
   OATH_HEARINGS: "https://data.cityofnewyork.us/resource/jz4z-kudi.json",
+  // DOB Complaints
+  DOB_COMPLAINTS: "https://data.cityofnewyork.us/resource/eabe-havv.json",
   // Additional agency datasets
   DEP: "https://data.cityofnewyork.us/resource/xbs2-bdct.json", // DEP Notices of Violation
   DOT: "https://data.cityofnewyork.us/resource/w286-9scw.json", // DOT Violations
@@ -482,6 +484,59 @@ Deno.serve(async (req) => {
             synced_at: now,
             source: "hpd",
             oath_status: hpdStatus || null,
+            status: isResolved ? 'closed' : 'open',
+          });
+        }
+      }
+    }
+
+    // Fetch DOB Complaints
+    if (agenciesToSync.includes("DOB") && bin) {
+      const complaintsData = await safeFetch(
+        `${NYC_OPEN_DATA_ENDPOINTS.DOB_COMPLAINTS}?bin=${bin}&$limit=100&$order=date_entered DESC`,
+        "DOB_COMPLAINTS"
+      );
+
+      console.log(`Found ${complaintsData.length} DOB complaints`);
+
+      for (const v of complaintsData as Record<string, unknown>[]) {
+        const complaintNum = v.complaint_number as string;
+        const dateEntered = v.date_entered as string;
+
+        if (complaintNum && dateEntered) {
+          const dispositionCode = (v.disposition_code || "") as string;
+          const dispositionDate = v.disposition_date as string || null;
+          const isResolved = dispositionCode === "I2" || dispositionCode === "C1" ||
+                            dispositionCode === "A1" || dispositionDate !== null;
+
+          const category = (v.complaint_category || "") as string;
+          const status_desc = (v.status || "") as string;
+          const descRaw = [
+            category,
+            v.unit ? `Unit: ${v.unit}` : null,
+            v.special_condition ? `Special: ${v.special_condition}` : null,
+            v.comments ? `${v.comments}` : null,
+          ].filter(Boolean).join(" — ");
+
+          violations.push({
+            agency: "DOB",
+            violation_number: `COMP-${complaintNum}`,
+            issued_date: dateEntered.split("T")[0],
+            hearing_date: null,
+            cure_due_date: null,
+            description_raw: descRaw || `DOB Complaint #${complaintNum}`,
+            property_id,
+            severity: (v.priority as string) === "A" ? "critical" :
+                      (v.priority as string) === "B" ? "medium" : "low",
+            violation_class: category,
+            violation_type: extractViolationType(descRaw, category, "DOB"),
+            is_stop_work_order: false,
+            is_vacate_order: false,
+            penalty_amount: null,
+            respondent_name: null,
+            synced_at: now,
+            source: "dob_complaints",
+            oath_status: status_desc || null,
             status: isResolved ? 'closed' : 'open',
           });
         }

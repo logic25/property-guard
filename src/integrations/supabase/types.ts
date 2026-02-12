@@ -356,6 +356,7 @@ export type Database = {
           is_landmark: boolean | null
           jurisdiction: Database["public"]["Enums"]["jurisdiction_type"]
           landmark_status: string | null
+          last_checked_at: string | null
           last_synced_at: string | null
           latitude: number | null
           legal_adult_use: boolean | null
@@ -364,6 +365,7 @@ export type Database = {
           longitude: number | null
           lot_area_sqft: number | null
           max_floor_area_ratio: number | null
+          monitoring_enabled: boolean | null
           nta_name: string | null
           number_of_buildings: number | null
           number_of_floors: number | null
@@ -444,6 +446,7 @@ export type Database = {
           is_landmark?: boolean | null
           jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
           landmark_status?: string | null
+          last_checked_at?: string | null
           last_synced_at?: string | null
           latitude?: number | null
           legal_adult_use?: boolean | null
@@ -452,6 +455,7 @@ export type Database = {
           longitude?: number | null
           lot_area_sqft?: number | null
           max_floor_area_ratio?: number | null
+          monitoring_enabled?: boolean | null
           nta_name?: string | null
           number_of_buildings?: number | null
           number_of_floors?: number | null
@@ -532,6 +536,7 @@ export type Database = {
           is_landmark?: boolean | null
           jurisdiction?: Database["public"]["Enums"]["jurisdiction_type"]
           landmark_status?: string | null
+          last_checked_at?: string | null
           last_synced_at?: string | null
           latitude?: number | null
           legal_adult_use?: boolean | null
@@ -540,6 +545,7 @@ export type Database = {
           longitude?: number | null
           lot_area_sqft?: number | null
           max_floor_area_ratio?: number | null
+          monitoring_enabled?: boolean | null
           nta_name?: string | null
           number_of_buildings?: number | null
           number_of_floors?: number | null
@@ -840,11 +846,17 @@ export type Database = {
       violations: {
         Row: {
           agency: Database["public"]["Enums"]["agency_type"]
+          amount_paid: number | null
+          balance_due: number | null
           certification_due_date: string | null
+          complaint_category: string | null
+          complaint_number: string | null
           created_at: string
           cure_due_date: string | null
           daily_penalty_amount: number | null
           description_raw: string | null
+          disposition_code: string | null
+          disposition_comments: string | null
           hearing_date: string | null
           id: string
           is_stop_work_order: boolean | null
@@ -855,6 +867,7 @@ export type Database = {
           penalty_amount: number | null
           penalty_paid: boolean | null
           penalty_text: string | null
+          priority: string | null
           property_id: string
           respondent_address: string | null
           respondent_name: string | null
@@ -863,17 +876,24 @@ export type Database = {
           status: Database["public"]["Enums"]["violation_status"]
           synced_at: string | null
           updated_at: string
+          violation_category: string | null
           violation_class: string | null
           violation_number: string
           violation_type: string | null
         }
         Insert: {
           agency: Database["public"]["Enums"]["agency_type"]
+          amount_paid?: number | null
+          balance_due?: number | null
           certification_due_date?: string | null
+          complaint_category?: string | null
+          complaint_number?: string | null
           created_at?: string
           cure_due_date?: string | null
           daily_penalty_amount?: number | null
           description_raw?: string | null
+          disposition_code?: string | null
+          disposition_comments?: string | null
           hearing_date?: string | null
           id?: string
           is_stop_work_order?: boolean | null
@@ -884,6 +904,7 @@ export type Database = {
           penalty_amount?: number | null
           penalty_paid?: boolean | null
           penalty_text?: string | null
+          priority?: string | null
           property_id: string
           respondent_address?: string | null
           respondent_name?: string | null
@@ -892,17 +913,24 @@ export type Database = {
           status?: Database["public"]["Enums"]["violation_status"]
           synced_at?: string | null
           updated_at?: string
+          violation_category?: string | null
           violation_class?: string | null
           violation_number: string
           violation_type?: string | null
         }
         Update: {
           agency?: Database["public"]["Enums"]["agency_type"]
+          amount_paid?: number | null
+          balance_due?: number | null
           certification_due_date?: string | null
+          complaint_category?: string | null
+          complaint_number?: string | null
           created_at?: string
           cure_due_date?: string | null
           daily_penalty_amount?: number | null
           description_raw?: string | null
+          disposition_code?: string | null
+          disposition_comments?: string | null
           hearing_date?: string | null
           id?: string
           is_stop_work_order?: boolean | null
@@ -913,6 +941,7 @@ export type Database = {
           penalty_amount?: number | null
           penalty_paid?: boolean | null
           penalty_text?: string | null
+          priority?: string | null
           property_id?: string
           respondent_address?: string | null
           respondent_name?: string | null
@@ -921,6 +950,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["violation_status"]
           synced_at?: string | null
           updated_at?: string
+          violation_category?: string | null
           violation_class?: string | null
           violation_number?: string
           violation_type?: string | null
