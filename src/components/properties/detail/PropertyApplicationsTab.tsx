@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FileStack, Search, ExternalLink, ChevronRight, ChevronDown, Calendar, User, DollarSign, Building2, FileText } from 'lucide-react';
+import { FileStack, Search, ExternalLink, ChevronRight, ChevronDown, Calendar, User, DollarSign, Building2, FileText, ShieldCheck, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 
@@ -33,13 +33,14 @@ interface Application {
   stories: number | null;
   dwelling_units: number | null;
   floor_area: number | null;
+  raw_data: Record<string, unknown> | null;
 }
 
 // DOB BIS job status codes decoded
 const BIS_STATUS_CODES: Record<string, string> = {
   'A': 'Pre-Filing',
   'B': 'Plan Examination',
-  'C': 'Plan Examination Approval Pending',
+  'C': 'Plan Exam Approval Pending',
   'D': 'Plan Approved',
   'E': 'Partial Permit Issued',
   'F': 'Permit Issued - Entire',
@@ -59,17 +60,15 @@ const BIS_STATUS_CODES: Record<string, string> = {
 
 const decodeStatus = (status: string | null, source: string): string => {
   if (!status) return 'Unknown';
-  // DOB BIS uses single-letter codes
   if (source === 'DOB BIS' && status.length <= 2) {
     return BIS_STATUS_CODES[status.toUpperCase()] || status;
   }
-  // DOB NOW Build already has readable statuses
   return status;
 };
 
 const getStatusVariant = (status: string | null, source: string) => {
   const decoded = decodeStatus(status, source).toLowerCase();
-  if (['signed off', 'completed', 'co issued', 'letter of completion', 'permit issued - entire', 'permit entire', 'issued'].some(s => decoded.includes(s))) {
+  if (['signed off', 'completed', 'co issued', 'letter of completion', 'permit issued', 'permit entire', 'issued'].some(s => decoded.includes(s))) {
     return 'default' as const;
   }
   if (['pre-filing', 'plan exam', 'partial permit', 'pending', 'filed', 'in review', 'plan approved'].some(s => decoded.includes(s))) {
@@ -91,6 +90,12 @@ const getAgencyColor = (agency: string) => {
   };
   return colors[agency] || 'bg-muted text-muted-foreground';
 };
+
+const getDOBNowBuildUrl = (appNumber: string) =>
+  `https://a810-dobnow.nyc.gov/Publish/#!/job/${appNumber}`;
+
+const getDOBBisUrl = (appNumber: string) =>
+  `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${appNumber}`;
 
 export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabProps) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -147,6 +152,173 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     );
   }
 
+  const renderBuildDetails = (app: Application) => {
+    const raw = app.raw_data || {};
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        {/* Dates & Permit Info */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5" />
+            Dates & Permit
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}</span></p>
+            <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MMM d, yyyy') : '—'}</span></p>
+            {raw.first_permit_date && (
+              <p>First Permit: <span className="text-foreground">{format(new Date(raw.first_permit_date as string), 'MMM d, yyyy')}</span></p>
+            )}
+            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MMM d, yyyy') : '—'}</span></p>
+          </div>
+        </div>
+
+        {/* Applicant */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5" />
+            Applicant
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Name: <span className="text-foreground">{app.applicant_name || '—'}</span></p>
+            {raw.applicant_title && (
+              <p>Title: <span className="text-foreground">{raw.applicant_title as string}</span></p>
+            )}
+            {raw.applicant_license && (
+              <p>License #: <span className="text-foreground">{raw.applicant_license as string}</span></p>
+            )}
+          </div>
+        </div>
+
+        {/* Filing Rep / Owner */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5" />
+            Owner / Filing Rep
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Owner: <span className="text-foreground">{app.owner_name || '—'}</span></p>
+            {raw.filing_rep_name && (
+              <p>Filing Rep: <span className="text-foreground">{raw.filing_rep_name as string}</span></p>
+            )}
+            {raw.filing_rep_company && (
+              <p>Company: <span className="text-foreground">{raw.filing_rep_company as string}</span></p>
+            )}
+          </div>
+        </div>
+
+        {/* Cost & Work */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <DollarSign className="w-3.5 h-3.5" />
+            Cost & Scope
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Est. Cost: <span className="text-foreground">{app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}</span></p>
+            {app.floor_area != null && app.floor_area > 0 && (
+              <p>Floor Area: <span className="text-foreground">{app.floor_area.toLocaleString()} sqft</span></p>
+            )}
+            {raw.work_on_floor && (
+              <p>Work Location: <span className="text-foreground">{raw.work_on_floor as string}</span></p>
+            )}
+          </div>
+        </div>
+
+        {/* Technical */}
+        {(raw.special_inspection || raw.review_building_code || raw.plumbing_work || raw.sprinkler_work) && (
+          <div className="space-y-2">
+            <h4 className="font-medium text-foreground flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Technical
+            </h4>
+            <div className="space-y-1 text-muted-foreground">
+              {raw.review_building_code && (
+                <p>Building Code: <span className="text-foreground">{raw.review_building_code as string}</span></p>
+              )}
+              {raw.special_inspection && (
+                <p>Special Inspection: <span className="text-foreground">{raw.special_inspection as string}</span></p>
+              )}
+              {raw.plumbing_work && <p className="text-foreground">✓ Plumbing Work</p>}
+              {raw.sprinkler_work && <p className="text-foreground">✓ Sprinkler Work</p>}
+            </div>
+          </div>
+        )}
+
+        {/* Description */}
+        {app.description && (
+          <div className="col-span-2 md:col-span-3 space-y-2">
+            <h4 className="font-medium text-foreground flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" />
+              Description / Scope of Work
+            </h4>
+            <p className="text-muted-foreground">{app.description}</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderBisDetails = (app: Application) => {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        {/* Dates */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5" />
+            Dates
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}</span></p>
+            <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MMM d, yyyy') : '—'}</span></p>
+            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MMM d, yyyy') : '—'}</span></p>
+          </div>
+        </div>
+
+        {/* People */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5" />
+            People
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Applicant: <span className="text-foreground">{app.applicant_name || '—'}</span></p>
+            <p>Owner: <span className="text-foreground">{app.owner_name || '—'}</span></p>
+          </div>
+        </div>
+
+        {/* Cost */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <DollarSign className="w-3.5 h-3.5" />
+            Cost
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Est. Cost: <span className="text-foreground">{app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}</span></p>
+          </div>
+        </div>
+
+        {/* Description */}
+        {app.description && (
+          <div className="col-span-2 md:col-span-3 space-y-2">
+            <h4 className="font-medium text-foreground flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" />
+              Description
+            </h4>
+            <p className="text-muted-foreground">{app.description}</p>
+          </div>
+        )}
+
+        {/* Status decode */}
+        {app.status && app.status.length <= 2 && (
+          <div className="col-span-2 md:col-span-3 bg-muted/50 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Status Code "{app.status}"</span> → {decodeStatus(app.status, app.source)}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -201,6 +373,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                 <TableHead className="font-semibold">Source</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="font-semibold">Filed</TableHead>
+                <TableHead className="font-semibold">Est. Cost</TableHead>
                 <TableHead className="font-semibold">Applicant</TableHead>
               </TableRow>
             </TableHeader>
@@ -208,6 +381,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               {filtered.map((app) => {
                 const isExpanded = expandedRows.has(app.id);
                 const decodedStatus = decodeStatus(app.status, app.source);
+                const isBuild = app.source === 'DOB NOW Build';
 
                 return (
                   <>
@@ -246,6 +420,9 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                       <TableCell className="text-sm text-muted-foreground">
                         {app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}
                       </TableCell>
+                      <TableCell className="text-sm">
+                        {app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground truncate max-w-[150px]">
                         {app.applicant_name || '—'}
                       </TableCell>
@@ -254,67 +431,8 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                     {/* Expanded detail row */}
                     {isExpanded && (
                       <TableRow key={`${app.id}-detail`} className="bg-muted/20 hover:bg-muted/20">
-                        <TableCell colSpan={8} className="py-4 px-6">
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                            {/* Dates */}
-                            <div className="space-y-2">
-                              <h4 className="font-medium text-foreground flex items-center gap-1.5">
-                                <Calendar className="w-3.5 h-3.5" />
-                                Dates
-                              </h4>
-                              <div className="space-y-1 text-muted-foreground">
-                                <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}</span></p>
-                                <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MMM d, yyyy') : '—'}</span></p>
-                                <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MMM d, yyyy') : '—'}</span></p>
-                              </div>
-                            </div>
-
-                            {/* People */}
-                            <div className="space-y-2">
-                              <h4 className="font-medium text-foreground flex items-center gap-1.5">
-                                <User className="w-3.5 h-3.5" />
-                                People
-                              </h4>
-                              <div className="space-y-1 text-muted-foreground">
-                                <p>Applicant: <span className="text-foreground">{app.applicant_name || '—'}</span></p>
-                                <p>Owner: <span className="text-foreground">{app.owner_name || '—'}</span></p>
-                              </div>
-                            </div>
-
-                            {/* Building Details */}
-                            <div className="space-y-2">
-                              <h4 className="font-medium text-foreground flex items-center gap-1.5">
-                                <Building2 className="w-3.5 h-3.5" />
-                                Building Details
-                              </h4>
-                              <div className="space-y-1 text-muted-foreground">
-                                <p>Est. Cost: <span className="text-foreground">{app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}</span></p>
-                                <p>Stories: <span className="text-foreground">{app.stories ?? '—'}</span></p>
-                                <p>Units: <span className="text-foreground">{app.dwelling_units ?? '—'}</span></p>
-                                <p>Floor Area: <span className="text-foreground">{app.floor_area ? `${app.floor_area.toLocaleString()} sqft` : '—'}</span></p>
-                              </div>
-                            </div>
-
-                            {/* Description */}
-                            {app.description && (
-                              <div className="col-span-2 md:col-span-3 space-y-2">
-                                <h4 className="font-medium text-foreground flex items-center gap-1.5">
-                                  <FileText className="w-3.5 h-3.5" />
-                                  Description
-                                </h4>
-                                <p className="text-muted-foreground">{app.description}</p>
-                              </div>
-                            )}
-
-                            {/* Status decode explanation for BIS */}
-                            {app.source === 'DOB BIS' && app.status && app.status.length <= 2 && (
-                              <div className="col-span-2 md:col-span-3 bg-muted/50 rounded-lg p-3">
-                                <p className="text-xs text-muted-foreground">
-                                  <span className="font-medium text-foreground">Status Code "{app.status}"</span> → {decodeStatus(app.status, app.source)}
-                                </p>
-                              </div>
-                            )}
-                          </div>
+                        <TableCell colSpan={9} className="py-4 px-6">
+                          {isBuild ? renderBuildDetails(app) : renderBisDetails(app)}
 
                           {/* External link */}
                           <div className="mt-3 pt-3 border-t border-border">
@@ -324,14 +442,14 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                               className="text-xs"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const url = app.source === 'DOB NOW Build'
-                                  ? `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${app.application_number}`
-                                  : `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${app.application_number}`;
+                                const url = isBuild
+                                  ? getDOBNowBuildUrl(app.application_number)
+                                  : getDOBBisUrl(app.application_number);
                                 window.open(url, '_blank');
                               }}
                             >
                               <ExternalLink className="w-3 h-3 mr-1" />
-                              View on DOB BIS Web
+                              {isBuild ? 'View on DOB NOW' : 'View on DOB BIS Web'}
                             </Button>
                           </div>
                         </TableCell>
