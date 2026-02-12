@@ -1,223 +1,197 @@
-# Phase 3-5 Implementation Plan: Intelligence, Notifications, and Analytics
+# Property Guard v2.0 — Gap Analysis and Implementation Plan
 
-## Parked Items (for later)
+## Current State Summary
 
-- **Properties page styling**: Tone down the aggressive header/table styling to something more balanced
-- **CO PDF download**: BIS blocks server-side requests with 403; investigate Firecrawl or browser-based scraping alternatives
+The project already has a solid foundation. Here is what exists versus what the spec calls for:
 
----
+### Already Built (Phases 1-3 partial)
 
-## Phase 3: Smarter Violation Intelligence
 
-### 3A. Age-Based Suppression - yes but add to roadmap to revisit later as we may have to modify
+| Feature                                                                                               | Status |
+| ----------------------------------------------------------------------------------------------------- | ------ |
+| Properties table with NYC Open Data fields (BIN, BBL, zoning, building characteristics)               | Done   |
+| Violations table (DOB, ECB, HPD, FDNY, DEP, DOT, DSNY, LPC, DOF)                                      | Done   |
+| Applications table (DOB NOW, BIS, LAA)                                                                | Done   |
+| DOB Complaints tracking                                                                               | Done   |
+| Change log for modification tracking                                                                  | Done   |
+| User authentication and RLS                                                                           | Done   |
+| NYC Open Data integration (9 agencies via Socrata)                                                    | Done   |
+| Scheduled sync (nightly full + 3x daily DOB quick)                                                    | Done   |
+| SMS alerts via Twilio                                                                                 | Done   |
+| Property detail page with tabs (Overview, Violations, Applications, Documents, Work Orders, Activity) | Done   |
+| Violations with severity indicators, OATH status, agency color-coding                                 | Done   |
+| Applications with status tracking                                                                     | Done   |
+| Collapsible/expandable row design                                                                     | Done   |
+| Search and filter functionality                                                                       | Done   |
+| Age-based suppression (Phase 3A)                                                                      | Done   |
+| OATH disposition reconciliation (Phase 3B)                                                            | Done   |
+| Complaint category decoding (Phase 3D)                                                                | Done   |
+| SWO/Vacate order detection from BIS jobs                                                              | Done   |
+| FDNY compliance monitoring (refrigeration, sprinklers, standpipes, fire alarms)                       | Done   |
+| Due Diligence reports (AI-generated)                                                                  | Done   |
+| Lease Q&A with document intelligence                                                                  | Done   |
+| Property AI chat                                                                                      | Done   |
+| Email digest system                                                                                   | Done   |
+| Work orders                                                                                           | Done   |
+| Vendor management                                                                                     | Done   |
+| Calendar page (hearings, deadlines, expirations)                                                      | Done   |
+| Portfolios                                                                                            | Done   |
+| Dashboard overview with stats, agency breakdown, recent violations                                    | Done   |
 
-**Database migration:**
 
-- Add `suppressed` (boolean, default false) and `suppression_reason` (text) columns to `violations` table
+### Not Yet Built
 
-**New file:** `src/lib/violation-aging.ts`
 
-- Aging rules: ECB > 2 years, DOB > 3 years, HPD > 3 years
-- `shouldSuppressViolation()` function checking issue date against rules
-- Only applies to violations with status "open"
+| Feature                                                              | Phase | Complexity                                              |
+| -------------------------------------------------------------------- | ----- | ------------------------------------------------------- |
+| Local Law Applicability Engine (LL11, LL84, LL97, LL87, LL152, etc.) | 2     | High                                                    |
+| Tax and Protest Tracking                                             | 2     | Medium                                                  |
+| Tenant Management (tags on applications)                             | 2     | Low                                                     |
+| Violation-Specific Guidance templates (Phase 3C)                     | 3     | Medium (roadmapped)                                     |
+| In-App Notification Center                                           | 4     | Medium - roadmap                                        |
+| Priority Routing (critical/high/normal/low)                          | 4     | Medium                                                  |
+| Per-Property Alert Settings                                          | 4     | Low                                                     |
+| Telegram Bot Integration                                             | 4/6   | High - now and this inteact wiht the ai of the app now? |
+| Violation Trend Charts                                               | 5     | Low - roadmap                                           |
+| Compliance Score System (0-100)                                      | 5     | Medium                                                  |
+| Hearing Calendar Enhancement (detail panel, reminders)               | 5     | Medium - roadmap                                        |
+| Google Calendar Integration                                          | 7     | Medium - roadmap                                        |
+| Enhanced Document Intelligence (vector embeddings, RAG)              | 7     | High - roadmap i already built a rag                    |
+| White Label / Multi-tenant                                           | 7     | High                                                    |
 
-**Edge function update:** `scheduled-sync/index.ts`
-
-- After sync completes, run suppression check on all open violations for the property
-
-**UI updates:**
-
-- `PropertyViolationsTab.tsx`: Add "Show suppressed" toggle alongside the Active/All toggle
-- Suppressed violations shown with muted styling + "Suppressed" badge with tooltip explaining why
-- `ViolationsPage.tsx`: Same toggle treatment
-- Update `isActiveViolation()` in `violation-utils.ts` to exclude suppressed violations
-
-### 3B. OATH Disposition Reconciliation
-
-**Database migration:**
-
-- Create `oath_hearings` table: id, summons_number (unique), hearing_date, hearing_status, disposition, disposition_date, penalty_amount, penalty_paid, violation_id (FK), property_id (FK), last_synced_at, created_at, updated_at
-- RLS: SELECT/INSERT/UPDATE through properties.user_id join; service role INSERT/UPDATE for sync
-- Indexes on summons_number, violation_id, property_id
-
-**Edge function update:** `fetch-nyc-violations/index.ts`
-
-- The OATH dataset is already queried for FDNY/DEP/DOT/DSNY/LPC/DOF violations
-- Add a post-sync step: for each ECB violation, query OATH API by violation_number
-- Upsert into `oath_hearings`
-- If disposition is "Dismissed" or "Not Guilty", auto-update violation status to "closed" and log to `change_log`
-
-**UI updates:**
-
-- `PropertyViolationsTab.tsx` expanded row: Show OATH hearing card when available (hearing date, status, disposition, penalty)
-- Color-coded disposition badges (green for dismissed, red for guilty, yellow for default)
-
-### 3C. Violation-Specific Guidance (What This Means) - i think our email has this we kist need to refine and can be roadmapped
-
-**New file:** `src/lib/violation-guidance.ts`
-
-- Template map keyed by violation pattern (structural, work without permit, illegal conversion, elevator, boiler, facade, complaint)
-- Each template: severity, whatItMeans, immediateActions[], timeline, typicalCost, whoToCall, preventionTips[]
-- `getViolationGuidance()` function matching violation description/category to templates
-
-**UI updates:**
-
-- `PropertyViolationsTab.tsx` expanded row: Add "What To Do" section below existing "What This Means" decode
-- Card layout with immediate actions checklist, timeline, cost estimate, who to call
-- Only shows when guidance match is found
-
-**Email integration:**
-
-- Update `send-email-digest` edge function to include guidance content for new violations in digest emails
-
-### 3D. Complaint Category Decoding - yes look at the glossary to decode the complaints
-
-**New file:** `src/lib/complaint-category-decoder.ts`
-
-- Map of DOB complaint codes to human-readable names: 4B = Illegal Conversion, 77 = Work Without Permit, 3A = Unsafe Structure, etc.
-- `decodeComplaintCategory()` function
-
-**UI updates:**
-
-- `PropertyViolationsTab.tsx`: Where `complaint_category` is displayed, show decoded name + description
-- `ViolationsPage.tsx`: Same treatment in expanded rows
 
 ---
 
-## Phase 4: Notifications and Alerts
+## Recommended Implementation Order
 
-### 4A. In-App Notification Center
+Given what is already built, here is the sequenced build plan, grouped into sprints:
 
-**Database migration:**
+### Sprint 1: Local Law Applicability Engine (Phase 2 gap — highest business value)
 
-- Create `notifications` table: id, user_id (uuid, not FK to auth), title, body, notification_type, priority (critical/high/normal/low), property_id, related_entity_type, related_entity_id, action_url, read (default false), read_at, dismissed (default false), dismissed_at, sent_via_email, created_at, expires_at
-- RLS: Users can SELECT/UPDATE their own notifications (user_id = auth.uid()); service role can INSERT
-- Indexes on user_id, read (partial where false), created_at DESC, priority
+This is the biggest missing piece from Phase 2 and directly feeds the Compliance Score in Phase 5.
 
-**New file:** `src/components/NotificationBell.tsx`
+**Database:**
 
-- Bell icon with unread count badge in sidebar header
-- Popover dropdown showing latest 10 notifications
-- Priority color dot per notification
-- "Mark all read" button
-- Click notification to navigate to action_url
-- Poll every 30 seconds for new notifications (or use Supabase realtime)
+- Create `compliance_requirements` table: id, property_id (FK), local_law (text), requirement_name, cycle_year, due_date, filing_deadline, status (pending/compliant/overdue/exempt), last_filed_date, next_due_date, penalty_amount, notes, created_at, updated_at
+- RLS scoped through properties.user_id
 
-**Sidebar update:** `DashboardSidebar.tsx`
+**New files:**
 
-- Add NotificationBell component next to the logo area
+- `src/lib/local-law-engine.ts` — Rules for LL11 (facade/FISP), LL84 (benchmarking), LL97 (emissions), LL87 (energy audit), LL152 (gas piping), LL33/95 (inspection after gas incident), LL62 (elevators), LL77 (wind safety), LL126 (building gas detection), etc.
+- Each rule: applicability check (sqft thresholds, stories, building type, has_gas, has_elevator), cycle logic (sub-cycle by last digit of block, FISP sub-cycles A/B/C), due date calculation, penalty amounts
+- `getApplicableLaws(property)` returns list of requirements with status
 
-**New page:** `src/pages/dashboard/NotificationsPage.tsx`
+**UI:**
 
-- Full notification history with filters (by type, priority, read/unread)
-- Add route to App.tsx
+- New tab or section on PropertyOverviewTab showing Local Law compliance grid
+- Status badges (compliant/due soon/overdue/exempt)
+- Educational tooltips explaining each law
 
-### 4B. Priority Routing
+**Sync integration:**
 
-**New file:** `src/lib/notification-priority.ts`
+- Run applicability check after property data enrichment
+- Upsert requirements into compliance_requirements table
 
-- `determineNotificationPriority()`: stop work/vacate/emergency = critical; new violations/hearings = high; status changes = normal; informational = low
-- `routeNotification()`: creates notification record; triggers email for critical/high via existing `send-email-digest` infrastructure
+### Sprint 2: Notification Center (Phase 4A + 4B)
 
-**Edge function update:** `scheduled-sync/index.ts`
+**Database:**
 
-- After detecting changes, call priority routing to create notifications
-- Critical items trigger immediate email via `send-change-summary`
+- Create `notifications` table with user_id, title, body, notification_type, priority, property_id, action_url, read/dismissed status, expires_at
+- RLS: users see their own; service role inserts
+- Enable realtime on notifications table
 
-### 4C. Per-Property Alert Settings
+**New files:**
 
-**Database migration:**
+- `src/components/NotificationBell.tsx` — Bell icon with unread badge, popover with latest 10, mark-all-read
+- `src/lib/notification-priority.ts` — Priority determination (SWO/vacate = critical, new violations = high, status changes = normal)
+- `src/pages/dashboard/NotificationsPage.tsx` — Full history with filters
 
-- Create `property_alert_settings` table: id, property_id (FK), user_id, notify_all_violations, notify_only_critical, notify_status_changes, notify_new_applications, notify_compliance_deadlines, days_before_deadline_alert (default 30), quiet_hours_start, quiet_hours_end, created_at, updated_at
-- UNIQUE on (property_id, user_id)
-- RLS through properties.user_id
+**Updates:**
 
-**UI:** Add "Alert Settings" section to `PropertySettingsTab.tsx`
+- DashboardSidebar: Add NotificationBell
+- App.tsx: Add notifications route
+- scheduled-sync: Create notifications after detecting changes, route by priority
 
-- Toggle switches for each notification type
-- Days-before-deadline slider
-- Quiet hours time pickers
+### Sprint 3: Per-Property Alert Settings + Compliance Score (Phase 4C + 5B)
+
+**Database:**
+
+- Create `property_alert_settings` table (notify toggles, quiet hours, days-before-deadline)
+- Create `compliance_scores` table (score, breakdown components, score_date)
+
+**New files:**
+
+- `src/lib/compliance-scoring.ts` — Score formula using violations (40pts) + Local Law compliance (40pts) + response time (20pts)
+
+**UI:**
+
+- PropertySettingsTab: Alert toggle switches, deadline slider, quiet hours
+- PropertyOverviewTab: Compliance score card with letter grade
+- DashboardOverview: Average score across portfolio
+- PropertiesPage: Score column in table
+
+### Sprint 4: Analytics + Calendar Enhancement (Phase 5A + 5C)
+
+**New files:**
+
+- `src/components/dashboard/ViolationTrendChart.tsx` — recharts LineChart, 12-month rolling, by severity
+
+**Database:**
+
+- Create `hearing_calendar` table for detailed hearing tracking with reminder flags
+
+**Updates:**
+
+- DashboardOverview: Add trend chart card
+- CalendarPage: Click-to-detail panel, "Today" button, stats bar
+- scheduled-sync: Upsert hearing_calendar entries, create reminder notifications at 7/3/1 days
+
+### Sprint 5: Tax Tracking + Tenant Management (Phase 2 gaps)
+
+**Database:**
+
+- Create `property_taxes` table: property_id, tax_year, amount, payment_date, tenant_responsible, protest_status, attorney, notes
+- Add tenant_name column to applications table
+
+**UI:**
+
+- PropertyOverviewTab: Tax history section with protest status
+- ApplicationsPage: Tenant name column and filter
+
+### Sprint 6: Telegram Bot (Phase 6) — now
+
+**Backend:**
+
+- New edge function `telegram-webhook/index.ts` for incoming messages
+- New edge function `send-telegram/index.ts` for outgoing messages
+- AI-powered intent parsing using supported models (Gemini)
+- Bot registration with BotFather
+
+**Database:**
+
+- Create `telegram_users` table linking Telegram chat_id to user_id
+- Add telegram_chat_id to notification delivery
+
+**Features:**
+
+- Query violations, compliance, hearings by property
+- Daily/weekly digest via Telegram
+- Group chat coordination
+
+### Sprint 7: Advanced Features (Phase 7) — Future
+
+- Google Calendar OAuth integration
+- Enhanced document intelligence (vector embeddings)
+- White label / multi-tenant architecture
 
 ---
-
-## Phase 5: Analytics and Reporting
-
-### 5A. Violation Trend Charts - roadmap
-
-**UI updates:** `DashboardOverview.tsx`
-
-- Add a "Violation Trends" card using recharts (already installed)
-- LineChart showing monthly violation counts over last 12 months
-- Lines for total, critical, and resolved
-- Query violations grouped by month from issued_date
-
-**New file:** `src/components/dashboard/ViolationTrendChart.tsx`
-
-- Reusable chart component accepting property_id (optional, for property-level or portfolio-level)
-
-### 5B. Compliance Score - this compliance score should be based on if the property is in compliance with LL and violations. Do you have the LL logic that we need
-
-**Database migration:**
-
-- Create `compliance_scores` table: id, property_id (FK), score (0-100), score_date, violations_score, compliance_score, response_time_score, total_violations, critical_violations, overdue_compliance_count, avg_resolution_days, created_at
-- UNIQUE on (property_id, score_date)
-- RLS through properties.user_id
-
-**New file:** `src/lib/compliance-scoring.ts`
-
-- Score formula: violations (0-40) + compliance (0-40) + response time (0-20)
-- Deductions per critical (-10), high (-5), other (-2)
-- Overdue requirements (-5 each)
-- Slow response time penalties
-
-**Edge function update:** `scheduled-sync/index.ts`
-
-- After sync, calculate and store compliance score for each property
-
-**UI updates:**
-
-- `PropertyOverviewTab.tsx`: Add compliance score card with letter grade (A-F), breakdown bars
-- `DashboardOverview.tsx`: Show average compliance score across portfolio
-- `PropertiesPage.tsx`: Add score column to properties table
-
-### 5C. Hearing Calendar Enhancement
-
-The existing `CalendarPage.tsx` already shows hearings, cure deadlines, certifications, permit expirations, document expirations, and work orders. Enhancements:
-
-**Database migration:**
-
-- Create `hearing_calendar` table: id, property_id, hearing_type, hearing_date, hearing_time, hearing_location, case_number, violation_id (FK), status, outcome, reminder_7_days, reminder_3_days, reminder_1_day, notes, created_at, updated_at
-- RLS through properties.user_id
-
-**Edge function update:** `scheduled-sync/index.ts`
-
-- When violations with hearing_date are synced, upsert into hearing_calendar
-- Check for upcoming hearings and create reminder notifications at 7/3/1 days
-
-**UI updates:**
-
-- `CalendarPage.tsx`: Click event to open detail panel with full info + property link
-- Add "Today" quick-nav button
-- Mini stats bar at top (total hearings this month, expiring permits, overdue items)
-
----
-
-## Implementation Sequence
-
-1. ~~**Phase 3A + 3D** (suppression + complaint decoding)~~ ✅ DONE
-2. ~~**Phase 3B** (OATH reconciliation)~~ ✅ DONE
-3. **Phase 3C** (violation guidance) -- ROADMAPPED for later refinement
-4. **Phase 4A** (notification center) -- database + new component + sidebar update
-5. **Phase 4B + 4C** (priority routing + per-property settings) -- builds on 4A
-6. **Phase 5A** (trend charts) -- ROADMAPPED
-7. **Phase 5B** (compliance score) -- database + scoring logic + UI cards
-8. **Phase 5C** (hearing calendar enhancement) -- extends existing calendar page
 
 ## Technical Notes
 
-- All new tables get RLS policies scoped through `properties.user_id` or direct `user_id = auth.uid()`
-- Notifications table needs service role INSERT policy for sync functions
-- OATH API (data.cityofnewyork.us) is free, no API key needed, 1000 req/hr
-- Realtime can be enabled on `notifications` table for instant bell updates (optional, polling works fine for MVP)
-- Compliance scores recalculated during nightly sync to avoid stale data
-- No new secrets required -- all APIs are public NYC Open Data endpoints
+- All new tables follow existing RLS patterns (scoped through properties.user_id or direct user_id = auth.uid())
+- No new API keys needed for Sprints 1-5 (all NYC Open Data APIs are free)
+- Telegram Bot (Sprint 6) will need a TELEGRAM_BOT_TOKEN secret
+- Local Law engine is the critical dependency for Compliance Scoring — must be built first
+- Recharts is already installed for trend charts
+- Realtime can be enabled on notifications table for instant updates
+- Compliance scores recalculated during nightly sync
