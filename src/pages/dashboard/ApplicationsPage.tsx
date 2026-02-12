@@ -9,13 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { FileStack, Search, RefreshCw, Building2, ExternalLink, Filter, ChevronRight, ChevronDown, Calendar, User, DollarSign, FileText, ShieldCheck } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { FileStack, Search, RefreshCw, Building2, ExternalLink, Filter, ChevronRight, ChevronDown, Calendar, User, DollarSign, FileText, ShieldCheck, StickyNote, Save, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { getSourceBadge } from '@/lib/application-utils';
+import { toast as sonnerToast } from 'sonner';
 
 interface Application {
   id: string;
@@ -37,6 +38,7 @@ interface Application {
   stories: number | null;
   dwelling_units: number | null;
   floor_area: number | null;
+  notes: string | null;
   raw_data: Record<string, unknown> | null;
   created_at: string;
   properties?: {
@@ -55,12 +57,100 @@ const BIS_STATUS_CODES: Record<string, string> = {
   'Q': 'Partial Permit', 'R': 'Plan Exam - Incomplete', 'X': 'Signed Off / Completed',
 };
 
+const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'CO Issued', 'Letter of Completion'];
+
+const normalizeStatusLabel = (status: string): string => {
+  const cleanups: [RegExp, string][] = [
+    [/^filing\s+/i, ''],
+    [/^permit\s+issued\s*-\s*/i, 'Permit Issued – '],
+  ];
+  let result = status;
+  cleanups.forEach(([pattern, replacement]) => {
+    result = result.replace(pattern, replacement);
+  });
+  return result.charAt(0).toUpperCase() + result.slice(1);
+};
+
 const decodeStatus = (status: string | null, source: string): string => {
   if (!status) return 'Unknown';
   if (source === 'DOB BIS' && status.length <= 2) {
     return BIS_STATUS_CODES[status.toUpperCase()] || status;
   }
-  return status.charAt(0).toUpperCase() + status.slice(1);
+  return normalizeStatusLabel(status);
+};
+
+const getStatusVariant = (status: string | null, source: string) => {
+  const decoded = decodeStatus(status, source).toLowerCase();
+  if (['loc issued', 'letter of completion'].some(s => decoded.includes(s))) return 'secondary' as const;
+  if (['signed off', 'completed', 'co issued', 'permit issued', 'issued', 'permit entire'].some(s => decoded.includes(s))) return 'default' as const;
+  if (['pre-filing', 'plan exam', 'partial permit', 'pending', 'filed', 'in review', 'plan approved'].some(s => decoded.includes(s))) return 'secondary' as const;
+  if (['disapproved', 'withdrawn', 'suspended', 'expired', 'denied', 'cancelled'].some(s => decoded.includes(s))) return 'destructive' as const;
+  return 'outline' as const;
+};
+
+const getAgencyColor = (agency: string) => {
+  const colors: Record<string, string> = {
+    DOB: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    FDNY: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+    HPD: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    DEP: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
+    DOT: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  };
+  return colors[agency] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
+};
+
+const getDOBNowBuildUrl = (appNumber: string) =>
+  `https://a810-dobnow.nyc.gov/Publish/#!/job/${appNumber}`;
+
+const getDOBBisUrl = (appNumber: string) =>
+  `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${appNumber}`;
+
+/** Parse filing suffix: X08023336-I1 → { prefix: 'X08023336', suffix: 'I1' } */
+const parseFilingNumber = (appNumber: string) => {
+  const match = appNumber.match(/^(.+)-(I\d+|P\d+|S\d+)$/i);
+  if (match) return { prefix: match[1], suffix: match[2].toUpperCase() };
+  return { prefix: appNumber, suffix: null };
+};
+
+// ─── Notes Inline Editor ───
+const NotesEditor = ({ appId, initialNotes }: { appId: string; initialNotes: string | null }) => {
+  const [notes, setNotes] = useState(initialNotes || '');
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from('applications').update({ notes }).eq('id', appId);
+    setSaving(false);
+    if (error) sonnerToast.error('Failed to save notes');
+    else { setDirty(false); sonnerToast.success('Notes saved'); }
+  };
+
+  return (
+    <div>
+      <Button variant="ghost" size="sm" className="text-xs gap-1.5 px-2 h-7" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>
+        <StickyNote className="w-3 h-3" />
+        Notes {initialNotes ? '•' : ''}
+      </Button>
+      {open && (
+        <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
+          <Textarea
+            placeholder="Add notes about this application..."
+            value={notes}
+            onChange={(e) => { setNotes(e.target.value); setDirty(true); }}
+            className="min-h-[60px] text-sm"
+          />
+          {dirty && (
+            <Button size="sm" className="h-7 text-xs" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+              Save
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const ApplicationsPage = () => {
@@ -68,8 +158,9 @@ const ApplicationsPage = () => {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [agencyFilter, setAgencyFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set());
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
+  const [statusFilterInit, setStatusFilterInit] = useState(false);
   const [sourceFilterInit, setSourceFilterInit] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
@@ -99,40 +190,22 @@ const ApplicationsPage = () => {
     });
   };
 
-  const filteredApplications = applications?.filter(app => {
-    const matchesSearch = searchQuery === '' || 
-      app.application_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.properties?.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
-    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
-    const matchesSource = selectedSources.size === 0 || selectedSources.has(app.source);
-    return matchesSearch && matchesAgency && matchesStatus && matchesSource;
-  });
+  const uniqueAgencies = useMemo(() => [...new Set(applications?.map(a => a.agency) || [])].sort(), [applications]);
+  const uniqueStatuses = useMemo(() => [...new Set(applications?.map(a => decodeStatus(a.status, a.source)).filter(Boolean) || [])].sort() as string[], [applications]);
+  const uniqueSources = useMemo(() => [...new Set(applications?.map(a => a.source) || [])].sort(), [applications]);
 
-  const getStatusVariant = (status: string | null, source: string) => {
-    const decoded = decodeStatus(status, source).toLowerCase();
-    if (['signed off', 'completed', 'co issued', 'permit issued'].some(s => decoded.includes(s))) return 'default' as const;
-    if (['pre-filing', 'plan exam', 'partial permit', 'pending', 'filed', 'in review', 'plan approved', 'letter of completion'].some(s => decoded.includes(s))) return 'secondary' as const;
-    if (['disapproved', 'withdrawn', 'suspended', 'expired', 'denied', 'cancelled'].some(s => decoded.includes(s))) return 'destructive' as const;
-    return 'outline' as const;
-  };
+  // Default status filter: exclude completed
+  useEffect(() => {
+    if (uniqueStatuses.length > 0 && !statusFilterInit) {
+      const defaults = new Set(
+        uniqueStatuses.filter(s => !COMPLETED_STATUSES.some(cs => s.toLowerCase().includes(cs.toLowerCase())))
+      );
+      setSelectedStatuses(defaults);
+      setStatusFilterInit(true);
+    }
+  }, [uniqueStatuses, statusFilterInit]);
 
-  const getAgencyColor = (agency: string) => {
-    const colors: Record<string, string> = {
-      DOB: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-      FDNY: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-      HPD: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-      DEP: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
-      DOT: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-    };
-    return colors[agency] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-  };
-
-  const uniqueAgencies = [...new Set(applications?.map(a => a.agency) || [])].sort();
-  const uniqueStatuses = [...new Set(applications?.map(a => a.status).filter(Boolean) || [])].sort() as string[];
-  const uniqueSources = [...new Set(applications?.map(a => a.source) || [])].sort();
-
+  // Default source filter: all
   useEffect(() => {
     if (uniqueSources.length > 0 && !sourceFilterInit) {
       setSelectedSources(new Set(uniqueSources));
@@ -140,90 +213,125 @@ const ApplicationsPage = () => {
     }
   }, [uniqueSources, sourceFilterInit]);
 
-  const toggleSource = (source: string) => {
-    setSelectedSources(prev => {
-      const next = new Set(prev);
-      if (next.has(source)) next.delete(source); else next.add(source);
-      return next;
-    });
-  };
+  const toggleStatus = (s: string) => setSelectedStatuses(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
+  const toggleSource = (s: string) => setSelectedSources(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
 
-  const renderExpandedDetails = (app: Application) => {
+  const filteredApplications = useMemo(() => {
+    return (applications || []).filter(app => {
+      const matchesSearch = searchQuery === '' ||
+        app.application_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.properties?.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
+      const decoded = decodeStatus(app.status, app.source);
+      const matchesStatus = selectedStatuses.size === 0 || selectedStatuses.has(decoded);
+      const matchesSource = selectedSources.size === 0 || selectedSources.has(app.source);
+      return matchesSearch && matchesAgency && matchesStatus && matchesSource;
+    });
+  }, [applications, searchQuery, agencyFilter, selectedStatuses, selectedSources]);
+
+  // Build related filings map from ALL applications (not just filtered)
+  const relatedFilingsMap = useMemo(() => {
+    const map = new Map<string, Application[]>();
+    (applications || []).forEach(app => {
+      const { prefix, suffix } = parseFilingNumber(app.application_number);
+      if (suffix) {
+        if (!map.has(prefix)) map.set(prefix, []);
+        map.get(prefix)!.push(app);
+      }
+    });
+    return map;
+  }, [applications]);
+
+  const activeCount = useMemo(() => {
+    return (applications || []).filter(a => {
+      const decoded = decodeStatus(a.status, a.source);
+      return !COMPLETED_STATUSES.some(cs => decoded.toLowerCase().includes(cs.toLowerCase()));
+    }).length;
+  }, [applications]);
+
+  const renderBuildDetails = (app: Application) => {
     const raw = app.raw_data || {};
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-        {/* Dates */}
         <div className="space-y-2">
-          <h4 className="font-medium text-foreground flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5" /> Dates & Permit
-          </h4>
+          <h4 className="font-medium text-foreground flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Dates & Permit</h4>
           <div className="space-y-1 text-muted-foreground">
             <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}</span></p>
             <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MM/dd/yy') : '—'}</span></p>
-            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MM/dd/yy') : '—'}</span></p>
             {raw.first_permit_date && <p>First Permit: <span className="text-foreground">{format(new Date(raw.first_permit_date as string), 'MM/dd/yy')}</span></p>}
+            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MM/dd/yy') : '—'}</span></p>
+            {raw.signoff_date && <p>Sign-Off: <span className="text-foreground">{raw.signoff_date as string}</span></p>}
           </div>
         </div>
-
-        {/* Applicant */}
         <div className="space-y-2">
-          <h4 className="font-medium text-foreground flex items-center gap-1.5">
-            <User className="w-3.5 h-3.5" /> Applicant
-          </h4>
+          <h4 className="font-medium text-foreground flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Applicant</h4>
           <div className="space-y-1 text-muted-foreground">
             <p>Name: <span className="text-foreground">{app.applicant_name || '—'}</span></p>
-            <p>Owner: <span className="text-foreground">{app.owner_name || '—'}</span></p>
+            {raw.applicant_license && <p>License #: <span className="text-foreground">{raw.applicant_license as string}</span></p>}
+            {(raw.applicant_business_name || raw.applicant_business) && <p>Company: <span className="text-foreground">{(raw.applicant_business_name || raw.applicant_business) as string}</span></p>}
             {raw.applicant_phone && <p>Phone: <span className="text-foreground">{raw.applicant_phone as string}</span></p>}
             {raw.applicant_email && <p>Email: <span className="text-foreground">{raw.applicant_email as string}</span></p>}
-            {(raw.applicant_business_name || raw.applicant_business) && (
-              <p>Company: <span className="text-foreground">{(raw.applicant_business_name || raw.applicant_business) as string}</span></p>
-            )}
-            {raw.applicant_license && <p>License #: <span className="text-foreground">{raw.applicant_license as string}</span></p>}
           </div>
         </div>
-
-        {/* Cost & Scope */}
         <div className="space-y-2">
-          <h4 className="font-medium text-foreground flex items-center gap-1.5">
-            <DollarSign className="w-3.5 h-3.5" /> Cost & Scope
-          </h4>
+          <h4 className="font-medium text-foreground flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Cost & Scope</h4>
           <div className="space-y-1 text-muted-foreground">
             <p>Est. Cost: <span className="text-foreground">{app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}</span></p>
-            {app.floor_area != null && app.floor_area > 0 && (
-              <p>Floor Area: <span className="text-foreground">{app.floor_area.toLocaleString()} sqft</span></p>
-            )}
-            {raw.apt_condo && <p>Apt/Condo #: <span className="text-foreground">{raw.apt_condo as string}</span></p>}
+            {app.floor_area != null && app.floor_area > 0 && <p>Floor Area: <span className="text-foreground">{app.floor_area.toLocaleString()} sqft</span></p>}
             {raw.work_on_floor && <p>Work Location: <span className="text-foreground">{raw.work_on_floor as string}</span></p>}
           </div>
         </div>
-
-        {/* Technical */}
         {(raw.special_inspection || raw.progress_inspection || raw.building_code || raw.review_building_code) && (
           <div className="space-y-2">
-            <h4 className="font-medium text-foreground flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5" /> Technical
-            </h4>
+            <h4 className="font-medium text-foreground flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Technical</h4>
             <div className="space-y-1 text-muted-foreground">
-              {(raw.review_building_code || raw.building_code) && (
-                <p>Building Code: <span className="text-foreground">{(raw.review_building_code || raw.building_code) as string}</span></p>
-              )}
+              {(raw.review_building_code || raw.building_code) && <p>Building Code: <span className="text-foreground">{(raw.review_building_code || raw.building_code) as string}</span></p>}
               {raw.special_inspection && <p>Special Inspection: <span className="text-foreground">{raw.special_inspection as string}</span></p>}
               {raw.progress_inspection && <p>Progress Inspection: <span className="text-foreground">{raw.progress_inspection as string}</span></p>}
             </div>
           </div>
         )}
-
-        {/* Description */}
         {app.description && (
           <div className="col-span-2 md:col-span-3 space-y-2">
-            <h4 className="font-medium text-foreground flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5" /> Scope of Work
-            </h4>
+            <h4 className="font-medium text-foreground flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Scope of Work</h4>
             <p className="text-muted-foreground whitespace-pre-wrap">{app.description}</p>
           </div>
         )}
+      </div>
+    );
+  };
 
-        {/* Status decode for BIS */}
+  const renderBisDetails = (app: Application) => {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Dates</h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}</span></p>
+            <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MM/dd/yy') : '—'}</span></p>
+            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MM/dd/yy') : '—'}</span></p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> People</h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Applicant: <span className="text-foreground">{app.applicant_name || '—'}</span></p>
+            <p>Owner: <span className="text-foreground">{app.owner_name || '—'}</span></p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Cost</h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Est. Cost: <span className="text-foreground">{app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}</span></p>
+          </div>
+        </div>
+        {app.description && (
+          <div className="col-span-2 md:col-span-3 space-y-2">
+            <h4 className="font-medium text-foreground flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Description</h4>
+            <p className="text-muted-foreground">{app.description}</p>
+          </div>
+        )}
         {app.source === 'DOB BIS' && app.status && app.status.length <= 2 && (
           <div className="col-span-2 md:col-span-3 bg-muted/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground">
@@ -231,24 +339,137 @@ const ApplicationsPage = () => {
             </p>
           </div>
         )}
-
-        {/* External Link */}
-        <div className="col-span-2 md:col-span-3 pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const url = app.source === 'DOB BIS'
-                ? `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${app.application_number}`
-                : `https://a810-dobnow.nyc.gov/Publish/#!/job/${app.application_number}`;
-              window.open(url, '_blank');
-            }}
-          >
-            <ExternalLink className="w-3 h-3 mr-2" />
-            View on NYC Portal
-          </Button>
-        </div>
       </div>
+    );
+  };
+
+  const renderAppDetails = (app: Application) => {
+    const isBuild = app.source.startsWith('DOB NOW');
+    return isBuild ? renderBuildDetails(app) : renderBisDetails(app);
+  };
+
+  const renderAppRow = (app: Application) => {
+    const isExpanded = expandedRows.has(app.id);
+    const decodedStatus = decodeStatus(app.status, app.source);
+    const sb = getSourceBadge(app.source);
+    const isBuild = app.source.startsWith('DOB NOW');
+    const { prefix, suffix } = parseFilingNumber(app.application_number);
+    const relatedApps = suffix ? (relatedFilingsMap.get(prefix) || []).filter(a => a.id !== app.id) : [];
+
+    return (
+      <>
+        <TableRow
+          key={app.id}
+          className="cursor-pointer hover:bg-muted/30 transition-colors"
+          onClick={() => toggleRow(app.id)}
+        >
+          <TableCell className="px-2">
+            {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+          </TableCell>
+          <TableCell className="font-mono text-sm">{app.application_number}</TableCell>
+          <TableCell>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-sm truncate max-w-[200px]">{app.properties?.address || 'Unknown'}</span>
+            </div>
+          </TableCell>
+          <TableCell>
+            <span className="text-sm">
+              {app.application_type}
+              {app.work_type && app.work_type !== app.application_type && <span className="text-muted-foreground ml-1 text-xs">({app.work_type})</span>}
+            </span>
+          </TableCell>
+          <TableCell>
+            <span className={`inline-flex items-center justify-center w-12 px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>{app.agency}</span>
+          </TableCell>
+          <TableCell>
+            <span className={`inline-flex items-center justify-center w-[90px] px-2 py-0.5 rounded text-xs font-semibold ${sb.bgColor} ${sb.color}`}>{sb.label}</span>
+          </TableCell>
+          <TableCell>
+            <Badge variant={getStatusVariant(app.status, app.source)} className="whitespace-nowrap">{decodedStatus}</Badge>
+          </TableCell>
+          <TableCell className="text-sm text-muted-foreground">
+            {app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}
+          </TableCell>
+          <TableCell className="text-sm">
+            {app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}
+          </TableCell>
+        </TableRow>
+
+        {isExpanded && (
+          <TableRow key={`${app.id}-detail`} className="bg-muted/20 hover:bg-muted/20">
+            <TableCell colSpan={9} className="py-4 px-6">
+              {renderAppDetails(app)}
+
+              {/* Related filings section */}
+              {relatedApps.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-border">
+                  <h4 className="text-sm font-medium text-foreground mb-2">
+                    Related Filings ({relatedApps.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {relatedApps.map(related => {
+                      const relSuffix = parseFilingNumber(related.application_number).suffix;
+                      const relStatus = decodeStatus(related.status, related.source);
+                      const isRelExpanded = expandedRows.has(`rel-${related.id}`);
+                      const relIsBuild = related.source.startsWith('DOB NOW');
+                      return (
+                        <div key={related.id} className="rounded-lg border border-border/60 overflow-hidden">
+                          <div
+                            className="flex items-center gap-3 text-sm bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedRows(prev => {
+                                const next = new Set(prev);
+                                const key = `rel-${related.id}`;
+                                if (next.has(key)) next.delete(key); else next.add(key);
+                                return next;
+                              });
+                            }}
+                          >
+                            {isRelExpanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                            <span className="font-mono text-xs">{related.application_number}</span>
+                            {relSuffix && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{relSuffix}</Badge>}
+                            <Badge variant={getStatusVariant(related.status, related.source)} className="text-xs whitespace-nowrap">{relStatus}</Badge>
+                            <span className="text-muted-foreground text-xs">{related.filing_date ? format(new Date(related.filing_date), 'MM/dd/yy') : '—'}</span>
+                            {related.estimated_cost && <span className="text-xs">${related.estimated_cost.toLocaleString()}</span>}
+                          </div>
+                          {isRelExpanded && (
+                            <div className="px-4 py-3 bg-muted/10 border-t border-border/40">
+                              {relIsBuild ? renderBuildDetails(related) : renderBisDetails(related)}
+                              <div className="mt-2 pt-2 border-t border-border/40 flex items-center justify-between">
+                                <NotesEditor appId={related.id} initialNotes={related.notes} />
+                                <Button
+                                  variant="outline" size="sm" className="text-xs shrink-0"
+                                  onClick={(e) => { e.stopPropagation(); window.open(relIsBuild ? getDOBNowBuildUrl(related.application_number) : getDOBBisUrl(related.application_number), '_blank'); }}
+                                >
+                                  <ExternalLink className="w-3 h-3 mr-1" />
+                                  {relIsBuild ? 'DOB NOW' : 'BIS Web'}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-3 pt-3 border-t border-border flex items-start justify-between gap-4">
+                <NotesEditor appId={app.id} initialNotes={app.notes} />
+                <Button
+                  variant="outline" size="sm" className="text-xs shrink-0"
+                  onClick={(e) => { e.stopPropagation(); window.open(isBuild ? getDOBNowBuildUrl(app.application_number) : getDOBBisUrl(app.application_number), '_blank'); }}
+                >
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  {isBuild ? 'View on DOB NOW' : 'View on DOB BIS Web'}
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
+      </>
     );
   };
 
@@ -266,10 +487,19 @@ const ApplicationsPage = () => {
         </Button>
       </div>
 
+      {/* Stats */}
+      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <span><strong>{applications?.length || 0}</strong> total applications</span>
+        <span>•</span>
+        <span><strong>{activeCount}</strong> active</span>
+        <span>•</span>
+        <span><strong>{filteredApplications?.length || 0}</strong> shown</span>
+      </div>
+
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-3">
             <div className="flex-1 min-w-[200px]">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -283,6 +513,8 @@ const ApplicationsPage = () => {
                 {uniqueAgencies.map(agency => (<SelectItem key={agency} value={agency}>{agency}</SelectItem>))}
               </SelectContent>
             </Select>
+
+            {/* Source Filter - multi-select */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-[180px] justify-start text-sm">
@@ -308,13 +540,33 @@ const ApplicationsPage = () => {
                 </div>
               </PopoverContent>
             </Popover>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                {uniqueStatuses.map(status => (<SelectItem key={status} value={status || 'unknown'}>{status}</SelectItem>))}
-              </SelectContent>
-            </Select>
+
+            {/* Status Filter - multi-select with active default */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-[180px] justify-start text-sm">
+                  <Filter className="w-4 h-4 mr-2" />
+                  Status ({selectedStatuses.size}/{uniqueStatuses.length})
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3" align="start">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">Filter by status</p>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setSelectedStatuses(new Set(uniqueStatuses))}>All</Button>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setSelectedStatuses(new Set())}>None</Button>
+                  </div>
+                </div>
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  {uniqueStatuses.map(status => (
+                    <label key={status} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1">
+                      <Checkbox checked={selectedStatuses.has(status)} onCheckedChange={() => toggleStatus(status)} />
+                      <span className="text-sm">{status}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </CardContent>
       </Card>
@@ -358,57 +610,7 @@ const ApplicationsPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredApplications.map((app) => {
-                    const isExpanded = expandedRows.has(app.id);
-                    const decodedStatus = decodeStatus(app.status, app.source);
-                    const sb = getSourceBadge(app.source);
-                    return (
-                      <Collapsible key={app.id} asChild open={isExpanded} onOpenChange={() => toggleRow(app.id)}>
-                        <>
-                          <TableRow className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => toggleRow(app.id)}>
-                            <TableCell className="px-2">
-                              {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                            </TableCell>
-                            <TableCell className="font-mono text-sm">{app.application_number}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                                <span className="text-sm truncate max-w-[200px]">{app.properties?.address || 'Unknown'}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm">
-                                {app.application_type}
-                                {app.work_type && <span className="text-muted-foreground ml-1">({app.work_type})</span>}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>{app.agency}</span>
-                            </TableCell>
-                            <TableCell>
-                              <span className={`inline-flex items-center justify-center w-[90px] px-2 py-0.5 rounded text-xs font-semibold ${sb.bgColor} ${sb.color}`}>{sb.label}</span>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={getStatusVariant(app.status, app.source)}>{decodedStatus}</Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}
-                            </TableCell>
-                          </TableRow>
-                          <CollapsibleContent asChild>
-                            <TableRow className="bg-muted/20 hover:bg-muted/20">
-                              <TableCell colSpan={9} className="py-4 px-6">
-                                {renderExpandedDetails(app)}
-                              </TableCell>
-                            </TableRow>
-                          </CollapsibleContent>
-                        </>
-                      </Collapsible>
-                    );
-                  })}
+                  {filteredApplications.map((app) => renderAppRow(app))}
                 </TableBody>
               </Table>
             </div>
