@@ -149,6 +149,36 @@ export const PropertyAIWidget = ({
     }
   }, [existingMessages]);
 
+  // Realtime subscription for new messages (e.g. from Telegram)
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const channel = supabase
+      .channel(`property-ai-${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'property_ai_messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as { id: string; role: string; content: string };
+          setMessages(prev => {
+            // Avoid duplicates
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            return [...prev, { id: newMsg.id, role: newMsg.role as 'user' | 'assistant', content: newMsg.content }];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId]);
+
   // Fetch all documents with extracted text for context
   const { data: allDocuments } = useQuery({
     queryKey: ['property-documents-ai', propertyId],
