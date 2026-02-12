@@ -1132,12 +1132,13 @@ Deno.serve(async (req) => {
     let coFound = false;
     if (bin) {
       try {
+        // Strategy 1: Check the DOB NOW CO dataset (post-2012)
         const coData = await safeFetch(
           `${NYC_OPEN_DATA_ENDPOINTS.CO}?bin=${bin}&$limit=10&$order=c_o_issue_date%20DESC`,
           "CO"
         );
 
-        console.log(`Found ${coData.length} CO records for BIN ${bin}`);
+        console.log(`Found ${coData.length} CO records in DOB NOW dataset for BIN ${bin}`);
 
         if (coData.length > 0) {
           const latest = coData[0] as Record<string, unknown>;
@@ -1147,7 +1148,6 @@ Deno.serve(async (req) => {
           
           let coStatus = 'valid';
           if (coType.toLowerCase().includes('temporary') || coType.toLowerCase().includes('tco')) {
-            // Check if TCO is expired
             const expDate = latest.expiration_dd || latest.expiration_date;
             if (expDate && new Date(expDate as string) < new Date()) {
               coStatus = 'expired_tco';
@@ -1157,6 +1157,7 @@ Deno.serve(async (req) => {
           }
 
           const coMetadata = {
+            source: 'DOB_NOW_CO',
             type: coType,
             issuance_date: issuanceDate ? (issuanceDate as string).split('T')[0] : null,
             job_number: jobNumber || null,
@@ -1164,16 +1165,15 @@ Deno.serve(async (req) => {
             latest_raw: latest,
           };
 
-          // Update property with CO data
           await supabase
             .from('properties')
             .update({ co_status: coStatus, co_data: coMetadata })
             .eq('id', property_id);
 
           coFound = true;
-          console.log(`CO status updated: ${coStatus} (type: ${coType})`);
+          console.log(`CO status updated from DOB NOW: ${coStatus} (type: ${coType})`);
 
-          // Check if a CO document already exists for this property
+          // Create document reference
           const { data: existingCODoc } = await supabase
             .from('property_documents')
             .select('id')
@@ -1182,7 +1182,6 @@ Deno.serve(async (req) => {
             .limit(1);
 
           if (!existingCODoc || existingCODoc.length === 0) {
-            // Create a document reference for the CO
             const coDescription = `${coType || 'Certificate of Occupancy'} — Issued ${issuanceDate ? new Date(issuanceDate as string).toLocaleDateString() : 'N/A'}${jobNumber ? ` (Job #${jobNumber})` : ''}`;
             const dobNowUrl = `https://a810-dobnow.nyc.gov/Publish/#!/certificate/${jobNumber || bin}`;
 
@@ -1195,25 +1194,97 @@ Deno.serve(async (req) => {
               file_type: 'link',
               metadata: coMetadata,
             });
-
-            console.log(`CO document reference created`);
+            console.log(`CO document reference created (DOB NOW)`);
           }
-        } else {
-          // No CO found — check if pre-1938
+        }
+
+        // Strategy 2: If no CO in DOB NOW dataset, check BIS Jobs for CO status codes
+        // BIS job_status: J = CO issued, H = completed, I = signed-off
+        if (!coFound) {
+          const bisJobs = await safeFetch(
+            `${NYC_OPEN_DATA_ENDPOINTS.DOB_BIS_JOBS}?bin__=${bin}&$limit=50&$order=latest_action_date%20DESC`,
+            "BIS_CO_CHECK"
+          );
+
+          const BIS_CO_STATUSES: Record<string, string> = {
+            'h': 'completed',
+            'i': 'signed off',
+            'j': 'co issued',
+            'k': 'final co',
+          };
+
+          const coJob = (bisJobs as Record<string, unknown>[]).find(j => {
+            const status = ((j.job_status || '') as string).toLowerCase();
+            return status in BIS_CO_STATUSES;
+          });
+
+          if (coJob) {
+            const jobStatus = ((coJob.job_status || '') as string).toLowerCase();
+            const statusLabel = BIS_CO_STATUSES[jobStatus] || 'co issued';
+            const jobNumber = (coJob.job__ || '') as string;
+            const jobType = (coJob.job_type || '') as string;
+            const actionDate = (coJob.latest_action_date || '') as string;
+
+            const coMetadata = {
+              source: 'BIS_JOBS',
+              type: `BIS ${statusLabel}`,
+              job_number: jobNumber,
+              job_type: jobType,
+              job_status: jobStatus,
+              status_label: statusLabel,
+              action_date: actionDate,
+            };
+
+            await supabase
+              .from('properties')
+              .update({ co_status: 'valid', co_data: coMetadata })
+              .eq('id', property_id);
+
+            coFound = true;
+            console.log(`CO status updated from BIS Jobs: valid (${statusLabel}, Job #${jobNumber})`);
+
+            // Create document reference linking to BIS
+            const { data: existingCODoc } = await supabase
+              .from('property_documents')
+              .select('id')
+              .eq('property_id', property_id)
+              .eq('document_type', 'certificate_of_occupancy')
+              .limit(1);
+
+            if (!existingCODoc || existingCODoc.length === 0) {
+              const bisUrl = `http://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?allbin=${bin}`;
+              const coDescription = `BIS Certificate of Occupancy — Job #${jobNumber} (${jobType}), Status: ${statusLabel}`;
+
+              await supabase.from('property_documents').insert({
+                property_id,
+                document_name: `Certificate of Occupancy (BIS)`,
+                document_type: 'certificate_of_occupancy',
+                description: coDescription,
+                file_url: bisUrl,
+                file_type: 'link',
+                metadata: coMetadata,
+              });
+              console.log(`CO document reference created (BIS)`);
+            }
+          }
+        }
+
+        // If still no CO found, set status based on year built
+        if (!coFound) {
           const { data: propData } = await supabase
             .from('properties')
             .select('year_built, co_status')
             .eq('id', property_id)
             .single();
 
-          if (propData && (!propData.co_status || propData.co_status === 'unknown')) {
+          if (propData && (!propData.co_status || propData.co_status === 'unknown' || propData.co_status === 'missing')) {
             const yearBuilt = propData.year_built;
             const newStatus = yearBuilt && yearBuilt < 1938 ? 'pre_1938' : 'missing';
             await supabase
               .from('properties')
               .update({ co_status: newStatus })
               .eq('id', property_id);
-            console.log(`No CO found, status set to: ${newStatus}`);
+            console.log(`No CO found in any source, status set to: ${newStatus}`);
           }
         }
       } catch (coError) {
