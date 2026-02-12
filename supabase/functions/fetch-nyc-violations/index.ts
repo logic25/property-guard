@@ -58,14 +58,70 @@ interface ViolationRecord {
   status: 'open' | 'in_progress' | 'closed';
 }
 
+// DOB violation code prefixes and their meanings
+const DOB_CODE_PREFIXES: Record<string, { type: string; description: string }> = {
+  'FTC-VT-PER': { type: 'elevator', description: 'Failure to Correct - Elevator Periodic Test' },
+  'FTC-VT-CAT1': { type: 'elevator', description: 'Failure to Correct - Elevator Category 1 Test' },
+  'FTC-VT-CAT5': { type: 'elevator', description: 'Failure to Correct - Elevator Category 5 Test' },
+  'FTF-VT-PER': { type: 'elevator', description: 'Failure to File - Elevator Periodic Test' },
+  'FTF-VT-CAT1': { type: 'elevator', description: 'Failure to File - Elevator Category 1 Test' },
+  'FTF-VT-CAT5': { type: 'elevator', description: 'Failure to File - Elevator Category 5 Test' },
+  'FTC-EN-BENCH': { type: 'elevator', description: 'Failure to Correct - Elevator Benchmarking' },
+  'FTF-EN-BENCH': { type: 'elevator', description: 'Failure to File - Elevator Benchmarking' },
+  'FTC-AEU-HAZ': { type: 'elevator', description: 'Failure to Correct - Elevator Hazardous Condition' },
+  'FTF-AEU-HAZ': { type: 'elevator', description: 'Failure to File - Elevator Hazardous Condition' },
+  'FTF-PL-PER': { type: 'gas_piping', description: 'Failure to File - Gas Piping Periodic Inspection (Local Law 152)' },
+  'FTC-PL-PER': { type: 'gas_piping', description: 'Failure to Correct - Gas Piping Periodic Inspection (Local Law 152)' },
+  'FTF-PL': { type: 'plumbing', description: 'Failure to File - Plumbing Compliance' },
+  'FTC-PL': { type: 'plumbing', description: 'Failure to Correct - Plumbing Compliance' },
+  'FTF-BL-PER': { type: 'hvac', description: 'Failure to File - Boiler Periodic Inspection' },
+  'FTC-BL-PER': { type: 'hvac', description: 'Failure to Correct - Boiler Periodic Inspection' },
+  'FTF-SP-PER': { type: 'fire_safety', description: 'Failure to File - Sprinkler Periodic Inspection' },
+  'FTC-SP-PER': { type: 'fire_safety', description: 'Failure to Correct - Sprinkler Periodic Inspection' },
+  'FTF-FA-PER': { type: 'structural', description: 'Failure to File - Façade Periodic Inspection (LL11/FISP)' },
+  'FTC-FA-PER': { type: 'structural', description: 'Failure to Correct - Façade Periodic Inspection (LL11/FISP)' },
+  'FTF-RE-PER': { type: 'structural', description: 'Failure to File - Retaining Wall Periodic Inspection' },
+  'FTC-RE-PER': { type: 'structural', description: 'Failure to Correct - Retaining Wall Periodic Inspection' },
+};
+
+// Decode a DOB violation code into a human-readable description
+function decodeDOBViolationCode(code: string | null): { type: string; description: string } | null {
+  if (!code) return null;
+  const upper = code.toUpperCase();
+  
+  // Try exact prefix matches (longest first)
+  const sortedPrefixes = Object.keys(DOB_CODE_PREFIXES).sort((a, b) => b.length - a.length);
+  for (const prefix of sortedPrefixes) {
+    if (upper.includes(prefix)) {
+      return DOB_CODE_PREFIXES[prefix];
+    }
+  }
+  
+  // Generic FTF/FTC patterns
+  if (upper.includes('FTF')) return { type: 'compliance', description: 'Failure to File - Compliance Document' };
+  if (upper.includes('FTC')) return { type: 'compliance', description: 'Failure to Correct - Compliance Issue' };
+  if (upper.includes('NOD')) return { type: 'compliance', description: 'Notice of Deficiency' };
+  
+  return null;
+}
+
 // Extract violation type from description or category
 function extractViolationType(description: string | null, category: string | null, agency: string): string | null {
   const text = `${description || ''} ${category || ''}`.toLowerCase();
   
-  // Elevator-related
-  if (text.includes('elevator') || text.includes('ftc') || text.includes('ftf') || 
-      text.includes('escalator') || text.includes('convey') || text.includes('lift')) {
+  // First try DOB code decoding for precise classification
+  const decoded = decodeDOBViolationCode(description);
+  if (decoded) return decoded.type;
+  
+  // Elevator-related (specific terms only, not generic FTF/FTC)
+  if (text.includes('elevator') || text.includes('escalator') || text.includes('convey') || 
+      text.includes('lift') || text.includes('dumbwaiter')) {
     return 'elevator';
+  }
+  // Gas piping / LL152
+  if (text.includes('gas piping') || text.includes('ll152') || text.includes('local law 152') ||
+      text.includes('gas leak') || text.includes('gas line')) {
+    return 'gas_piping';
   }
   // Plumbing
   if (text.includes('plumb') || text.includes('water') || text.includes('sewer') || 
