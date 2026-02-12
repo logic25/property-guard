@@ -196,7 +196,7 @@ export const PropertyOverviewTab = ({
   return (
     <div className="space-y-6">
       {/* Quick Stats Row - Clickable cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card 
           className="cursor-pointer hover:border-destructive/50 transition-colors"
           onClick={() => onTabChange?.('violations')}
@@ -284,25 +284,6 @@ export const PropertyOverviewTab = ({
           </CardContent>
         </Card>
 
-        <Card 
-          className="cursor-pointer hover:border-success/50 transition-colors"
-          onClick={() => {
-            const el = document.getElementById('local-law-compliance');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }}
-        >
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-success/10 flex items-center justify-center">
-                <Shield className="w-4 h-4 text-success" />
-              </div>
-              <div>
-                <p className="text-xl font-bold">{complianceScore}</p>
-                <p className="text-xs text-muted-foreground">Compliance</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Last Synced Indicator */}
