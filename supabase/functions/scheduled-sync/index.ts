@@ -171,8 +171,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // --- If nightly sync, trigger daily summary emails ---
-    if (scheduleType === "nightly" && results.changes_detected > 0) {
+    // --- If nightly sync, trigger daily summary emails (disabled during testing) ---
+    if (false && scheduleType === "nightly" && results.changes_detected > 0) {
       try {
         console.log("Triggering daily change summary emails...");
         const summaryRes = await fetch(`${supabaseUrl}/functions/v1/send-change-summary`, {
