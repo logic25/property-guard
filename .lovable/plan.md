@@ -1,198 +1,140 @@
-# Property Guard v2.0 — Gap Analysis and Implementation Plan
+# Admin Panel: API Logging, User Management, and Remote Support
 
-## Current State Summary
-
-The project already has a solid foundation. Here is what exists versus what the spec calls for:
-
-### Already Built (Phases 1-3 partial)
-
-
-| Feature                                                                                               | Status |
-| ----------------------------------------------------------------------------------------------------- | ------ |
-| Properties table with NYC Open Data fields (BIN, BBL, zoning, building characteristics)               | Done   |
-| Violations table (DOB, ECB, HPD, FDNY, DEP, DOT, DSNY, LPC, DOF)                                      | Done   |
-| Applications table (DOB NOW, BIS, LAA)                                                                | Done   |
-| DOB Complaints tracking                                                                               | Done   |
-| Change log for modification tracking                                                                  | Done   |
-| User authentication and RLS                                                                           | Done   |
-| NYC Open Data integration (9 agencies via Socrata)                                                    | Done   |
-| Scheduled sync (nightly full + 3x daily DOB quick)                                                    | Done   |
-| SMS alerts via Twilio                                                                                 | Done   |
-| Property detail page with tabs (Overview, Violations, Applications, Documents, Work Orders, Activity) | Done   |
-| Violations with severity indicators, OATH status, agency color-coding                                 | Done   |
-| Applications with status tracking                                                                     | Done   |
-| Collapsible/expandable row design                                                                     | Done   |
-| Search and filter functionality                                                                       | Done   |
-| Age-based suppression (Phase 3A)                                                                      | Done   |
-| OATH disposition reconciliation (Phase 3B)                                                            | Done   |
-| Complaint category decoding (Phase 3D)                                                                | Done   |
-| SWO/Vacate order detection from BIS jobs                                                              | Done   |
-| FDNY compliance monitoring (refrigeration, sprinklers, standpipes, fire alarms)                       | Done   |
-| Due Diligence reports (AI-generated)                                                                  | Done   |
-| Lease Q&A with document intelligence                                                                  | Done   |
-| Property AI chat                                                                                      | Done   |
-| Email digest system                                                                                   | Done   |
-| Work orders                                                                                           | Done   |
-| Vendor management                                                                                     | Done   |
-| Calendar page (hearings, deadlines, expirations)                                                      | Done   |
-| Portfolios                                                                                            | Done   |
-| Dashboard overview with stats, agency breakdown, recent violations                                    | Done   |
-
-
-### Not Yet Built
-
-
-| Feature                                                              | Phase | Complexity                                              |
-| -------------------------------------------------------------------- | ----- | ------------------------------------------------------- |
-| Local Law Applicability Engine (LL11, LL84, LL97, LL87, LL152, etc.) | 2     | Done                                                    |
-| OER (Office of Environmental Remediation) tracking in Status & Restrictions | 2 | Medium — add E-designation, Phase I/II ESA status, OER enrollment |
-| Tax and Protest Tracking                                             | 2     | Medium                                                  |
-| Tenant Management (tags on applications)                             | 2     | Low                                                     |
-| Violation-Specific Guidance templates (Phase 3C)                     | 3     | Medium (roadmapped)                                     |
-| In-App Notification Center                                           | 4     | Medium - roadmap                                        |
-| Priority Routing (critical/high/normal/low)                          | 4     | Medium                                                  |
-| Per-Property Alert Settings                                          | 4     | Low                                                     |
-| Telegram Bot Integration                                             | 4/6   | High - now and this inteact wiht the ai of the app now? |
-| Violation Trend Charts                                               | 5     | Low - roadmap                                           |
-| Compliance Score System (0-100)                                      | 5     | Done                                                    |
-| Hearing Calendar Enhancement (detail panel, reminders)               | 5     | Medium - roadmap                                        |
-| Google Calendar Integration                                          | 7     | Medium - roadmap                                        |
-| Enhanced Document Intelligence (vector embeddings, RAG)              | 7     | High - roadmap i already built a rag                    |
-| White Label / Multi-tenant                                           | 7     | High                                                    |
-
+This plan covers three major capabilities you'll need as a product owner: monitoring your external API health, managing your users, and providing remote support.
 
 ---
 
-## Recommended Implementation Order
+## 1. NYC Open Data API Call Logging
 
-Given what is already built, here is the sequenced build plan, grouped into sprints:
+### What it does
 
-### Sprint 1: Local Law Applicability Engine (Phase 2 gap — highest business value)
+Every outgoing call to NYC Open Data (DOB Jobs, PLUTO, ECB violations, OATH hearings, etc.) gets logged with endpoint, status code, response time, and any errors. You'll see a dashboard showing:
 
-This is the biggest missing piece from Phase 2 and directly feeds the Compliance Score in Phase 5.
+- Real-time API health (green/yellow/red per dataset)
+- Error rate trends over time (catch dataset access changes like the PAD 403 early)
+- Average response times per endpoint
+- Total call volume by day/week
 
-**Database:**
+### How it works
 
-- Create `compliance_requirements` table: id, property_id (FK), local_law (text), requirement_name, cycle_year, due_date, filing_deadline, status (pending/compliant/overdue/exempt), last_filed_date, next_due_date, penalty_amount, notes, created_at, updated_at
-- RLS scoped through properties.user_id
-
-**New files:**
-
-- `src/lib/local-law-engine.ts` — Rules for LL11 (facade/FISP), LL84 (benchmarking), LL97 (emissions), LL87 (energy audit), LL152 (gas piping), LL33/95 (inspection after gas incident), LL62 (elevators), LL77 (wind safety), LL126 (building gas detection), etc.
-- Each rule: applicability check (sqft thresholds, stories, building type, has_gas, has_elevator), cycle logic (sub-cycle by last digit of block, FISP sub-cycles A/B/C), due date calculation, penalty amounts
-- `getApplicableLaws(property)` returns list of requirements with status
-
-**UI:**
-
-- New tab or section on PropertyOverviewTab showing Local Law compliance grid
-- Status badges (compliant/due soon/overdue/exempt)
-- Educational tooltips explaining each law
-
-**Sync integration:**
-
-- Run applicability check after property data enrichment
-- Upsert requirements into compliance_requirements table
-
-### Sprint 2: Notification Center (Phase 4A + 4B)
-
-**Database:**
-
-- Create `notifications` table with user_id, title, body, notification_type, priority, property_id, action_url, read/dismissed status, expires_at
-- RLS: users see their own; service role inserts
-- Enable realtime on notifications table
-
-**New files:**
-
-- `src/components/NotificationBell.tsx` — Bell icon with unread badge, popover with latest 10, mark-all-read
-- `src/lib/notification-priority.ts` — Priority determination (SWO/vacate = critical, new violations = high, status changes = normal)
-- `src/pages/dashboard/NotificationsPage.tsx` — Full history with filters
-
-**Updates:**
-
-- DashboardSidebar: Add NotificationBell
-- App.tsx: Add notifications route
-- scheduled-sync: Create notifications after detecting changes, route by priority
-
-### Sprint 3: Per-Property Alert Settings + Compliance Score (Phase 4C + 5B)
-
-**Database:**
-
-- Create `property_alert_settings` table (notify toggles, quiet hours, days-before-deadline)
-- Create `compliance_scores` table (score, breakdown components, score_date)
-
-**New files:**
-
-- `src/lib/compliance-scoring.ts` — Score formula using violations (40pts) + Local Law compliance (40pts) + response time (20pts)
-
-**UI:**
-
-- PropertySettingsTab: Alert toggle switches, deadline slider, quiet hours
-- PropertyOverviewTab: Compliance score card with letter grade
-- DashboardOverview: Average score across portfolio
-- PropertiesPage: Score column in table
-
-### Sprint 4: Analytics + Calendar Enhancement (Phase 5A + 5C)
-
-**New files:**
-
-- `src/components/dashboard/ViolationTrendChart.tsx` — recharts LineChart, 12-month rolling, by severity
-
-**Database:**
-
-- Create `hearing_calendar` table for detailed hearing tracking with reminder flags
-
-**Updates:**
-
-- DashboardOverview: Add trend chart card
-- CalendarPage: Click-to-detail panel, "Today" button, stats bar
-- scheduled-sync: Upsert hearing_calendar entries, create reminder notifications at 7/3/1 days
-
-### Sprint 5: Tax Tracking + Tenant Management (Phase 2 gaps)
-
-**Database:**
-
-- Create `property_taxes` table: property_id, tax_year, amount, payment_date, tenant_responsible, protest_status, attorney, notes
-- Add tenant_name column to applications table
-
-**UI:**
-
-- PropertyOverviewTab: Tax history section with protest status
-- ApplicationsPage: Tenant name column and filter
-
-### Sprint 6: Telegram Bot (Phase 6) — now
-
-**Backend:**
-
-- New edge function `telegram-webhook/index.ts` for incoming messages
-- New edge function `send-telegram/index.ts` for outgoing messages
-- AI-powered intent parsing using supported models (Gemini)
-- Bot registration with BotFather
-
-**Database:**
-
-- Create `telegram_users` table linking Telegram chat_id to user_id
-- Add telegram_chat_id to notification delivery
-
-**Features:**
-
-- Query violations, compliance, hearings by property
-- Daily/weekly digest via Telegram
-- Group chat coordination
-
-### Sprint 7: Advanced Features (Phase 7) — Future
-
-- Google Calendar OAuth integration
-- Enhanced document intelligence (vector embeddings)
-- White label / multi-tenant architecture
+- A lightweight wrapper function intercepts all `fetch()` calls to `data.cityofnewyork.us` and logs results to an `api_call_logs` table
+- The admin panel reads from this table with filters by endpoint, status, date range
+- No impact on user-facing performance (logging is fire-and-forget)
 
 ---
 
-## Technical Notes
+## 2. User Management Panel
 
-- All new tables follow existing RLS patterns (scoped through properties.user_id or direct user_id = auth.uid())
-- No new API keys needed for Sprints 1-5 (all NYC Open Data APIs are free)
-- Telegram Bot (Sprint 6) will need a TELEGRAM_BOT_TOKEN secret
-- Local Law engine is the critical dependency for Compliance Scoring — must be built first
-- Recharts is already installed for trend charts
-- Realtime can be enabled on notifications table for instant updates
-- Compliance scores recalculated during nightly sync
+### What you can see and do
+
+- **User list**: email, signup date, last active, property count, AI questions used this month
+- **User detail view**: their properties, violation counts, subscription status (future Stripe), AI usage
+- **Account actions**: disable/enable account, reset password (sends email), add admin notes
+- **Usage analytics**: active users over time, feature adoption (who uses AI, DD reports, etc.)
+
+### Role system
+
+- A new `user_role` column on the `profiles` table: `owner` (default), `admin`
+- Admin routes are protected -- only users with `role = 'admin'` can access `/dashboard/admin/*`
+- You manually set yourself as admin via a one-time database update
+
+---
+
+## 3. Remote Support / "Login As User"
+
+### What's typical in SaaS products
+
+The industry-standard approach is called **"impersonation"** or **"login-as"**:
+
+- Admin clicks "View as [user]" from the user management panel
+- The app loads that user's data in a read-only or full-access mode
+- A prominent banner shows "You are viewing as [user@email.com](mailto:user@email.com) -- Exit"
+- All admin actions while impersonating are logged for audit
+
+### How we'd implement it
+
+- An edge function `admin-impersonate` that:
+  1. Verifies the caller is an admin
+  2. Generates a short-lived session token for the target user
+  3. Returns it to the admin's browser
+- The frontend stores the impersonation token and swaps the auth context
+- A yellow banner appears at the top: "Viewing as [user@example.com](mailto:user@example.com)" with an "Exit" button
+- All actions during impersonation are logged to an `admin_audit_log` table
+
+### Privacy and trust
+
+- Users can optionally see "An admin viewed your account on [date]" in their settings (transparency)
+- Impersonation sessions auto-expire after 30 minutes
+- No password access -- admins never see or use user passwords
+
+---
+
+## Technical Implementation Details
+
+### New database tables
+
+```text
+api_call_logs
+  - id, created_at
+  - endpoint (text) -- e.g. "PLUTO", "DOB_JOBS", "ECB"
+  - url (text)
+  - status_code (int)
+  - response_time_ms (int)
+  - error_message (text, nullable)
+  - property_id (uuid, nullable)
+  - user_id (uuid, nullable)
+
+admin_audit_log
+  - id, created_at
+  - admin_user_id (uuid)
+  - action (text) -- "impersonate", "disable_user", "reset_password"
+  - target_user_id (uuid)
+  - metadata (jsonb)
+```
+
+### New files
+
+```text
+src/pages/dashboard/admin/
+  AdminOverview.tsx        -- API health dashboard + user stats
+  AdminUsersPage.tsx       -- User list with search/filter
+  AdminUserDetailPage.tsx  -- Individual user deep-dive
+  AdminAPILogsPage.tsx     -- API call log table with filters
+
+src/lib/api-logger.ts     -- Wrapper that logs fetch calls
+
+supabase/functions/admin-impersonate/index.ts  -- Impersonation token generator
+```
+
+### Route structure
+
+```text
+/dashboard/admin           -- Overview (API health + stats)
+/dashboard/admin/users     -- User management
+/dashboard/admin/users/:id -- User detail
+/dashboard/admin/api-logs  -- API call logs
+```
+
+### Sidebar update
+
+- New "Admin" section at bottom of sidebar (only visible to admin role users) ok what other features like billing or someting would we need?
+- Icon: Shield or ShieldCheck from lucide-react
+
+### RLS policies
+
+- `api_call_logs`: any authenticated user can INSERT (for logging), only admins can SELECT
+- `admin_audit_log`: only admins can INSERT and SELECT
+- Admin check: `EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role = 'admin')`
+
+---
+
+## Implementation order
+
+1. Add `role` column to `profiles` table + set yourself as admin
+2. Create `api_call_logs` table + `api-logger.ts` wrapper
+3. Wire the logger into `nyc-building-sync.ts`, `SmartAddressAutocomplete.tsx`, and edge functions
+4. Build Admin API Logs page with charts
+5. Create `AdminUsersPage` with user list from profiles + ai_usage
+6. Build user detail view
+7. Add impersonation edge function + frontend support
+8. Create `admin_audit_log` table and wire up audit logging
