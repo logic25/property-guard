@@ -75,10 +75,12 @@ export const PropertyAIWidget = ({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const isDialogOpenRef = useRef(false);
   const [unreadCount, setUnreadCount] = useState(0);
   // Refetch messages when dialog opens (catches Telegram messages)
   const handleDialogOpen = (open: boolean) => {
     setIsDialogOpen(open);
+    isDialogOpenRef.current = open;
     if (open) {
       setUnreadCount(0);
       queryClient.invalidateQueries({ queryKey: ['property-ai-conversation', propertyId] });
@@ -178,8 +180,8 @@ export const PropertyAIWidget = ({
             if (prev.some(m => m.id === newMsg.id)) return prev;
             return [...prev, { id: newMsg.id, role: newMsg.role as 'user' | 'assistant', content: newMsg.content }];
           });
-          // Track unread when dialog is closed
-          if (!isDialogOpen) {
+          // Track unread when dialog is closed (use ref to avoid stale closure)
+          if (!isDialogOpenRef.current) {
             setUnreadCount(prev => prev + 1);
           }
           queryClient.invalidateQueries({ queryKey: ['property-ai-messages', conversationId] });
@@ -190,7 +192,7 @@ export const PropertyAIWidget = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId, queryClient, isDialogOpen]);
+  }, [conversationId, queryClient]);
 
   // Fetch all documents with extracted text for context
   const { data: allDocuments } = useQuery({
