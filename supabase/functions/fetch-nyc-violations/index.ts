@@ -613,6 +613,102 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== OATH RECONCILIATION FOR ECB VIOLATIONS =====
+    // Cross-reference ECB violations with OATH hearing outcomes
+    if (agenciesToSync.includes("ECB") && property_id) {
+      try {
+        // Get all open ECB violations for this property
+        const { data: openECBViolations } = await supabase
+          .from("violations")
+          .select("id, violation_number, status")
+          .eq("property_id", property_id)
+          .eq("agency", "ECB")
+          .eq("status", "open");
+
+        if (openECBViolations && openECBViolations.length > 0) {
+          console.log(`OATH Reconciliation: Checking ${openECBViolations.length} open ECB violations`);
+          
+          for (const ecbViol of openECBViolations) {
+            try {
+              // Query OATH by violation_number (ECB summons number)
+              const oathData = await safeFetch(
+                `${NYC_OPEN_DATA_ENDPOINTS.OATH_HEARINGS}?ticket_number=${encodeURIComponent(ecbViol.violation_number)}&$limit=5&$order=hearing_date_time DESC`,
+                `OATH_RECON/${ecbViol.violation_number}`
+              );
+
+              if (oathData.length > 0) {
+                const latest = oathData[0] as Record<string, unknown>;
+                
+                const hearingStatus = (latest.hearing_status || '') as string;
+                const hearingResult = (latest.hearing_result || '') as string;
+                const disposition = hearingResult || hearingStatus;
+                const hearingDate = latest.hearing_date_time ? (latest.hearing_date_time as string).split('T')[0] : null;
+                const penaltyImposed = latest.penalty_imposed ? parseFloat(latest.penalty_imposed as string) : null;
+                const amountPaid = latest.total_amount_paid ? parseFloat(latest.total_amount_paid as string) : null;
+                const balanceDue = latest.amount_due ? parseFloat(latest.amount_due as string) : null;
+
+                // Upsert into oath_hearings
+                await supabase
+                  .from("oath_hearings")
+                  .upsert({
+                    summons_number: ecbViol.violation_number,
+                    hearing_date: hearingDate,
+                    hearing_status: hearingStatus,
+                    disposition: disposition,
+                    disposition_date: hearingDate,
+                    penalty_amount: penaltyImposed,
+                    amount_paid: amountPaid,
+                    balance_due: balanceDue,
+                    penalty_paid: (balanceDue !== null && balanceDue <= 0) || false,
+                    violation_id: ecbViol.id,
+                    property_id,
+                    last_synced_at: now,
+                    raw_data: latest,
+                  }, { onConflict: 'summons_number' });
+
+                // Auto-close if dismissed or not guilty
+                const dispositionUpper = disposition.toUpperCase();
+                if (dispositionUpper.includes('DISMISSED') || dispositionUpper.includes('NOT GUILTY') || 
+                    dispositionUpper.includes('WRITTEN OFF') || dispositionUpper.includes('VACATED')) {
+                  await supabase
+                    .from("violations")
+                    .update({
+                      status: 'closed',
+                      disposition_code: disposition,
+                      disposition_comments: `OATH: ${disposition}`,
+                    })
+                    .eq("id", ecbViol.id);
+
+                  console.log(`  OATH auto-closed ECB ${ecbViol.violation_number}: ${disposition}`);
+                } else {
+                  // Update OATH status on the violation even if not closing
+                  const oathStatusStr = [hearingStatus, hearingResult].filter(Boolean).join(' | ');
+                  if (oathStatusStr) {
+                    await supabase
+                      .from("violations")
+                      .update({
+                        oath_status: oathStatusStr,
+                        penalty_amount: penaltyImposed ?? undefined,
+                        amount_paid: amountPaid ?? undefined,
+                        balance_due: balanceDue ?? undefined,
+                      })
+                      .eq("id", ecbViol.id);
+                  }
+                }
+              }
+
+              // Rate limit: small delay between OATH lookups
+              await new Promise(resolve => setTimeout(resolve, 200));
+            } catch (oathErr) {
+              console.error(`OATH reconciliation error for ${ecbViol.violation_number}:`, oathErr);
+            }
+          }
+        }
+      } catch (oathReconcileErr) {
+        console.error("OATH reconciliation error:", oathReconcileErr);
+      }
+    }
+
     // Deduplicate by composite key: agency + violation_number
     // Different agencies can have overlapping violation numbers
     const uniqueViolations = Array.from(

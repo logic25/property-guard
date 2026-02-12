@@ -25,7 +25,7 @@ import {
 import { 
   AlertTriangle, Plus, Search, Loader2, Calendar, Building2, RefreshCw,
   ArrowUpDown, ExternalLink, DollarSign, Gavel, ChevronRight, ChevronDown,
-  FileText, User, MessageSquare, Save, MoreHorizontal, Wrench
+  FileText, User, MessageSquare, Save, MoreHorizontal, Wrench, Scale
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { isActiveViolation, getAgencyColor, getAgencyLookupUrl, getStatusColor } from '@/lib/violation-utils';
@@ -83,11 +83,13 @@ const ViolationsPage = () => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
   const [savingNotes, setSavingNotes] = useState<Set<string>>(new Set());
+  const [oathHearings, setOathHearings] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState({
     property_id: '', agency: '' as string, violation_number: '', issued_date: '',
     hearing_date: '', cure_due_date: '', description_raw: '', notes: '',
   });
+
 
   const fetchData = async () => {
     if (!user) return;
@@ -131,6 +133,27 @@ const ViolationsPage = () => {
   };
 
   useEffect(() => { fetchData(); }, [user]);
+
+  // Fetch OATH hearings for ECB violations
+  useEffect(() => {
+    const ecbViolations = violations.filter(v => v.agency === 'ECB');
+    if (ecbViolations.length === 0) return;
+    
+    const fetchOath = async () => {
+      const ecbIds = ecbViolations.map(v => v.id);
+      const { data } = await supabase
+        .from('oath_hearings')
+        .select('*')
+        .in('violation_id', ecbIds);
+      
+      if (data) {
+        const map: Record<string, any> = {};
+        data.forEach((h: any) => { if (h.violation_id) map[h.violation_id] = h; });
+        setOathHearings(map);
+      }
+    };
+    fetchOath();
+  }, [violations]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -580,7 +603,47 @@ const ViolationsPage = () => {
                                         </div>
                                       );
                                     })()}
-                                    {v.oath_status && (
+                                    {/* OATH Hearing Card */}
+                                    {v.agency === 'ECB' && oathHearings[v.id] && (() => {
+                                      const oath = oathHearings[v.id];
+                                      const dispColor = oath.disposition?.toUpperCase().includes('DISMISSED') || oath.disposition?.toUpperCase().includes('NOT GUILTY')
+                                        ? 'text-green-600 bg-green-500/10 border-green-200'
+                                        : oath.disposition?.toUpperCase().includes('GUILTY') || oath.disposition?.toUpperCase().includes('DEFAULT')
+                                        ? 'text-red-600 bg-red-500/10 border-red-200'
+                                        : 'text-yellow-600 bg-yellow-500/10 border-yellow-200';
+                                      return (
+                                        <div className="rounded-lg border p-3 bg-muted/30 space-y-2">
+                                          <div className="flex items-center gap-2">
+                                            <Scale className="w-4 h-4 text-muted-foreground" />
+                                            <span className="font-semibold text-sm">OATH Hearing</span>
+                                            {oath.disposition && (
+                                              <Badge variant="outline" className={`text-xs ${dispColor}`}>
+                                                {oath.disposition}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                            {oath.hearing_date && (
+                                              <div><span className="text-muted-foreground">Hearing:</span> {new Date(oath.hearing_date).toLocaleDateString()}</div>
+                                            )}
+                                            {oath.hearing_status && (
+                                              <div><span className="text-muted-foreground">Status:</span> {oath.hearing_status}</div>
+                                            )}
+                                            {oath.penalty_amount != null && (
+                                              <div><span className="text-muted-foreground">Penalty:</span> <span className="text-destructive font-medium">${oath.penalty_amount.toLocaleString()}</span></div>
+                                            )}
+                                            {oath.amount_paid != null && (
+                                              <div><span className="text-muted-foreground">Paid:</span> ${oath.amount_paid.toLocaleString()}</div>
+                                            )}
+                                            {oath.balance_due != null && oath.balance_due > 0 && (
+                                              <div><span className="text-muted-foreground">Balance:</span> <span className="text-destructive font-medium">${oath.balance_due.toLocaleString()}</span></div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {v.oath_status && !oathHearings[v.id] && (
                                       <div className="flex gap-2">
                                         <span className="text-muted-foreground w-28 shrink-0">OATH Status:</span>
                                         <Badge variant="outline">{v.oath_status}</Badge>

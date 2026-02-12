@@ -164,6 +164,38 @@ Deno.serve(async (req) => {
           console.error(`  -> Sync failed: ${response.status}`);
         }
 
+        // --- Apply age-based suppression ---
+        try {
+          const { data: openViolations } = await supabase
+            .from("violations")
+            .select("id, agency, issued_date, status, suppressed")
+            .eq("property_id", property.id)
+            .eq("status", "open")
+            .eq("suppressed", false);
+
+          if (openViolations && openViolations.length > 0) {
+            const AGING_RULES: Record<string, number> = { ECB: 730, DOB: 1095, HPD: 1095 };
+            let suppressedCount = 0;
+
+            for (const v of openViolations) {
+              const rule = AGING_RULES[v.agency];
+              if (!rule) continue;
+              const daysSince = Math.floor((Date.now() - new Date(v.issued_date).getTime()) / (1000 * 60 * 60 * 24));
+              if (daysSince > rule) {
+                const years = Math.floor(daysSince / 365);
+                await supabase.from("violations").update({
+                  suppressed: true,
+                  suppression_reason: `${v.agency} violation open >${Math.floor(rule / 365)} years likely resolved but not updated (${years} year${years !== 1 ? 's' : ''} old)`,
+                }).eq("id", v.id);
+                suppressedCount++;
+              }
+            }
+            if (suppressedCount > 0) console.log(`  -> Suppressed ${suppressedCount} stale violations`);
+          }
+        } catch (suppressErr) {
+          console.error("Suppression error:", suppressErr);
+        }
+
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (error) {
         results.errors++;

@@ -70,8 +70,22 @@ import {
 import { calculateViolationSeverity, getSeverityBadgeClasses } from '@/lib/violation-severity';
 import { CreateWorkOrderDialog } from '@/components/violations/CreateWorkOrderDialog';
 import { decodeComplaintCategory, getComplaintSeverityColor } from '@/lib/complaint-category-decoder';
+import { Gavel } from 'lucide-react';
 import { shouldSuppressViolation } from '@/lib/violation-aging';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+interface OATHHearing {
+  id: string;
+  summons_number: string;
+  hearing_date: string | null;
+  hearing_status: string | null;
+  disposition: string | null;
+  disposition_date: string | null;
+  penalty_amount: number | null;
+  amount_paid: number | null;
+  balance_due: number | null;
+  penalty_paid: boolean;
+}
 
 interface Violation {
   id: string;
@@ -193,6 +207,29 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   // Show suppressed toggle
   const [showSuppressed, setShowSuppressed] = useState(false);
+  // OATH hearings data
+  const [oathHearings, setOathHearings] = useState<Record<string, OATHHearing>>({});
+
+  // Fetch OATH hearings for ECB violations
+  useEffect(() => {
+    const ecbViolationIds = violations.filter(v => v.agency === 'ECB').map(v => v.id);
+    if (ecbViolationIds.length === 0) return;
+    
+    const fetchOathHearings = async () => {
+      const { data } = await supabase
+        .from('oath_hearings')
+        .select('*')
+        .eq('property_id', propertyId)
+        .in('violation_id', ecbViolationIds);
+      
+      if (data) {
+        const map: Record<string, OATHHearing> = {};
+        data.forEach((h: any) => { if (h.violation_id) map[h.violation_id] = h; });
+        setOathHearings(map);
+      }
+    };
+    fetchOathHearings();
+  }, [violations, propertyId]);
 
   const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))].sort(), [violations]);
   const violationTypes = useMemo(() => [...new Set(violations.map(v => v.violation_type).filter(Boolean))].sort() as string[], [violations]);
@@ -785,7 +822,50 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                                         </div>
                                       )}
 
-                                      {violation.oath_status && (
+                                      {/* OATH Hearing Card */}
+                                      {violation.agency === 'ECB' && oathHearings[violation.id] && (() => {
+                                        const oath = oathHearings[violation.id];
+                                        const dispColor = oath.disposition?.toUpperCase().includes('DISMISSED') || oath.disposition?.toUpperCase().includes('NOT GUILTY')
+                                          ? 'text-green-600 bg-green-500/10 border-green-200'
+                                          : oath.disposition?.toUpperCase().includes('GUILTY') || oath.disposition?.toUpperCase().includes('DEFAULT')
+                                          ? 'text-red-600 bg-red-500/10 border-red-200'
+                                          : 'text-yellow-600 bg-yellow-500/10 border-yellow-200';
+                                        return (
+                                          <div className="rounded-lg border p-3 bg-muted/30 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                              <Gavel className="w-4 h-4 text-muted-foreground" />
+                                              <span className="font-semibold text-sm">OATH Hearing</span>
+                                              {oath.disposition && (
+                                                <Badge variant="outline" className={`text-xs ${dispColor}`}>
+                                                  {oath.disposition}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                              {oath.hearing_date && (
+                                                <div><span className="text-muted-foreground">Hearing:</span> {new Date(oath.hearing_date).toLocaleDateString()}</div>
+                                              )}
+                                              {oath.hearing_status && (
+                                                <div><span className="text-muted-foreground">Status:</span> {oath.hearing_status}</div>
+                                              )}
+                                              {oath.penalty_amount != null && (
+                                                <div><span className="text-muted-foreground">Penalty:</span> <span className="text-destructive font-medium">${oath.penalty_amount.toLocaleString()}</span></div>
+                                              )}
+                                              {oath.amount_paid != null && (
+                                                <div><span className="text-muted-foreground">Paid:</span> ${oath.amount_paid.toLocaleString()}</div>
+                                              )}
+                                              {oath.balance_due != null && oath.balance_due > 0 && (
+                                                <div><span className="text-muted-foreground">Balance:</span> <span className="text-destructive font-medium">${oath.balance_due.toLocaleString()}</span></div>
+                                              )}
+                                              {oath.penalty_paid && (
+                                                <div><Badge variant="outline" className="text-[10px] text-green-600 bg-green-500/10">Paid</Badge></div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {violation.oath_status && !oathHearings[violation.id] && (
                                         <div className="flex gap-2">
                                           <span className="text-muted-foreground w-24">OATH Status:</span>
                                           <Badge variant="outline">{violation.oath_status}</Badge>
