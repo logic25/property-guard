@@ -13,7 +13,7 @@ const TelegramTab = () => {
   const [telegramUser, setTelegramUser] = useState<any>(null);
   const [isUnlinking, setIsUnlinking] = useState(false);
 
-  const botUsername = 'PropertyGuardBot'; // Users should update this
+  const botUsername = 'ComplianceIQBot';
 
   useEffect(() => {
     fetchTelegramLink();
