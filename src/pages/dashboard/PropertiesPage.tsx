@@ -256,34 +256,67 @@ const PropertiesPage = () => {
     );
   }
 
+  // Summary stats
+  const totalProperties = properties.length;
+  const totalViolations = properties.reduce((sum, p) => sum + (p.violations_count || 0), 0);
+  const propertiesWithIssues = properties.filter(p => (p.violations_count || 0) > 0).length;
+  const compliantProperties = totalProperties - propertiesWithIssues;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl font-bold text-foreground">Properties</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your buildings and track compliance
-          </p>
+      {/* Bold Header Banner */}
+      <div className="gradient-hero rounded-2xl p-6 md:p-8 shadow-elevated">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-display text-2xl md:text-3xl font-bold text-primary-foreground">
+              Properties
+            </h1>
+            <p className="text-primary-foreground/60 mt-1 text-sm">
+              Manage your buildings and track compliance
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              onClick={syncAllViolations}
+              disabled={isSyncing || properties.length === 0}
+              className="border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/10 bg-primary-foreground/5"
+            >
+              {isSyncing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              {isSyncing ? 'Syncing...' : 'Sync All'}
+            </Button>
+            <Button variant="hero" onClick={() => setIsDialogOpen(true)}>
+              <Plus className="w-4 h-4" />
+              Add Property
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button 
-            variant="outline" 
-            onClick={syncAllViolations}
-            disabled={isSyncing || properties.length === 0}
-          >
-            {isSyncing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            {isSyncing ? 'Syncing...' : 'Sync All'}
-          </Button>
-          <Button variant="hero" onClick={() => setIsDialogOpen(true)}>
-            <Plus className="w-4 h-4" />
-            Add Property
-          </Button>
-        </div>
+
+        {/* Summary Stats Row */}
+        {totalProperties > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-primary-foreground/10 backdrop-blur-sm rounded-xl p-4 border border-primary-foreground/10">
+              <div className="text-2xl font-display font-bold text-primary-foreground">{totalProperties}</div>
+              <div className="text-xs text-primary-foreground/60 font-medium">Total Properties</div>
+            </div>
+            <div className="bg-primary-foreground/10 backdrop-blur-sm rounded-xl p-4 border border-primary-foreground/10">
+              <div className="text-2xl font-display font-bold text-accent">{totalViolations}</div>
+              <div className="text-xs text-primary-foreground/60 font-medium">Open Violations</div>
+            </div>
+            <div className="bg-primary-foreground/10 backdrop-blur-sm rounded-xl p-4 border border-primary-foreground/10">
+              <div className="text-2xl font-display font-bold text-destructive">{propertiesWithIssues}</div>
+              <div className="text-xs text-primary-foreground/60 font-medium">With Issues</div>
+            </div>
+            <div className="bg-primary-foreground/10 backdrop-blur-sm rounded-xl p-4 border border-primary-foreground/10">
+              <div className="text-2xl font-display font-bold text-success">{compliantProperties}</div>
+              <div className="text-xs text-primary-foreground/60 font-medium">Compliant</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Search and View Toggle */}
@@ -320,18 +353,18 @@ const PropertiesPage = () => {
       {/* Properties Display */}
       {filteredProperties.length > 0 ? (
         viewMode === 'table' ? (
-          <div className="rounded-xl border border-border overflow-hidden bg-card">
+          <div className="rounded-xl border border-border overflow-hidden bg-card shadow-card">
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="font-semibold">Address</TableHead>
-                  <TableHead className="font-semibold">Borough</TableHead>
-                  <TableHead className="font-semibold">Type</TableHead>
-                  <TableHead className="font-semibold">CO Status</TableHead>
-                  <TableHead className="font-semibold">Agencies</TableHead>
-                  <TableHead className="font-semibold text-center">Violations</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
-                  <TableHead className="font-semibold">Last Synced</TableHead>
+                <TableRow className="bg-primary text-primary-foreground hover:bg-primary">
+                  <TableHead className="font-semibold text-primary-foreground">Address</TableHead>
+                  <TableHead className="font-semibold text-primary-foreground">Borough</TableHead>
+                  <TableHead className="font-semibold text-primary-foreground">Type</TableHead>
+                  <TableHead className="font-semibold text-primary-foreground">CO Status</TableHead>
+                  <TableHead className="font-semibold text-primary-foreground">Agencies</TableHead>
+                  <TableHead className="font-semibold text-primary-foreground text-center">Violations</TableHead>
+                  <TableHead className="font-semibold text-primary-foreground">Status</TableHead>
+                  <TableHead className="font-semibold text-primary-foreground">Last Synced</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
