@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { getSourceBadge } from '@/lib/application-utils';
+import { TenantTagEditor } from './TenantTagEditor';
 
 interface PropertyApplicationsTabProps {
   propertyId: string;
@@ -40,6 +41,8 @@ interface Application {
   dwelling_units: number | null;
   floor_area: number | null;
   notes: string | null;
+  tenant_name: string | null;
+  tenant_notes: string | null;
   raw_data: Record<string, unknown> | null;
 }
 
@@ -287,7 +290,8 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
       const matchesSearch = !searchQuery ||
         app.application_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         app.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        app.applicant_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        app.applicant_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.tenant_name?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
       const decodedStatus = decodeStatus(app.status, app.source);
       const matchesStatus = selectedStatuses.size === 0 || selectedStatuses.has(decodedStatus);
@@ -737,7 +741,10 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               )}
 
               <div className="mt-3 pt-3 border-t border-border flex items-start justify-between gap-4">
-                <NotesEditor appId={app.id} initialNotes={app.notes} />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <NotesEditor appId={app.id} initialNotes={app.notes} />
+                  <TenantTagEditor appId={app.id} initialTenantName={app.tenant_name} initialTenantNotes={app.tenant_notes} />
+                </div>
                 <Button
                   variant="outline"
                   size="sm"

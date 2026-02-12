@@ -17,6 +17,7 @@ import { PropertyViolationsTab } from '@/components/properties/detail/PropertyVi
 import { PropertyDocumentsTab } from '@/components/properties/detail/PropertyDocumentsTab';
 import { PropertyWorkOrdersTab } from '@/components/properties/detail/PropertyWorkOrdersTab';
 import { PropertyActivityTab } from '@/components/properties/detail/PropertyActivityTab';
+import { PropertyTaxesTab } from '@/components/properties/detail/PropertyTaxesTab';
 import { PropertySettingsTab } from '@/components/properties/PropertySettingsTab';
 import { EditPropertyDialog } from '@/components/properties/EditPropertyDialog';
 import { getBoroughName } from '@/lib/property-utils';
@@ -369,7 +370,7 @@ const PropertyDetailPage = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-7 max-w-4xl">
+        <TabsList className="grid w-full grid-cols-8 max-w-5xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="violations">
             Violations {openViolations > 0 && `(${openViolations})`}
@@ -383,6 +384,7 @@ const PropertyDetailPage = () => {
           <TabsTrigger value="work-orders">
             Work Orders {workOrders.length > 0 && `(${workOrders.length})`}
           </TabsTrigger>
+          <TabsTrigger value="taxes">Taxes</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -425,6 +427,10 @@ const PropertyDetailPage = () => {
             violations={violations}
             onRefresh={fetchPropertyData}
           />
+        </TabsContent>
+
+        <TabsContent value="taxes" className="mt-6">
+          <PropertyTaxesTab propertyId={property.id} />
         </TabsContent>
 
         <TabsContent value="activity" className="mt-6">
