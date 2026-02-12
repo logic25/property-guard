@@ -177,6 +177,22 @@ const ApplicationsPage = () => {
     enabled: !!user?.id,
   });
 
+  // Last sync timestamp
+  const { data: lastSyncTime } = useQuery({
+    queryKey: ['last-sync-time', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('properties')
+        .select('last_synced_at')
+        .eq('user_id', user!.id)
+        .not('last_synced_at', 'is', null)
+        .order('last_synced_at', { ascending: false })
+        .limit(1);
+      return data?.[0]?.last_synced_at || null;
+    },
+    enabled: !!user?.id,
+  });
+
   const handleSync = async () => {
     toast({ title: "Syncing applications...", description: "Fetching latest data from NYC Open Data." });
     await refetch();
@@ -216,22 +232,10 @@ const ApplicationsPage = () => {
   const toggleStatus = (s: string) => setSelectedStatuses(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
   const toggleSource = (s: string) => setSelectedSources(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
 
-  const filteredApplications = useMemo(() => {
-    return (applications || []).filter(app => {
-      const matchesSearch = searchQuery === '' ||
-        app.application_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        app.properties?.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        app.description?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
-      const decoded = decodeStatus(app.status, app.source);
-      const matchesStatus = selectedStatuses.size === 0 || selectedStatuses.has(decoded);
-      const matchesSource = selectedSources.size === 0 || selectedSources.has(app.source);
-      return matchesSearch && matchesAgency && matchesStatus && matchesSource;
-    });
-  }, [applications, searchQuery, agencyFilter, selectedStatuses, selectedSources]);
+  // (old filteredApplications removed — replaced by deduped version below)
 
-  // Build related filings map from ALL applications (not just filtered)
-  const relatedFilingsMap = useMemo(() => {
+  // Build job family map from ALL applications — group by job prefix
+  const jobFamilyMap = useMemo(() => {
     const map = new Map<string, Application[]>();
     (applications || []).forEach(app => {
       const { prefix, suffix } = parseFilingNumber(app.application_number);
@@ -242,6 +246,45 @@ const ApplicationsPage = () => {
     });
     return map;
   }, [applications]);
+
+  // Determine the primary app ID for each job family (latest filing_date)
+  const primaryAppIds = useMemo(() => {
+    const ids = new Set<string>();
+    const nonPrimaryIds = new Set<string>();
+    for (const [, family] of jobFamilyMap) {
+      if (family.length <= 1) {
+        if (family.length === 1) ids.add(family[0].id);
+        continue;
+      }
+      // Pick the one with the latest filing date as primary
+      const sorted = [...family].sort((a, b) => {
+        const da = a.filing_date ? new Date(a.filing_date).getTime() : 0;
+        const db = b.filing_date ? new Date(b.filing_date).getTime() : 0;
+        return db - da;
+      });
+      ids.add(sorted[0].id);
+      sorted.slice(1).forEach(a => nonPrimaryIds.add(a.id));
+    }
+    return { primary: ids, nonPrimary: nonPrimaryIds };
+  }, [jobFamilyMap]);
+
+  // Filter out non-primary family members from the displayed list
+  const filteredApplications = useMemo(() => {
+    return (applications || []).filter(app => {
+      // Skip non-primary family members
+      if (primaryAppIds.nonPrimary.has(app.id)) return false;
+
+      const matchesSearch = searchQuery === '' ||
+        app.application_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.properties?.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        app.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
+      const decoded = decodeStatus(app.status, app.source);
+      const matchesStatus = selectedStatuses.size === 0 || selectedStatuses.has(decoded);
+      const matchesSource = selectedSources.size === 0 || selectedSources.has(app.source);
+      return matchesSearch && matchesAgency && matchesStatus && matchesSource;
+    });
+  }, [applications, searchQuery, agencyFilter, selectedStatuses, selectedSources, primaryAppIds]);
 
   const activeCount = useMemo(() => {
     return (applications || []).filter(a => {
@@ -354,7 +397,7 @@ const ApplicationsPage = () => {
     const sb = getSourceBadge(app.source);
     const isBuild = app.source.startsWith('DOB NOW');
     const { prefix, suffix } = parseFilingNumber(app.application_number);
-    const relatedApps = suffix ? (relatedFilingsMap.get(prefix) || []).filter(a => a.id !== app.id) : [];
+    const relatedApps = (jobFamilyMap.get(prefix) || []).filter(a => a.id !== app.id);
 
     return (
       <>
@@ -490,10 +533,17 @@ const ApplicationsPage = () => {
       {/* Stats */}
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
         <span><strong>{applications?.length || 0}</strong> total applications</span>
+        <span><strong>{applications?.length || 0}</strong> total applications</span>
         <span>•</span>
         <span><strong>{activeCount}</strong> active</span>
         <span>•</span>
         <span><strong>{filteredApplications?.length || 0}</strong> shown</span>
+        {lastSyncTime && (
+          <>
+            <span>•</span>
+            <span className="text-xs">Last synced: {format(new Date(lastSyncTime), 'MMM d, yyyy h:mm a')}</span>
+          </>
+        )}
       </div>
 
       {/* Filters */}
