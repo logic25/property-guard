@@ -14,7 +14,8 @@ import {
   ChevronRight,
   FileStack,
   FileText,
-  Calendar
+  Calendar,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -27,6 +28,7 @@ const navItems = [
   { icon: FolderOpen, label: 'Portfolios', href: '/dashboard/portfolios' },
   { icon: FileStack, label: 'Applications', href: '/dashboard/applications' },
   { icon: AlertTriangle, label: 'Violations', href: '/dashboard/violations' },
+  { icon: Bell, label: 'Notifications', href: '/dashboard/notifications' },
   { icon: FileText, label: 'DD Reports', href: '/dashboard/dd-reports' },
   { icon: Users, label: 'Vendors', href: '/dashboard/vendors' },
   { icon: ClipboardList, label: 'Work Orders', href: '/dashboard/work-orders' },

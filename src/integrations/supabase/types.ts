@@ -442,6 +442,62 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          category: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          is_read: boolean
+          message: string
+          metadata: Json | null
+          priority: Database["public"]["Enums"]["notification_priority"]
+          property_id: string | null
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          metadata?: Json | null
+          priority?: Database["public"]["Enums"]["notification_priority"]
+          property_id?: string | null
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          metadata?: Json | null
+          priority?: Database["public"]["Enums"]["notification_priority"]
+          property_id?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       oath_hearings: {
         Row: {
           amount_paid: number | null
@@ -1310,6 +1366,7 @@ export type Database = {
         | "LPC"
         | "DOF"
       jurisdiction_type: "NYC" | "NON_NYC"
+      notification_priority: "critical" | "high" | "normal" | "low"
       violation_status: "open" | "in_progress" | "closed"
       work_order_status: "open" | "in_progress" | "awaiting_docs" | "completed"
     }
@@ -1451,6 +1508,7 @@ export const Constants = {
         "DOF",
       ],
       jurisdiction_type: ["NYC", "NON_NYC"],
+      notification_priority: ["critical", "high", "normal", "low"],
       violation_status: ["open", "in_progress", "closed"],
       work_order_status: ["open", "in_progress", "awaiting_docs", "completed"],
     },
