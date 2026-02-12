@@ -65,7 +65,7 @@ const BIS_STATUS_CODES: Record<string, string> = {
   'X': 'Signed Off / Completed',
 };
 
-const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'CO Issued', 'Letter of Completion'];
+const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'Complete', 'CO Issued', 'Letter of Completion', 'LOC Issued'];
 
 const normalizeStatusLabel = (status: string): string => {
   // Clean up verbose/redundant status labels from API
