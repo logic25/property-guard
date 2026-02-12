@@ -22,6 +22,11 @@ const SOURCE_MAP: Record<string, SourceBadge> = {
     color: 'text-blue-700 dark:text-blue-300',
     bgColor: 'bg-blue-100 dark:bg-blue-900/40',
   },
+  'DOB NOW Limited Alt': {
+    label: 'LAA',
+    color: 'text-blue-700 dark:text-blue-300',
+    bgColor: 'bg-blue-100 dark:bg-blue-900/40',
+  },
   'DOB NOW Elevator': {
     label: 'Elevator',
     color: 'text-violet-700 dark:text-violet-300',
