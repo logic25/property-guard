@@ -1415,6 +1415,7 @@ export type Database = {
         Args: { p_property_id: string }
         Returns: Json
       }
+      generate_deadline_reminders: { Args: never; Returns: undefined }
     }
     Enums: {
       agency_type:
