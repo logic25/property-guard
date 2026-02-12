@@ -1263,34 +1263,53 @@ Deno.serve(async (req) => {
 
               // Attempt to fetch the CO PDF listing page and download the PDF
               try {
-                const borough = ((coJob.borough || '') as string).toUpperCase();
-                const boroughNum = borough === 'MANHATTAN' ? '1' : borough === 'BRONX' ? '2' : borough === 'BROOKLYN' ? '3' : borough === 'QUEENS' ? '4' : borough === 'STATEN ISLAND' ? '5' : '0';
-                const pdfListUrl = `http://a810-bisweb.nyc.gov/bisweb/COPdfListingServlet?requestid=1&key=${jobNumber}&borough=${boroughNum}&bin=${bin}`;
+                // Use COsByLocationServlet which lists all COs for a BIN
+                const pdfListUrl = `http://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?requestid=0&allbin=${bin}`;
+                console.log(`Fetching CO PDF listing: ${pdfListUrl}`);
                 
                 const pdfListResp = await fetch(pdfListUrl, {
-                  headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PropertyMonitor/1.0)' },
+                  headers: { 
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml',
+                  },
                 });
+                
+                console.log(`CO listing response: ${pdfListResp.status} ${pdfListResp.statusText}`);
                 
                 if (pdfListResp.ok) {
                   const html = await pdfListResp.text();
-                  // Parse out PDF filename - pattern like "K000310206577.PDF" or similar
-                  const pdfMatch = html.match(/href="[^"]*?([A-Z]\d+\.PDF)"/i) || html.match(/([A-Z]\d+\.PDF)/i);
+                  console.log(`CO listing HTML length: ${html.length}`);
                   
-                  if (pdfMatch) {
-                    const pdfFilename = pdfMatch[1];
-                    const pdfUrl = `http://a810-bisweb.nyc.gov/bisweb/CosbyImage?cofession=${pdfFilename}`;
+                  // Find all PDF filenames - pattern like "K000310206577.PDF"
+                  const pdfMatches = html.match(/[A-Z]\d+\.PDF/gi);
+                  console.log(`PDF matches found: ${pdfMatches ? pdfMatches.join(', ') : 'none'}`);
+                  
+                  if (pdfMatches && pdfMatches.length > 0) {
+                    // Use the first (or best matching) PDF
+                    const pdfFilename = pdfMatches[0];
+                    // The actual PDF download URL from BIS
+                    const pdfUrl = `http://a810-bisweb.nyc.gov/bisweb/${pdfFilename}`;
                     
-                    console.log(`Attempting to download CO PDF: ${pdfFilename}`);
+                    console.log(`Downloading CO PDF: ${pdfUrl}`);
                     
                     const pdfResp = await fetch(pdfUrl, {
-                      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PropertyMonitor/1.0)' },
+                      headers: { 
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/pdf',
+                        'Referer': pdfListUrl,
+                      },
                     });
+                    
+                    console.log(`PDF download response: ${pdfResp.status}, content-type: ${pdfResp.headers.get('content-type')}`);
                     
                     if (pdfResp.ok) {
                       const pdfBuffer = await pdfResp.arrayBuffer();
                       const pdfBytes = new Uint8Array(pdfBuffer);
                       
-                      if (pdfBytes.length > 1000) { // Sanity check - real PDFs are > 1KB
+                      console.log(`PDF size: ${pdfBytes.length} bytes, starts with: ${String.fromCharCode(...pdfBytes.slice(0, 4))}`);
+                      
+                      // Check it starts with %PDF
+                      if (pdfBytes.length > 1000 && pdfBytes[0] === 0x25 && pdfBytes[1] === 0x50) {
                         const storagePath = `${property_id}/co_${jobNumber}.pdf`;
                         
                         const { error: uploadError } = await supabase.storage
@@ -1313,11 +1332,11 @@ Deno.serve(async (req) => {
                           console.error('Failed to upload CO PDF:', uploadError);
                         }
                       } else {
-                        console.log(`PDF response too small (${pdfBytes.length} bytes), likely not a real PDF`);
+                        console.log(`Response is not a valid PDF (${pdfBytes.length} bytes)`);
                       }
                     }
                   } else {
-                    console.log('No PDF link found in CO listing page');
+                    console.log('No PDF filenames found in CO listing HTML');
                   }
                 }
               } catch (pdfError) {
