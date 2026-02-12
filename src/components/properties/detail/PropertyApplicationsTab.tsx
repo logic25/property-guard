@@ -201,6 +201,9 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               <p>First Permit: <span className="text-foreground">{format(new Date(raw.first_permit_date as string), 'MMM d, yyyy')}</span></p>
             )}
             <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MMM d, yyyy') : '—'}</span></p>
+            {raw.signoff_date && (
+              <p>Sign-Off: <span className="text-foreground">{raw.signoff_date as string}</span></p>
+            )}
             {isPermitted && (
               <p className="text-success font-medium">✓ Permitted</p>
             )}
@@ -221,14 +224,20 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             {raw.applicant_license && (
               <p>License #: <span className="text-foreground">{raw.applicant_license as string}</span></p>
             )}
-            {raw.applicant_business_name && (
-              <p>Company: <span className="text-foreground">{raw.applicant_business_name as string}</span></p>
+            {(raw.applicant_business_name || raw.applicant_business) && (
+              <p>Company: <span className="text-foreground">{(raw.applicant_business_name || raw.applicant_business) as string}</span></p>
             )}
             {raw.applicant_phone && (
               <p>Phone: <span className="text-foreground">{raw.applicant_phone as string}</span></p>
             )}
             {raw.applicant_email && (
               <p>Email: <span className="text-foreground">{raw.applicant_email as string}</span></p>
+            )}
+            {raw.firm_name && (
+              <p>Firm: <span className="text-foreground">{raw.firm_name as string}</span></p>
+            )}
+            {raw.license_type && (
+              <p>License Type: <span className="text-foreground">{raw.license_type as string} {raw.license_number ? `#${raw.license_number}` : ''}</span></p>
             )}
           </div>
         </div>
@@ -247,6 +256,12 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             {raw.filing_rep_company && (
               <p>Company: <span className="text-foreground">{raw.filing_rep_company as string}</span></p>
             )}
+            {raw.design_professional && (
+              <p>Design Prof: <span className="text-foreground">{raw.design_professional as string}</span></p>
+            )}
+            {raw.design_professional_license && (
+              <p>License: <span className="text-foreground">{raw.design_professional_license as string}</span></p>
+            )}
           </div>
         </div>
 
@@ -260,6 +275,9 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             <p>Est. Cost: <span className="text-foreground">{app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}</span></p>
             {app.floor_area != null && app.floor_area > 0 && (
               <p>Floor Area: <span className="text-foreground">{app.floor_area.toLocaleString()} sqft</span></p>
+            )}
+            {raw.apt_condo && (
+              <p>Apt/Condo #: <span className="text-foreground">{raw.apt_condo as string}</span></p>
             )}
             {raw.work_on_floor && (
               <p>Work Location: <span className="text-foreground">{raw.work_on_floor as string}</span></p>
@@ -277,24 +295,55 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             {raw.review_building_code && (
               <p>Building Code: <span className="text-foreground">{raw.review_building_code as string}</span></p>
             )}
+            {raw.building_code && (
+              <p>Building Code: <span className="text-foreground">{raw.building_code as string}</span></p>
+            )}
+            {raw.device_type && (
+              <p>Device Type: <span className="text-foreground">{raw.device_type as string}</span></p>
+            )}
             {raw.special_inspection ? (
               <p>Special Inspection: <span className="text-foreground">{raw.special_inspection as string}</span>
                 {raw.special_inspection_agency && <span className="text-xs ml-1">(Agency #{raw.special_inspection_agency as string})</span>}
               </p>
-            ) : (
+            ) : app.source === 'DOB NOW Build' ? (
               <p>Special Inspection: <span className="text-foreground">None</span></p>
-            )}
+            ) : null}
             {raw.progress_inspection ? (
               <p>Progress Inspection: <span className="text-foreground">{raw.progress_inspection as string}</span>
                 {raw.progress_inspection_agency && <span className="text-xs ml-1">(Agency #{raw.progress_inspection_agency as string})</span>}
               </p>
-            ) : (
+            ) : app.source === 'DOB NOW Build' ? (
               <p>Progress Inspection: <span className="text-foreground">None</span></p>
+            ) : null}
+            {raw.inspection_type && (
+              <p>Inspection: <span className="text-foreground">{raw.inspection_type as string}</span>
+                {raw.inspection_date && <span className="text-xs ml-1">({raw.inspection_date as string})</span>}
+              </p>
             )}
             {raw.plumbing_work && <p className="text-foreground">✓ Plumbing Work</p>}
             {raw.sprinkler_work && <p className="text-foreground">✓ Sprinkler Work</p>}
+            {raw.general_wiring === 'Yes' && <p className="text-foreground">✓ General Wiring</p>}
+            {raw.lighting_work === 'Yes' && <p className="text-foreground">✓ Lighting Work</p>}
+            {raw.hvac_wiring === 'Yes' && <p className="text-foreground">✓ HVAC Wiring</p>}
           </div>
         </div>
+
+        {/* Building Info (if available) */}
+        {(raw.existing_stories || raw.proposed_stories || app.stories || raw.building_type || raw.building_use_type) && (
+          <div className="space-y-2">
+            <h4 className="font-medium text-foreground flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5" />
+              Building Info
+            </h4>
+            <div className="space-y-1 text-muted-foreground">
+              {raw.building_type && <p>Type: <span className="text-foreground">{raw.building_type as string}</span></p>}
+              {raw.building_use_type && <p>Use: <span className="text-foreground">{raw.building_use_type as string}</span></p>}
+              {app.stories && <p>Stories: <span className="text-foreground">{app.stories}</span></p>}
+              {raw.existing_stories && <p>Existing: <span className="text-foreground">{raw.existing_stories as string} stories</span></p>}
+              {raw.proposed_stories && <p>Proposed: <span className="text-foreground">{raw.proposed_stories as string} stories</span></p>}
+            </div>
+          </div>
+        )}
 
         {/* Description / Scope of Work */}
         {app.description && (
@@ -303,10 +352,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               <FileText className="w-3.5 h-3.5" />
               Scope of Work
             </h4>
-            <p className="text-muted-foreground">{app.description}</p>
-            <p className="text-xs text-muted-foreground italic">
-              Note: Full job description is only available on the DOB NOW website — click the link below to view.
-            </p>
+            <p className="text-muted-foreground whitespace-pre-wrap">{app.description}</p>
           </div>
         )}
       </div>
@@ -454,7 +500,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               {filtered.map((app) => {
                 const isExpanded = expandedRows.has(app.id);
                 const decodedStatus = decodeStatus(app.status, app.source);
-                const isBuild = app.source === 'DOB NOW Build';
+                const isBuild = app.source.startsWith('DOB NOW');
 
                 return (
                   <>

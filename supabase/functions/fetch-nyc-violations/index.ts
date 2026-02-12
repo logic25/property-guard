@@ -26,6 +26,9 @@ const NYC_OPEN_DATA_ENDPOINTS = {
   // Application endpoints
   DOB_BIS_JOBS: "https://data.cityofnewyork.us/resource/ic3t-wcy2.json",
   DOB_NOW_BUILD: "https://data.cityofnewyork.us/resource/w9ak-ipjd.json",
+  DOB_NOW_LIMITED_ALT: "https://data.cityofnewyork.us/resource/xxbr-ypig.json",
+  DOB_NOW_ELECTRICAL: "https://data.cityofnewyork.us/resource/dm9a-ab7w.json",
+  DOB_NOW_ELEVATOR: "https://data.cityofnewyork.us/resource/kfp4-dz4h.json",
 };
 
 // Agency name mappings for OATH dataset
@@ -822,12 +825,15 @@ Deno.serve(async (req) => {
 
     // Fetch DOB BIS Job Application Filings
     if (bin) {
-      const [bisJobs, dobNowBuild] = await Promise.all([
+      const [bisJobs, dobNowBuild, dobNowLimitedAlt, dobNowElectrical, dobNowElevator] = await Promise.all([
         safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_BIS_JOBS}?bin__=${bin}&$limit=200&$order=latest_action_date DESC`, "DOB_BIS_JOBS"),
         safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_NOW_BUILD}?bin=${bin}&$limit=200&$order=filing_date DESC`, "DOB_NOW_BUILD"),
+        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_NOW_LIMITED_ALT}?location_bin=${bin}&$limit=200&$order=filing_date DESC`, "DOB_NOW_LIMITED_ALT"),
+        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_NOW_ELECTRICAL}?bin=${bin}&$limit=200&$order=filing_date DESC`, "DOB_NOW_ELECTRICAL"),
+        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_NOW_ELEVATOR}?bin=${bin}&$limit=200&$order=filing_date DESC`, "DOB_NOW_ELEVATOR"),
       ]);
 
-      console.log(`Found ${bisJobs.length} DOB BIS jobs, ${dobNowBuild.length} DOB NOW Build applications`);
+      console.log(`Found ${bisJobs.length} BIS jobs, ${dobNowBuild.length} Build, ${dobNowLimitedAlt.length} Limited Alt, ${dobNowElectrical.length} Electrical, ${dobNowElevator.length} Elevator apps`);
 
       for (const j of bisJobs as Record<string, unknown>[]) {
         const jobNum = j.job__ as string;
@@ -880,14 +886,12 @@ Deno.serve(async (req) => {
 
         const jobType = (a.job_type as string) || null;
         const workOnFloor = (a.work_on_floor as string) || null;
+        const aptCondo = (a.apt_condo_no_s as string) || null;
 
-        // Build a rich description from available fields
         const descParts = [
           workOnFloor,
           a.building_type ? `Building Type: ${a.building_type}` : null,
         ].filter(Boolean);
-
-        // DOB NOW Build API does NOT have job_description — only on the website
 
         applicationRecords.push({
           property_id,
@@ -910,10 +914,11 @@ Deno.serve(async (req) => {
               ? `${a.owner_first_name} ${a.owner_last_name}`.trim()
               : null),
           estimated_cost: a.initial_cost ? parseFloat(a.initial_cost as string) : null,
-          stories: null,
-          dwelling_units: null,
+          stories: a.proposed_no_of_stories ? parseInt(a.proposed_no_of_stories as string) : null,
+          dwelling_units: a.proposed_dwelling_units ? parseInt(a.proposed_dwelling_units as string) : null,
           floor_area: a.total_construction_floor_area ? parseFloat(a.total_construction_floor_area as string) : null,
           raw_data: {
+            apt_condo: aptCondo,
             applicant_license: a.applicant_license || null,
             applicant_title: a.applicant_professional_title || null,
             applicant_business_name: a.applicant_business_name || null,
@@ -923,10 +928,6 @@ Deno.serve(async (req) => {
               ? `${a.filing_representative_first_name} ${a.filing_representative_last_name}`.trim()
               : null,
             filing_rep_company: a.filing_representative_business_name || null,
-            filing_rep_street: a.filing_representative_street_name || null,
-            filing_rep_city: a.filing_representative_city || null,
-            filing_rep_state: a.filing_representative_state || null,
-            filing_rep_zip: a.filing_representative_zip || null,
             work_on_floor: workOnFloor,
             first_permit_date: a.first_permit_date ? (a.first_permit_date as string).split('T')[0] : null,
             special_inspection: a.specialinspectionrequirement || null,
@@ -936,10 +937,128 @@ Deno.serve(async (req) => {
             review_building_code: a.review_building_code || null,
             plumbing_work: a.plumbing_work_type === '1',
             sprinkler_work: a.sprinkler_work_type === '1',
-            in_compliance_nycecc: a.in_compliance_with_nycecc || null,
-            little_e: a.little_e || null,
-            job_filing_number: a.job_filing_number || null,
-            dobrunjobnumber: a.dobrunjobnumber || null,
+            existing_stories: a.existing_stories || null,
+            existing_height: a.existing_height || null,
+            proposed_stories: a.proposed_no_of_stories || null,
+            proposed_height: a.proposed_height || null,
+          },
+        });
+      }
+
+      // DOB NOW: Build – Limited Alteration Applications (plumbing, fire suppression, oil work, etc.)
+      for (const la of dobNowLimitedAlt as Record<string, unknown>[]) {
+        const appNum = (la.permit_number || la.job_number) as string;
+        if (!appNum) continue;
+
+        applicationRecords.push({
+          property_id,
+          application_number: String(appNum),
+          application_type: (la.work_type_name as string) || 'Limited Alteration',
+          agency: 'DOB',
+          source: 'DOB NOW Limited Alt',
+          status: (la.filing_status_name as string) || null,
+          filing_date: la.filing_date ? (la.filing_date as string).split('T')[0] : null,
+          approval_date: la.permit_issued_date ? (la.permit_issued_date as string).split('T')[0] : null,
+          expiration_date: la.permit_expiration_date ? (la.permit_expiration_date as string).split('T')[0] : null,
+          job_type: (la.filing_type_name as string) || null,
+          work_type: (la.work_type_name as string) || null,
+          description: (la.proposed_work_summary as string) || null,
+          applicant_name: null,
+          owner_name: null,
+          estimated_cost: null,
+          stories: null,
+          dwelling_units: null,
+          floor_area: null,
+          raw_data: {
+            building_type: la.building_type_name || null,
+            inspection_type: la.inspection_type_name || null,
+            inspection_date: la.inspection_date ? (la.inspection_date as string).split('T')[0] : null,
+            signoff_date: la.laasign_off_date ? (la.laasign_off_date as string).split('T')[0] : null,
+          },
+        });
+      }
+
+      // DOB NOW: Electrical Permit Applications
+      for (const el of dobNowElectrical as Record<string, unknown>[]) {
+        const appNum = (el.job_filing_number || el.job_number) as string;
+        if (!appNum) continue;
+
+        applicationRecords.push({
+          property_id,
+          application_number: String(appNum),
+          application_type: 'Electrical Permit',
+          agency: 'DOB',
+          source: 'DOB NOW Electrical',
+          status: (el.filing_status as string) || null,
+          filing_date: el.filing_date ? (el.filing_date as string).split('T')[0] : null,
+          approval_date: null,
+          expiration_date: null,
+          job_type: (el.filing_type as string) || null,
+          work_type: 'Electrical',
+          description: (el.job_description as string) || null,
+          applicant_name: (el.applicant_first_name && el.applicant_last_name)
+            ? `${el.applicant_first_name} ${el.applicant_last_name}`.trim()
+            : null,
+          owner_name: (el.owner_first_name && el.owner_last_name)
+            ? `${el.owner_first_name} ${el.owner_last_name}`.trim()
+            : null,
+          estimated_cost: null,
+          stories: null,
+          dwelling_units: null,
+          floor_area: null,
+          raw_data: {
+            license_type: el.license_type || null,
+            license_number: el.license_number || null,
+            firm_name: el.firm_name || null,
+            firm_number: el.firm_number || null,
+            building_use_type: el.building_use_type || null,
+            general_wiring: el.general_wiring || null,
+            lighting_work: el.lighting_work || null,
+            hvac_wiring: el.hvac_wiring || null,
+            total_meters: el.total_meters || null,
+            job_start_date: el.job_start_date ? (el.job_start_date as string).split('T')[0] : null,
+            completion_date: el.completion_date ? (el.completion_date as string).split('T')[0] : null,
+          },
+        });
+      }
+
+      // DOB NOW: Build – Elevator Permit Applications
+      for (const ev of dobNowElevator as Record<string, unknown>[]) {
+        const appNum = (ev.job_filing_number || ev.job_number) as string;
+        if (!appNum) continue;
+
+        applicationRecords.push({
+          property_id,
+          application_number: String(appNum),
+          application_type: (ev.elevatordevicetype as string) || 'Elevator Permit',
+          agency: 'DOB',
+          source: 'DOB NOW Elevator',
+          status: (ev.filing_status as string) || null,
+          filing_date: ev.filing_date ? (ev.filing_date as string).split('T')[0] : null,
+          approval_date: ev.permit_entire_date ? (ev.permit_entire_date as string).split('T')[0] : null,
+          expiration_date: ev.permit_expiration_date ? (ev.permit_expiration_date as string).split('T')[0] : null,
+          job_type: (ev.filing_type as string) || null,
+          work_type: (ev.filingstatus_or_filingincludes as string) || 'Elevator',
+          description: (ev.descriptionofwork as string) || null,
+          applicant_name: (ev.applicant_firstname && ev.applicant_lastname)
+            ? `${ev.applicant_firstname} ${ev.applicant_lastname}`.trim()
+            : null,
+          owner_name: (ev.owner_businessname as string) ||
+            ((ev.owner_firstname && ev.owner_lastname)
+              ? `${ev.owner_firstname} ${ev.owner_lastname}`.trim()
+              : null),
+          estimated_cost: ev.estimated_cost ? parseFloat(ev.estimated_cost as string) : null,
+          stories: ev.buildingstories ? parseInt(ev.buildingstories as string) : null,
+          dwelling_units: null,
+          floor_area: ev.total_construction_floor ? parseFloat(ev.total_construction_floor as string) : null,
+          raw_data: {
+            device_type: ev.elevatordevicetype || null,
+            building_code: ev.building_code || null,
+            design_professional: ev.designprofessional || null,
+            design_professional_license: ev.designprofessional_license || null,
+            applicant_business: ev.applicant_businessname || null,
+            applicant_license: ev.applicant_license_number || null,
+            asbestos_compliance: ev.asbestosabatementcompliance || null,
           },
         });
       }
