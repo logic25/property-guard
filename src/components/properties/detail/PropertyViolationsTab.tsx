@@ -103,6 +103,7 @@ type SortDirection = 'asc' | 'desc';
 // Display-friendly violation type labels
 const VIOLATION_TYPE_LABELS: Record<string, string> = {
   elevator: 'Elevator',
+  gas_piping: 'Gas Piping',
   plumbing: 'Plumbing',
   electrical: 'Electrical',
   fire_safety: 'Fire Safety',
@@ -115,12 +116,57 @@ const VIOLATION_TYPE_LABELS: Record<string, string> = {
   environmental: 'Environmental',
   signage: 'Signage',
   zoning: 'Zoning',
+  compliance: 'Compliance',
   other: 'Other',
 };
 
 const getViolationTypeLabel = (type: string | null | undefined): string => {
   if (!type) return '—';
   return VIOLATION_TYPE_LABELS[type] || type;
+};
+
+// DOB violation code decoder (client-side mirror of edge function logic)
+const DOB_CODE_DESCRIPTIONS: Record<string, string> = {
+  'FTC-VT-PER': 'Failure to Correct - Elevator Periodic Test',
+  'FTC-VT-CAT1': 'Failure to Correct - Elevator Category 1 Test',
+  'FTC-VT-CAT5': 'Failure to Correct - Elevator Category 5 Test',
+  'FTF-VT-PER': 'Failure to File - Elevator Periodic Test',
+  'FTF-VT-CAT1': 'Failure to File - Elevator Category 1 Test',
+  'FTF-VT-CAT5': 'Failure to File - Elevator Category 5 Test',
+  'FTC-EN-BENCH': 'Failure to Correct - Elevator Benchmarking',
+  'FTF-EN-BENCH': 'Failure to File - Elevator Benchmarking',
+  'FTC-AEU-HAZ': 'Failure to Correct - Elevator Hazardous Condition',
+  'FTF-AEU-HAZ': 'Failure to File - Elevator Hazardous Condition',
+  'FTF-PL-PER': 'Failure to File - Gas Piping Periodic Inspection (Local Law 152)',
+  'FTC-PL-PER': 'Failure to Correct - Gas Piping Periodic Inspection (Local Law 152)',
+  'FTF-PL': 'Failure to File - Plumbing Compliance',
+  'FTC-PL': 'Failure to Correct - Plumbing Compliance',
+  'FTF-BL-PER': 'Failure to File - Boiler Periodic Inspection',
+  'FTC-BL-PER': 'Failure to Correct - Boiler Periodic Inspection',
+  'FTF-SP-PER': 'Failure to File - Sprinkler Periodic Inspection',
+  'FTC-SP-PER': 'Failure to Correct - Sprinkler Periodic Inspection',
+  'FTF-FA-PER': 'Failure to File - Façade Periodic Inspection (LL11/FISP)',
+  'FTC-FA-PER': 'Failure to Correct - Façade Periodic Inspection (LL11/FISP)',
+  'FTF-RE-PER': 'Failure to File - Retaining Wall Periodic Inspection',
+  'FTC-RE-PER': 'Failure to Correct - Retaining Wall Periodic Inspection',
+  'FTF-CO': 'Failure to File - Certificate of Occupancy',
+  'FTC-CO': 'Failure to Correct - Certificate of Occupancy',
+};
+
+const decodeDOBCode = (code: string | null): string | null => {
+  if (!code) return null;
+  const upper = code.toUpperCase();
+  // Try longest prefix match first
+  const sortedKeys = Object.keys(DOB_CODE_DESCRIPTIONS).sort((a, b) => b.length - a.length);
+  for (const prefix of sortedKeys) {
+    if (upper.includes(prefix)) {
+      return DOB_CODE_DESCRIPTIONS[prefix];
+    }
+  }
+  if (upper.includes('FTF')) return 'Failure to File - Compliance Document';
+  if (upper.includes('FTC')) return 'Failure to Correct - Compliance Issue';
+  if (upper.includes('NOD')) return 'Notice of Deficiency';
+  return null;
 };
 
 export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }: PropertyViolationsTabProps) => {
@@ -578,7 +624,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                       </TableCell>
                       <TableCell className="max-w-[200px]">
                         <p className="text-sm text-muted-foreground line-clamp-2">
-                          {violation.description_raw || 'No description'}
+                          {decodeDOBCode(violation.description_raw) || violation.description_raw || 'No description'}
                         </p>
                       </TableCell>
                       <TableCell>
@@ -617,6 +663,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                         <TableCell colSpan={9} className="py-4">
                           {(() => {
                             const sev = calculateViolationSeverity(violation);
+                            const decodedDesc = decodeDOBCode(violation.description_raw);
                             return (
                               <div className="space-y-4 pl-8">
                                 {/* Severity Banner */}
@@ -641,14 +688,32 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                                     </h4>
                                     
                                     <div className="space-y-2 text-sm">
+                                      {/* Decoded description */}
+                                      {decodedDesc && (
+                                        <div className="flex gap-2">
+                                          <span className="text-muted-foreground w-28 shrink-0">What This Means:</span>
+                                          <span className="flex-1 font-medium">{decodedDesc}</span>
+                                        </div>
+                                      )}
+
                                       <div className="flex gap-2">
-                                        <span className="text-muted-foreground w-24">Full Description:</span>
-                                        <span className="flex-1">{violation.description_raw || 'No description available'}</span>
+                                        <span className="text-muted-foreground w-28 shrink-0">Violation Code:</span>
+                                        <span className="flex-1 font-mono text-xs">{violation.description_raw || '—'}</span>
+                                      </div>
+
+                                      <div className="flex gap-2">
+                                        <span className="text-muted-foreground w-28 shrink-0">Issued Date:</span>
+                                        <span>{new Date(violation.issued_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                      </div>
+
+                                      <div className="flex gap-2">
+                                        <span className="text-muted-foreground w-28 shrink-0">Category:</span>
+                                        <Badge variant="outline" className="text-xs">{getViolationTypeLabel(violation.violation_type)}</Badge>
                                       </div>
                                       
                                       {violation.violation_class && (
                                         <div className="flex gap-2">
-                                          <span className="text-muted-foreground w-24">Class/Code:</span>
+                                          <span className="text-muted-foreground w-28 shrink-0">Class/Code:</span>
                                           <span>{violation.violation_class}</span>
                                         </div>
                                       )}
