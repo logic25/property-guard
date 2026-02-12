@@ -280,10 +280,19 @@ export const PropertyAIWidget = ({
   const sendMessage = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return;
 
+    const rawInput = inputValue.trim();
+    const isAIQuery = rawInput.toLowerCase().startsWith('@ai ');
+    const messageContent = isAIQuery ? rawInput.slice(4).trim() : rawInput;
+
+    if (isAIQuery && !messageContent) {
+      toast.error('Type a question after @ai');
+      return;
+    }
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: inputValue.trim(),
+      content: rawInput,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -310,8 +319,35 @@ export const PropertyAIWidget = ({
       await saveMessage.mutateAsync({
         conversationId: currentConversationId,
         role: 'user',
-        content: userMessage.content,
+        content: rawInput,
       });
+
+      // If not an @ai query, just save the message (plain chat) and stop
+      if (!isAIQuery) {
+        setIsLoading(false);
+        inputRef.current?.focus();
+        return;
+      }
+
+      // Track AI usage
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const { data: existingUsage } = await supabase
+        .from('ai_usage')
+        .select('id, question_count')
+        .eq('user_id', user!.id)
+        .eq('month', currentMonth)
+        .maybeSingle();
+
+      if (existingUsage) {
+        await supabase
+          .from('ai_usage')
+          .update({ question_count: existingUsage.question_count + 1, updated_at: new Date().toISOString() })
+          .eq('id', existingUsage.id);
+      } else {
+        await supabase
+          .from('ai_usage')
+          .insert({ user_id: user!.id, month: currentMonth, question_count: 1 });
+      }
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/property-ai`,
@@ -322,9 +358,18 @@ export const PropertyAIWidget = ({
             Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
-            messages: [...messages, userMessage].map(m => ({
+            messages: [...messages, { role: 'user', content: messageContent }].filter(m => {
+              // Only send @ai messages to the AI (strip prefix)
+              if (m.role === 'user') {
+                const c = m.content.toLowerCase();
+                return c.startsWith('@ai ') || c.startsWith('[via telegram]');
+              }
+              return m.role === 'assistant';
+            }).map(m => ({
               role: m.role,
-              content: m.content,
+              content: m.role === 'user' && m.content.toLowerCase().startsWith('@ai ')
+                ? m.content.slice(4).trim()
+                : m.content,
             })),
             propertyId,
             propertyData,
@@ -431,7 +476,7 @@ export const PropertyAIWidget = ({
       setIsLoading(false);
       inputRef.current?.focus();
     }
-  }, [inputValue, isLoading, messages, conversationId, createConversation, saveMessage, propertyId, propertyData, violations, allDocuments, workOrders]);
+  }, [inputValue, isLoading, messages, conversationId, createConversation, saveMessage, propertyId, propertyData, violations, allDocuments, workOrders, user]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -441,10 +486,10 @@ export const PropertyAIWidget = ({
   };
 
   const suggestedQuestions = [
-    "What are the open violations?",
-    "What's the zoning for this property?",
-    "Any upcoming deadlines?",
-    "Who's responsible for repairs?",
+    "@ai What are the open violations?",
+    "@ai What's the zoning for this property?",
+    "@ai Any upcoming deadlines?",
+    "@ai Who's responsible for repairs?",
   ];
 
   const hasDocuments = (allDocuments || documents).length > 0;
@@ -562,7 +607,12 @@ export const PropertyAIWidget = ({
                     <div className="space-y-4">
                       {messages.map((message) => {
                         const isTelegram = message.content.startsWith('[via Telegram]');
-                        const displayContent = isTelegram ? message.content.replace('[via Telegram] ', '') : message.content;
+                        const isAI = message.role === 'user' && message.content.toLowerCase().startsWith('@ai ');
+                        const displayContent = isTelegram 
+                          ? message.content.replace('[via Telegram] ', '') 
+                          : isAI 
+                            ? message.content.slice(4).trim() 
+                            : message.content;
                         return (
                         <div
                           key={message.id}
@@ -583,6 +633,11 @@ export const PropertyAIWidget = ({
                             {isTelegram && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 mb-1">
                                 📱 Telegram
+                              </span>
+                            )}
+                            {isAI && message.role === 'user' && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/20 text-primary-foreground mb-1">
+                                ✨ AI Question
                               </span>
                             )}
                             {message.role === 'assistant' ? (
@@ -623,7 +678,7 @@ export const PropertyAIWidget = ({
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder="Ask about violations, documents, zoning..."
+                      placeholder="Type a message, or @ai to ask AI..."
                       disabled={isLoading}
                       className="flex-1"
                     />
@@ -632,7 +687,7 @@ export const PropertyAIWidget = ({
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Only answers questions about this property. Not legal or financial advice.
+                    Start with <span className="font-semibold text-primary">@ai</span> to ask AI. Plain messages are saved as notes. Only property-related topics.
                   </p>
                 </div>
               </div>
