@@ -672,7 +672,22 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
                     Related Filings ({relatedApps.length})
                   </h4>
                   <div className="space-y-2">
-                    {relatedApps.map(related => {
+                    {[...relatedApps].sort((a, b) => {
+                      // Sort order: I (Initial) → S (Subsequent) → P (Post-Approval)
+                      const getSuffixOrder = (appNum: string) => {
+                        const { suffix } = parseFilingNumber(appNum);
+                        if (!suffix) return 9;
+                        const letter = suffix.replace(/-[A-Z]+$/, '').charAt(0).toUpperCase();
+                        if (letter === 'I') return 0;
+                        if (letter === 'S') return 1;
+                        if (letter === 'P') return 2;
+                        return 3;
+                      };
+                      const orderA = getSuffixOrder(a.application_number);
+                      const orderB = getSuffixOrder(b.application_number);
+                      if (orderA !== orderB) return orderA - orderB;
+                      return a.application_number.localeCompare(b.application_number);
+                    }).map(related => {
                       const relSuffix = parseFilingNumber(related.application_number).suffix;
                       const relStatus = decodeStatus(related.status, related.source);
                       const isRelExpanded = expandedRows.has(`rel-${related.id}`);
