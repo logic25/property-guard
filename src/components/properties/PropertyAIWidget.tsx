@@ -75,6 +75,15 @@ export const PropertyAIWidget = ({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  // Refetch messages when dialog opens (catches Telegram messages)
+  const handleDialogOpen = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (open) {
+      queryClient.invalidateQueries({ queryKey: ['property-ai-conversation', propertyId] });
+      queryClient.invalidateQueries({ queryKey: ['property-ai-messages'] });
+    }
+  };
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -101,6 +110,7 @@ export const PropertyAIWidget = ({
       return conversation;
     },
     enabled: !!user,
+    refetchOnWindowFocus: true,
   });
 
   // Fetch messages for the conversation
@@ -123,6 +133,7 @@ export const PropertyAIWidget = ({
       })) || [];
     },
     enabled: !!existingConversation?.id,
+    refetchOnWindowFocus: true,
   });
 
   // Load messages when conversation is fetched
@@ -432,7 +443,7 @@ export const PropertyAIWidget = ({
           )}
           
           {/* Quick Q&A Button */}
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={handleDialogOpen}>
             <DialogTrigger asChild>
               <Button
                 className="w-full justify-between"
