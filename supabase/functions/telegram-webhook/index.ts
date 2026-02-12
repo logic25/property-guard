@@ -157,6 +157,7 @@ RULES:
 - Reference specific violation numbers, dates, amounts
 - For compliance questions, check both violations AND compliance_requirements
 - For tax questions, check property_taxes data
+- For lease questions, check the Documents section for extracted lease content (expiration dates, terms, etc.)
 - Always mention the property address when referencing data`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -336,6 +337,27 @@ async function getPropertyContext(supabase: any, userId: string): string {
       context += `Recent Taxes:\n`;
       for (const t of taxes) {
         context += `  • ${t.tax_year}: ${t.payment_status}${t.balance_due ? ` ($${t.balance_due} due)` : ""}${t.protest_status ? ` | Protest: ${t.protest_status}` : ""}\n`;
+      }
+    }
+
+    // Documents & Leases
+    const { data: docs } = await supabase
+      .from("property_documents")
+      .select("document_name, document_type, extracted_text, expiration_date")
+      .eq("property_id", prop.id)
+      .not("extracted_text", "is", null);
+
+    if (docs && docs.length > 0) {
+      context += `Documents (${docs.length}):\n`;
+      for (const d of docs) {
+        context += `  • ${d.document_name} (${d.document_type})`;
+        if (d.expiration_date) context += ` | Expires: ${d.expiration_date}`;
+        context += "\n";
+        if (d.extracted_text) {
+          // Include first 2000 chars of lease text for AI context
+          const excerpt = d.extracted_text.slice(0, 2000);
+          context += `    Content: ${excerpt}${d.extracted_text.length > 2000 ? "..." : ""}\n`;
+        }
       }
     }
   }
