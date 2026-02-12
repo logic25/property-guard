@@ -131,10 +131,16 @@ const getDOBNowBuildUrl = (appNumber: string) =>
 const getDOBBisUrl = (appNumber: string) =>
   `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${appNumber}`;
 
-/** Parse filing suffix: X08023336-I1 → { prefix: 'X08023336', suffix: 'I1' } */
+/** Parse filing suffix: B00518982-I1 → { prefix: 'B00518982', suffix: 'I1' }
+ *  Also handles electrical/agency suffixes: B00020213-I1-EL → { prefix: 'B00020213', suffix: 'I1-EL' }
+ */
 const parseFilingNumber = (appNumber: string) => {
-  const match = appNumber.match(/^(.+)-(I\d+|P\d+|S\d+)$/i);
-  if (match) return { prefix: match[1], suffix: match[2].toUpperCase() };
+  // Match job-prefix followed by filing suffix, with optional agency tag like -EL
+  const match = appNumber.match(/^(.+?)-(I\d+|P\d+|S\d+)(-[A-Z]+)?$/i);
+  if (match) {
+    const suffix = (match[2] + (match[3] || '')).toUpperCase();
+    return { prefix: match[1], suffix };
+  }
   return { prefix: appNumber, suffix: null };
 };
 
