@@ -135,7 +135,9 @@ Deno.serve(async (req) => {
     }
 
     // AI-powered query: fetch property context and ask AI
+    console.log("Fetching property context for user:", userId);
     const { context: propertyContext, properties: userProperties } = await getPropertyContext(supabase, userId);
+    console.log("Property context length:", propertyContext.length, "chars, properties:", userProperties.length);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -160,6 +162,7 @@ RULES:
 - For lease questions, check the Documents section for extracted lease content (expiration dates, terms, etc.)
 - Always mention the property address when referencing data`;
 
+    console.log("Calling AI, system prompt length:", systemPrompt.length);
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -167,7 +170,7 @@ RULES:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash-lite",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: text },
@@ -175,8 +178,10 @@ RULES:
       }),
     });
 
+    console.log("AI response status:", aiResponse.status);
+
     if (!aiResponse.ok) {
-      console.error("AI error:", aiResponse.status);
+      console.error("AI error:", aiResponse.status, await aiResponse.text().catch(() => ""));
       if (aiResponse.status === 429) {
         await sendTelegram(TELEGRAM_BOT_TOKEN, chatId, "⚠️ Rate limit reached. Please try again in a moment.");
       } else if (aiResponse.status === 402) {
@@ -189,10 +194,12 @@ RULES:
 
     const aiData = await aiResponse.json();
     const reply = aiData.choices?.[0]?.message?.content || "No response generated.";
+    console.log("AI reply length:", reply.length);
 
     // Telegram max message length is 4096
     const truncatedReply = reply.length > 4000 ? reply.slice(0, 4000) + "\n\n_...truncated_" : reply;
     await sendTelegram(TELEGRAM_BOT_TOKEN, chatId, truncatedReply, "Markdown");
+    console.log("Telegram reply sent");
 
     // Log Q&A to property AI conversation if we can identify the property
     try {
@@ -200,6 +207,9 @@ RULES:
       if (matchedProperty) {
         await logToPropertyChat(supabase, userId, matchedProperty.id, 
           `[via Telegram] ${text}`, `[via Telegram] ${reply}`);
+        console.log("Logged to property chat:", matchedProperty.address);
+      } else {
+        console.log("No property matched for logging, query:", text);
       }
     } catch (logErr) {
       console.error("Error logging to property chat:", logErr);
