@@ -43,19 +43,19 @@ export const PropertyCard = ({ property, onEdit, onDelete }: PropertyCardProps) 
   const getCOStatusDisplay = (status: string | null | undefined) => {
     switch (status) {
       case 'valid':
-        return { icon: '🟢', label: 'Valid CO', className: 'bg-success/10 text-success' };
+        return { dotClass: 'bg-success', label: 'Valid CO', className: 'bg-success/10 text-success' };
       case 'temporary':
-        return { icon: '🟡', label: 'Temp CO', className: 'bg-warning/10 text-warning' };
+        return { dotClass: 'bg-warning', label: 'Temp CO', className: 'bg-warning/10 text-warning' };
       case 'expired_tco':
-        return { icon: '🔴', label: 'Expired TCO', className: 'bg-destructive/10 text-destructive' };
+        return { dotClass: 'bg-destructive', label: 'Expired TCO', className: 'bg-destructive/10 text-destructive' };
       case 'missing':
-        return { icon: '🔴', label: 'No CO', className: 'bg-destructive/10 text-destructive' };
+        return { dotClass: 'bg-destructive', label: 'No CO', className: 'bg-destructive/10 text-destructive' };
       case 'pre_1938':
-        return { icon: '🏛️', label: 'Pre-1938', className: 'bg-muted text-muted-foreground' };
+        return { dotClass: 'bg-muted-foreground', label: 'Pre-1938', className: 'bg-muted text-muted-foreground' };
       case 'use_violation':
-        return { icon: '🟡', label: 'Use Violation', className: 'bg-warning/10 text-warning' };
+        return { dotClass: 'bg-warning', label: 'Use Violation', className: 'bg-warning/10 text-warning' };
       default:
-        return { icon: '❔', label: 'Unknown', className: 'bg-muted text-muted-foreground' };
+        return { dotClass: 'bg-muted-foreground', label: 'Unknown', className: 'bg-muted text-muted-foreground' };
     }
   };
 
@@ -88,8 +88,8 @@ export const PropertyCard = ({ property, onEdit, onDelete }: PropertyCardProps) 
         </div>
         <div className="flex items-center gap-2">
           {/* CO Status Badge */}
-          <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${coStatus.className}`}>
-            <span>{coStatus.icon}</span>
+           <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 whitespace-nowrap ${coStatus.className}`}>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${coStatus.dotClass}`} />
             {coStatus.label}
           </span>
           <DropdownMenu>
