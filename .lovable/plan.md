@@ -44,7 +44,8 @@ The project already has a solid foundation. Here is what exists versus what the 
 
 | Feature                                                              | Phase | Complexity                                              |
 | -------------------------------------------------------------------- | ----- | ------------------------------------------------------- |
-| Local Law Applicability Engine (LL11, LL84, LL97, LL87, LL152, etc.) | 2     | High                                                    |
+| Local Law Applicability Engine (LL11, LL84, LL97, LL87, LL152, etc.) | 2     | Done                                                    |
+| OER (Office of Environmental Remediation) tracking in Status & Restrictions | 2 | Medium — add E-designation, Phase I/II ESA status, OER enrollment |
 | Tax and Protest Tracking                                             | 2     | Medium                                                  |
 | Tenant Management (tags on applications)                             | 2     | Low                                                     |
 | Violation-Specific Guidance templates (Phase 3C)                     | 3     | Medium (roadmapped)                                     |
@@ -53,7 +54,7 @@ The project already has a solid foundation. Here is what exists versus what the 
 | Per-Property Alert Settings                                          | 4     | Low                                                     |
 | Telegram Bot Integration                                             | 4/6   | High - now and this inteact wiht the ai of the app now? |
 | Violation Trend Charts                                               | 5     | Low - roadmap                                           |
-| Compliance Score System (0-100)                                      | 5     | Medium                                                  |
+| Compliance Score System (0-100)                                      | 5     | Done                                                    |
 | Hearing Calendar Enhancement (detail panel, reminders)               | 5     | Medium - roadmap                                        |
 | Google Calendar Integration                                          | 7     | Medium - roadmap                                        |
 | Enhanced Document Intelligence (vector embeddings, RAG)              | 7     | High - roadmap i already built a rag                    |
