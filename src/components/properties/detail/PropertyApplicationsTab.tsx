@@ -154,6 +154,9 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
 
   const renderBuildDetails = (app: Application) => {
     const raw = app.raw_data || {};
+    const filingStatus = app.status || '';
+    const isPermitted = filingStatus.toLowerCase().includes('permit');
+
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
         {/* Dates & Permit Info */}
@@ -169,6 +172,9 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               <p>First Permit: <span className="text-foreground">{format(new Date(raw.first_permit_date as string), 'MMM d, yyyy')}</span></p>
             )}
             <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MMM d, yyyy') : '—'}</span></p>
+            {isPermitted && (
+              <p className="text-success font-medium">✓ Permitted</p>
+            )}
           </div>
         </div>
 
@@ -185,6 +191,15 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             )}
             {raw.applicant_license && (
               <p>License #: <span className="text-foreground">{raw.applicant_license as string}</span></p>
+            )}
+            {raw.applicant_business_name && (
+              <p>Company: <span className="text-foreground">{raw.applicant_business_name as string}</span></p>
+            )}
+            {raw.applicant_phone && (
+              <p>Phone: <span className="text-foreground">{raw.applicant_phone as string}</span></p>
+            )}
+            {raw.applicant_email && (
+              <p>Email: <span className="text-foreground">{raw.applicant_email as string}</span></p>
             )}
           </div>
         </div>
@@ -223,34 +238,59 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
           </div>
         </div>
 
-        {/* Technical */}
-        {(raw.special_inspection || raw.review_building_code || raw.plumbing_work || raw.sprinkler_work) && (
-          <div className="space-y-2">
-            <h4 className="font-medium text-foreground flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Technical
-            </h4>
-            <div className="space-y-1 text-muted-foreground">
-              {raw.review_building_code && (
-                <p>Building Code: <span className="text-foreground">{raw.review_building_code as string}</span></p>
-              )}
-              {raw.special_inspection && (
-                <p>Special Inspection: <span className="text-foreground">{raw.special_inspection as string}</span></p>
-              )}
-              {raw.plumbing_work && <p className="text-foreground">✓ Plumbing Work</p>}
-              {raw.sprinkler_work && <p className="text-foreground">✓ Sprinkler Work</p>}
-            </div>
+        {/* Technical / Inspections */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Technical & Inspections
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            {raw.review_building_code && (
+              <p>Building Code: <span className="text-foreground">{raw.review_building_code as string}</span></p>
+            )}
+            {raw.special_inspection ? (
+              <p>Special Inspection: <span className="text-foreground">{raw.special_inspection as string}</span>
+                {raw.special_inspection_agency && <span className="text-xs ml-1">(Agency #{raw.special_inspection_agency as string})</span>}
+              </p>
+            ) : (
+              <p>Special Inspection: <span className="text-foreground">None</span></p>
+            )}
+            {raw.progress_inspection ? (
+              <p>Progress Inspection: <span className="text-foreground">{raw.progress_inspection as string}</span>
+                {raw.progress_inspection_agency && <span className="text-xs ml-1">(Agency #{raw.progress_inspection_agency as string})</span>}
+              </p>
+            ) : (
+              <p>Progress Inspection: <span className="text-foreground">None</span></p>
+            )}
+            {raw.plumbing_work && <p className="text-foreground">✓ Plumbing Work</p>}
+            {raw.sprinkler_work && <p className="text-foreground">✓ Sprinkler Work</p>}
           </div>
-        )}
+        </div>
 
-        {/* Description */}
-        {app.description && (
+        {/* Compliance */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <Wrench className="w-3.5 h-3.5" />
+            Compliance
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            {raw.in_compliance_nycecc && (
+              <p>NYCECC Compliance: <span className="text-foreground">{raw.in_compliance_nycecc as string}</span></p>
+            )}
+            {raw.little_e && (
+              <p>Little e: <span className="text-foreground">{raw.little_e as string}</span></p>
+            )}
+          </div>
+        </div>
+
+        {/* Description / Scope of Work */}
+        {(app.description || raw.job_description) && (
           <div className="col-span-2 md:col-span-3 space-y-2">
             <h4 className="font-medium text-foreground flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5" />
-              Description / Scope of Work
+              Job Description / Scope of Work
             </h4>
-            <p className="text-muted-foreground">{app.description}</p>
+            <p className="text-muted-foreground">{(raw.job_description as string) || app.description}</p>
           </div>
         )}
       </div>

@@ -172,10 +172,13 @@ const PropertyDetailPage = () => {
 
       if (error) throw error;
 
-      if (data?.total_found > 0) {
-        toast.success(`Found ${data.total_found} violations from NYC Open Data`);
+      if (data?.total_found > 0 || data?.new_applications > 0) {
+        const parts = [];
+        if (data?.total_found > 0) parts.push(`${data.total_found} violations`);
+        if (data?.applications_found > 0) parts.push(`${data.applications_found} applications`);
+        toast.success(`Synced: ${parts.join(', ')}`);
       } else {
-        toast.info('No new violations found');
+        toast.info('No new data found');
       }
 
       await fetchPropertyData();
@@ -325,7 +328,7 @@ const PropertyDetailPage = () => {
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            {isSyncing ? 'Syncing...' : 'Sync Violations'}
+            {isSyncing ? 'Syncing...' : 'Sync Data'}
           </Button>
         </div>
       </div>
