@@ -624,9 +624,6 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
           </TableCell>
           <TableCell className="text-sm">
             {app.application_type}
-            {app.work_type && app.work_type !== app.application_type && (
-              <span className="text-muted-foreground ml-1 text-xs">({app.work_type})</span>
-            )}
           </TableCell>
           <TableCell>
             <span className={`inline-flex items-center justify-center w-12 px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>

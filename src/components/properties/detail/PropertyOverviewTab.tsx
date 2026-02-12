@@ -360,6 +360,14 @@ export const PropertyOverviewTab = ({
             </div>
 
             <div className="flex items-start gap-2">
+              <Layers className="w-4 h-4 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground">Gross SF</p>
+                <p className="font-medium text-sm">{property.gross_sqft && property.gross_sqft > 0 ? `${property.gross_sqft.toLocaleString()} sf` : '-'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2">
               <Home className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
                 <p className="text-xs text-muted-foreground">Dwelling Units</p>
