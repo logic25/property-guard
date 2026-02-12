@@ -632,7 +632,7 @@ Deno.serve(async (req) => {
             try {
               // Query OATH by violation_number (ECB summons number)
               const oathData = await safeFetch(
-                `${NYC_OPEN_DATA_ENDPOINTS.OATH_HEARINGS}?ticket_number=${encodeURIComponent(ecbViol.violation_number)}&$limit=5&$order=hearing_date_time DESC`,
+                `${NYC_OPEN_DATA_ENDPOINTS.OATH_HEARINGS}?ticket_number=${encodeURIComponent(ecbViol.violation_number)}&$limit=5&$order=hearing_date DESC`,
                 `OATH_RECON/${ecbViol.violation_number}`
               );
 
@@ -642,13 +642,13 @@ Deno.serve(async (req) => {
                 const hearingStatus = (latest.hearing_status || '') as string;
                 const hearingResult = (latest.hearing_result || '') as string;
                 const disposition = hearingResult || hearingStatus;
-                const hearingDate = latest.hearing_date_time ? (latest.hearing_date_time as string).split('T')[0] : null;
+                const hearingDate = latest.hearing_date ? (latest.hearing_date as string).split('T')[0] : null;
                 const penaltyImposed = latest.penalty_imposed ? parseFloat(latest.penalty_imposed as string) : null;
                 const amountPaid = latest.total_amount_paid ? parseFloat(latest.total_amount_paid as string) : null;
                 const balanceDue = latest.amount_due ? parseFloat(latest.amount_due as string) : null;
 
                 // Upsert into oath_hearings
-                await supabase
+                const { error: oathUpsertErr } = await supabase
                   .from("oath_hearings")
                   .upsert({
                     summons_number: ecbViol.violation_number,
@@ -665,6 +665,12 @@ Deno.serve(async (req) => {
                     last_synced_at: now,
                     raw_data: latest,
                   }, { onConflict: 'summons_number' });
+                
+                if (oathUpsertErr) {
+                  console.error(`OATH upsert error for ${ecbViol.violation_number}:`, oathUpsertErr);
+                } else {
+                  console.log(`  OATH hearing saved for ${ecbViol.violation_number}: ${disposition}`);
+                }
 
                 // Auto-close if dismissed or not guilty
                 const dispositionUpper = disposition.toUpperCase();
