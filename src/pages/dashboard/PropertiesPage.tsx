@@ -439,8 +439,8 @@ const PropertiesPage = () => {
                       </TableCell>
                       <TableCell>
                         {property.has_swo || property.has_vacate ? (
-                          <Badge variant="destructive" className="text-xs">
-                            {property.has_vacate ? '⚠ Vacate' : property.has_swo ? '⛔ SWO' : 'Issues'}
+                          <Badge variant="destructive" className="text-xs font-bold">
+                            {property.has_vacate ? 'VACATE' : 'SWO'}
                           </Badge>
                         ) : violationsCount > 0 ? (
                           <Badge variant="destructive" className="text-xs">
