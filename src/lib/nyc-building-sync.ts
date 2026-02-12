@@ -149,14 +149,14 @@ export async function fetchPADData(houseNumber: string, streetName: string, boro
       
       return {
         bin: match.bin || '',
-        bbl: `${match.boro}${(match.block || '').padStart(5, '0')}${(match.lot || '').padStart(4, '0')}`,
+        bbl: `${match.boro}${(match.block || '').replace(/\D/g, '').padStart(5, '0').slice(-5)}${(match.lot || '').replace(/\D/g, '').padStart(4, '0').slice(-4)}`,
       };
     }
     
     const r = results[0];
     return {
       bin: r.bin || '',
-      bbl: `${r.boro}${(r.block || '').padStart(5, '0')}${(r.lot || '').padStart(4, '0')}`,
+      bbl: `${r.boro}${(r.block || '').replace(/\D/g, '').padStart(5, '0').slice(-5)}${(r.lot || '').replace(/\D/g, '').padStart(4, '0').slice(-4)}`,
     };
   } catch (error) {
     console.error('Error fetching PAD data:', error);
