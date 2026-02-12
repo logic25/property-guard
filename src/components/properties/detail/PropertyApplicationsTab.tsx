@@ -90,13 +90,13 @@ const decodeStatus = (status: string | null, source: string): string => {
 
 const getStatusVariant = (status: string | null, source: string) => {
   const decoded = decodeStatus(status, source).toLowerCase();
+  // LOC / Letter of Completion — intermediate completion, visually distinct from Signed Off
+  if (['loc issued', 'letter of completion'].some(s => decoded.includes(s))) {
+    return 'secondary' as const;
+  }
   // Fully completed — dark/primary badge
   if (['signed off', 'completed', 'co issued'].some(s => decoded.includes(s))) {
     return 'default' as const;
-  }
-  // Letter of completion — intermediate completion, use secondary to differentiate from signed off
-  if (decoded.includes('letter of completion')) {
-    return 'secondary' as const;
   }
   // Active/issued permits
   if (['permit issued', 'issued', 'permit entire'].some(s => decoded.includes(s))) {
@@ -199,7 +199,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
   const [statusFilterInit, setStatusFilterInit] = useState(false);
   const [sourceFilterInit, setSourceFilterInit] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  
 
   const { data: applications, isLoading } = useQuery({
     queryKey: ['property-applications', propertyId],
@@ -289,74 +289,27 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     });
   }, [applications, searchQuery, agencyFilter, selectedStatuses, selectedSources]);
 
-  // Group related filings by prefix (I1/P1/P2...) into collapsible trees
-  interface FilingGroup {
-    prefix: string;
-    parent: Application | null;
-    children: Application[];
-  }
-
-  const groupedFiltered = useMemo(() => {
-    const groups: Map<string, FilingGroup> = new Map();
-    const standalone: Application[] = [];
-
-    filtered.forEach(app => {
+  // Build a map of related filings by job number prefix
+  const relatedFilingsMap = useMemo(() => {
+    const map = new Map<string, Application[]>();
+    (applications || []).forEach(app => {
       const { prefix, suffix } = parseFilingNumber(app.application_number);
-      if (!suffix) {
-        standalone.push(app);
-        return;
-      }
-      if (!groups.has(prefix)) {
-        groups.set(prefix, { prefix, parent: null, children: [] });
-      }
-      const group = groups.get(prefix)!;
-      if (suffix.startsWith('I')) {
-        group.parent = app;
-      } else {
-        group.children.push(app);
+      if (suffix) {
+        if (!map.has(prefix)) map.set(prefix, []);
+        map.get(prefix)!.push(app);
       }
     });
+    return map;
+  }, [applications]);
 
-    // Build final ordered list: each entry is either a standalone app or a group
-    type ListItem =
-      | { type: 'standalone'; app: Application }
-      | { type: 'group'; group: FilingGroup };
-
-    const result: ListItem[] = [];
-
-    groups.forEach((group) => {
-      // Only treat as group if there are children
-      if (group.children.length > 0) {
-        group.children.sort((a, b) => a.application_number.localeCompare(b.application_number));
-        result.push({ type: 'group', group });
-      } else if (group.parent) {
-        // Has suffix but no siblings — standalone
-        result.push({ type: 'standalone', app: group.parent });
-      }
-    });
-
-    standalone.forEach(app => {
-      result.push({ type: 'standalone', app });
-    });
-
-    // Sort by the primary filing date
-    result.sort((a, b) => {
-      const dateA = (a.type === 'group' ? (a.group.parent?.filing_date || a.group.children[0]?.filing_date) : a.app.filing_date) || '';
-      const dateB = (b.type === 'group' ? (b.group.parent?.filing_date || b.group.children[0]?.filing_date) : b.app.filing_date) || '';
+  // For the table, show each filtered app as its own row (no nesting)
+  const sortedFiltered = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const dateA = a.filing_date || '';
+      const dateB = b.filing_date || '';
       return dateB.localeCompare(dateA);
     });
-
-    return result;
   }, [filtered]);
-
-  const toggleGroup = (prefix: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(prefix)) next.delete(prefix);
-      else next.add(prefix);
-      return next;
-    });
-  };
 
   if (isLoading) {
     return (
@@ -608,47 +561,29 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     );
   };
 
-  const renderAppRow = (app: Application, filingLabel: string | null, isSubFiling: boolean, onGroupToggle?: () => void, isGroupOpen?: boolean) => {
+  const renderAppRow = (app: Application) => {
     const isExpanded = expandedRows.has(app.id);
     const decodedStatus = decodeStatus(app.status, app.source);
     const isBuild = app.source.startsWith('DOB NOW');
-    const hasGroupToggle = !!onGroupToggle;
+    const { prefix, suffix } = parseFilingNumber(app.application_number);
+    const relatedApps = suffix ? (relatedFilingsMap.get(prefix) || []).filter(a => a.id !== app.id) : [];
 
     return (
       <>
         <TableRow
           key={app.id}
-          className={`cursor-pointer hover:bg-muted/30 transition-colors ${isSubFiling ? 'bg-muted/10' : ''}`}
+          className="cursor-pointer hover:bg-muted/30 transition-colors"
           onClick={() => toggleRow(app.id)}
         >
           <TableCell className="w-8 px-2">
-            {hasGroupToggle ? (
-              <button
-                onClick={(e) => { e.stopPropagation(); onGroupToggle!(); }}
-                className="p-0.5 hover:bg-muted rounded"
-              >
-                {isGroupOpen ? (
-                  <ChevronDown className="w-4 h-4 text-primary" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-primary" />
-                )}
-              </button>
-            ) : isExpanded ? (
+            {isExpanded ? (
               <ChevronDown className="w-4 h-4 text-muted-foreground" />
             ) : (
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             )}
           </TableCell>
           <TableCell className="font-mono text-sm">
-            <div className="flex items-center gap-2">
-              {isSubFiling && <span className="text-muted-foreground pl-3">↳</span>}
-              {app.application_number}
-              {filingLabel && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                  {filingLabel}
-                </Badge>
-              )}
-            </div>
+            {app.application_number}
           </TableCell>
           <TableCell className="text-sm">
             {app.application_type}
@@ -684,6 +619,39 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
           <TableRow key={`${app.id}-detail`} className="bg-muted/20 hover:bg-muted/20">
             <TableCell colSpan={9} className="py-4 px-6">
               {isBuild ? renderBuildDetails(app) : renderBisDetails(app)}
+
+              {/* Related filings section */}
+              {relatedApps.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-border">
+                  <h4 className="text-sm font-medium text-foreground mb-2">
+                    Related Filings ({relatedApps.length})
+                  </h4>
+                  <div className="space-y-1.5">
+                    {relatedApps.map(related => {
+                      const relSuffix = parseFilingNumber(related.application_number).suffix;
+                      const relStatus = decodeStatus(related.status, related.source);
+                      return (
+                        <div key={related.id} className="flex items-center gap-3 text-sm bg-muted/30 rounded-lg px-3 py-2">
+                          <span className="font-mono text-xs">{related.application_number}</span>
+                          {relSuffix && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{relSuffix}</Badge>
+                          )}
+                          <Badge variant={getStatusVariant(related.status, related.source)} className="text-xs whitespace-nowrap">
+                            {relStatus}
+                          </Badge>
+                          <span className="text-muted-foreground text-xs">
+                            {related.filing_date ? format(new Date(related.filing_date), 'MMM d, yyyy') : '—'}
+                          </span>
+                          {related.estimated_cost && (
+                            <span className="text-xs">${related.estimated_cost.toLocaleString()}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="mt-3 pt-3 border-t border-border flex items-start justify-between gap-4">
                 <NotesEditor appId={app.id} initialNotes={app.notes} />
                 <Button
@@ -802,7 +770,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
       </div>
 
       {/* Table */}
-      {groupedFiltered.length > 0 ? (
+      {sortedFiltered.length > 0 ? (
         <div className="rounded-xl border border-border overflow-hidden bg-card">
           <Table>
             <TableHeader>
@@ -819,36 +787,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {groupedFiltered.map((item) => {
-                if (item.type === 'standalone') {
-                  return renderAppRow(item.app, null, false);
-                }
-                // Group: render parent with toggle, then collapsible children
-                const { group } = item;
-                const isGroupOpen = expandedGroups.has(group.prefix);
-                const allApps = [group.parent, ...group.children].filter(Boolean) as Application[];
-
-                return (
-                  <> 
-                    {/* Parent row (I1) or first child if no parent */}
-                    {group.parent ? (
-                      <>
-                        {renderAppRow(group.parent, group.children.length > 0 ? `${group.children.length + 1} filings` : null, false, group.children.length > 0 ? () => toggleGroup(group.prefix) : undefined, isGroupOpen)}
-                      </>
-                    ) : (
-                      <>
-                        {renderAppRow(group.children[0], `${group.children.length} filings`, false, () => toggleGroup(group.prefix), isGroupOpen)}
-                      </>
-                    )}
-                    {/* Collapsible children */}
-                    {isGroupOpen && group.children.map((child) => {
-                      if (!group.parent && child === group.children[0]) return null;
-                      const { suffix } = parseFilingNumber(child.application_number);
-                      return renderAppRow(child, suffix || null, true);
-                    })}
-                  </>
-                );
-              })}
+              {sortedFiltered.map((app) => renderAppRow(app))}
             </TableBody>
           </Table>
         </div>
