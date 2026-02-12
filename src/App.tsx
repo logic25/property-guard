@@ -20,6 +20,10 @@ import WorkOrdersPage from "@/pages/dashboard/WorkOrdersPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
 import CalendarPage from "@/pages/dashboard/CalendarPage";
 import NotificationsPage from "@/pages/dashboard/NotificationsPage";
+import AdminOverview from "@/pages/dashboard/admin/AdminOverview";
+import AdminAPILogsPage from "@/pages/dashboard/admin/AdminAPILogsPage";
+import AdminUsersPage from "@/pages/dashboard/admin/AdminUsersPage";
+import AdminUserDetailPage from "@/pages/dashboard/admin/AdminUserDetailPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +58,10 @@ const App = () => (
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="calendar" element={<CalendarPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="admin" element={<AdminOverview />} />
+              <Route path="admin/api-logs" element={<AdminAPILogsPage />} />
+              <Route path="admin/users" element={<AdminUsersPage />} />
+              <Route path="admin/users/:userId" element={<AdminUserDetailPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

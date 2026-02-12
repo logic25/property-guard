@@ -15,9 +15,13 @@ import {
   FileStack,
   FileText,
   Calendar,
-  Bell
+  Bell,
+  ShieldCheck,
+  Activity,
+  UserCog
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdminRole } from '@/hooks/useAdminRole';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -34,9 +38,16 @@ const navItems = [
   { icon: Calendar, label: 'Calendar', href: '/dashboard/calendar' },
 ];
 
+const adminItems = [
+  { icon: ShieldCheck, label: 'Admin', href: '/dashboard/admin' },
+  { icon: Activity, label: 'API Logs', href: '/dashboard/admin/api-logs' },
+  { icon: UserCog, label: 'Users', href: '/dashboard/admin/users' },
+];
+
 const DashboardSidebar = () => {
   const location = useLocation();
   const { signOut, user } = useAuth();
+  const { isAdmin } = useAdminRole();
   const [collapsed, setCollapsed] = useState(false);
 
   const NavItem = ({ item }: { item: typeof navItems[0] }) => {
@@ -131,6 +142,20 @@ const DashboardSidebar = () => {
               <NavItem item={item} />
             </li>
           ))}
+          {isAdmin && (
+            <>
+              <li className="pt-3 pb-1">
+                {!collapsed && (
+                  <span className="px-4 text-xs font-semibold uppercase text-muted-foreground tracking-wider">Admin</span>
+                )}
+              </li>
+              {adminItems.map((item) => (
+                <li key={item.href}>
+                  <NavItem item={item} />
+                </li>
+              ))}
+            </>
+          )}
         </ul>
       </nav>
 

@@ -1,5 +1,6 @@
 // NYC Building Data Sync Service
 // Fetches comprehensive building data from PLUTO and BIS datasets
+import { loggedFetch } from '@/lib/api-logger';
 
 export interface NYCBuildingData {
   // Basic identifiers
@@ -117,7 +118,7 @@ async function fetchDOBJobsByBin(bin: string): Promise<Partial<NYCBuildingData> 
     url.searchParams.set('$order', 'latest_action_date DESC');
 
     console.log('Fetching DOB Jobs data for BIN:', bin);
-    const response = await fetch(url.toString());
+    const response = await loggedFetch(url.toString());
     if (!response.ok) {
       console.error('DOB Jobs API error:', response.status);
       return null;
@@ -191,7 +192,7 @@ export async function fetchPLUTOData(bbl: string): Promise<Partial<NYCBuildingDa
     url.searchParams.set('$limit', '1');
 
     console.log('Fetching PLUTO data for BBL:', cleanBbl);
-    const response = await fetch(url.toString());
+    const response = await loggedFetch(url.toString());
     if (!response.ok) {
       console.error('PLUTO API error:', response.status);
       return null;
@@ -289,7 +290,7 @@ export async function fetchDOBData(
     url.searchParams.set('$limit', '1');
     url.searchParams.set('$order', 'latest_action_date DESC');
 
-    const response = await fetch(url.toString());
+    const response = await loggedFetch(url.toString());
     if (!response.ok) return null;
 
     const results = await response.json();
