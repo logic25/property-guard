@@ -17,12 +17,15 @@ const NYC_OPEN_DATA_ENDPOINTS = {
   // DOB Complaints
   DOB_COMPLAINTS: "https://data.cityofnewyork.us/resource/eabe-havv.json",
   // Additional agency datasets
-  DEP: "https://data.cityofnewyork.us/resource/xbs2-bdct.json", // DEP Notices of Violation
-  DOT: "https://data.cityofnewyork.us/resource/w286-9scw.json", // DOT Violations
-  DSNY: "https://data.cityofnewyork.us/resource/erm2-nwe9.json", // 311 DSNY complaints (proxy)
-  LPC: "https://data.cityofnewyork.us/resource/wyev-xvpj.json", // Landmarks violations
-  DOF: "https://data.cityofnewyork.us/resource/bnx9-e6tj.json", // DOF Property Tax Liens
+  DEP: "https://data.cityofnewyork.us/resource/xbs2-bdct.json",
+  DOT: "https://data.cityofnewyork.us/resource/w286-9scw.json",
+  DSNY: "https://data.cityofnewyork.us/resource/erm2-nwe9.json",
+  LPC: "https://data.cityofnewyork.us/resource/wyev-xvpj.json",
+  DOF: "https://data.cityofnewyork.us/resource/bnx9-e6tj.json",
   CO: "https://data.cityofnewyork.us/resource/bs8b-p36w.json",
+  // Application endpoints
+  DOB_BIS_JOBS: "https://data.cityofnewyork.us/resource/ic3t-wcy2.json",
+  DOB_NOW_BUILD: "https://data.cityofnewyork.us/resource/w9ak-ipjd.json",
 };
 
 // Agency name mappings for OATH dataset
@@ -794,6 +797,153 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ===== APPLICATIONS SYNC =====
+    const applicationRecords: Array<{
+      property_id: string;
+      application_number: string;
+      application_type: string;
+      agency: string;
+      source: string;
+      status: string | null;
+      filing_date: string | null;
+      approval_date: string | null;
+      expiration_date: string | null;
+      job_type: string | null;
+      work_type: string | null;
+      description: string | null;
+      applicant_name: string | null;
+      owner_name: string | null;
+      estimated_cost: number | null;
+      stories: number | null;
+      dwelling_units: number | null;
+      floor_area: number | null;
+    }> = [];
+
+    // Fetch DOB BIS Job Application Filings
+    if (bin) {
+      const [bisJobs, dobNowBuild] = await Promise.all([
+        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_BIS_JOBS}?bin__=${bin}&$limit=200&$order=latest_action_date DESC`, "DOB_BIS_JOBS"),
+        safeFetch(`${NYC_OPEN_DATA_ENDPOINTS.DOB_NOW_BUILD}?bin=${bin}&$limit=200&$order=filing_date DESC`, "DOB_NOW_BUILD"),
+      ]);
+
+      console.log(`Found ${bisJobs.length} DOB BIS jobs, ${dobNowBuild.length} DOB NOW Build applications`);
+
+      for (const j of bisJobs as Record<string, unknown>[]) {
+        const jobNum = j.job__ as string;
+        if (!jobNum) continue;
+
+        const jobType = (j.job_type as string) || null;
+        const jobTypeLabel = jobType === 'NB' ? 'New Building' :
+                            jobType === 'A1' ? 'Alteration Type 1' :
+                            jobType === 'A2' ? 'Alteration Type 2' :
+                            jobType === 'A3' ? 'Alteration Type 3' :
+                            jobType === 'DM' ? 'Demolition' :
+                            jobType === 'SG' ? 'Sign' :
+                            jobType || 'Job Filing';
+
+        applicationRecords.push({
+          property_id,
+          application_number: String(jobNum),
+          application_type: jobTypeLabel,
+          agency: 'DOB',
+          source: 'DOB BIS',
+          status: (j.job_status as string) || (j.latest_action_date ? 'Filed' : null),
+          filing_date: j.pre__filing_date ? (j.pre__filing_date as string).split('T')[0] :
+                       j.latest_action_date ? (j.latest_action_date as string).split('T')[0] : null,
+          approval_date: j.approved_date ? (j.approved_date as string).split('T')[0] :
+                         j.fully_permitted_date ? (j.fully_permitted_date as string).split('T')[0] : null,
+          expiration_date: j.job_status_descrp?.toString().toLowerCase().includes('expired') ? 
+                          (j.latest_action_date as string)?.split('T')[0] || null : null,
+          job_type: jobType,
+          work_type: (j.building_type as string) || null,
+          description: [
+            j.job_description,
+            j.building_type ? `Building Type: ${j.building_type}` : null,
+          ].filter(Boolean).join(' — ') || null,
+          applicant_name: (j.applicant_s_first_name && j.applicant_s_last_name)
+            ? `${j.applicant_s_first_name} ${j.applicant_s_last_name}`.trim()
+            : null,
+          owner_name: (j.owner_s_first_name && j.owner_s_last_name)
+            ? `${j.owner_s_first_name} ${j.owner_s_last_name}`.trim()
+            : (j.owner_s_business_name as string) || null,
+          estimated_cost: j.initial_cost ? parseFloat(j.initial_cost as string) : null,
+          stories: j.proposed_no_of_stories ? parseInt(j.proposed_no_of_stories as string) : null,
+          dwelling_units: j.proposed_dwelling_units ? parseInt(j.proposed_dwelling_units as string) : null,
+          floor_area: j.proposed_zoning_sqft ? parseFloat(j.proposed_zoning_sqft as string) : null,
+        });
+      }
+
+      for (const a of dobNowBuild as Record<string, unknown>[]) {
+        const appNum = (a.job_filing_number || a.dobrunjobnumber) as string;
+        if (!appNum) continue;
+
+        const jobType = (a.job_type as string) || null;
+        const workType = (a.work_type as string) || null;
+
+        applicationRecords.push({
+          property_id,
+          application_number: String(appNum),
+          application_type: jobType || 'DOB NOW Filing',
+          agency: 'DOB',
+          source: 'DOB NOW Build',
+          status: (a.filing_status as string) || (a.current_status_date ? 'Filed' : null),
+          filing_date: a.filing_date ? (a.filing_date as string).split('T')[0] : null,
+          approval_date: a.approved_date ? (a.approved_date as string).split('T')[0] : null,
+          expiration_date: a.expiration_date ? (a.expiration_date as string).split('T')[0] : null,
+          job_type: jobType,
+          work_type: workType,
+          description: [
+            a.job_description || a.filing_reason,
+            workType ? `Work: ${workType}` : null,
+          ].filter(Boolean).join(' — ') || null,
+          applicant_name: (a.applicant_first_name && a.applicant_last_name)
+            ? `${a.applicant_first_name} ${a.applicant_last_name}`.trim()
+            : (a.applicant_business_name as string) || null,
+          owner_name: (a.owner_first_name && a.owner_last_name)
+            ? `${a.owner_first_name} ${a.owner_last_name}`.trim()
+            : (a.owner_business_name as string) || null,
+          estimated_cost: a.estimated_job_costs ? parseFloat(a.estimated_job_costs as string) : null,
+          stories: a.stories ? parseInt(a.stories as string) : null,
+          dwelling_units: a.dwelling_units ? parseInt(a.dwelling_units as string) : null,
+          floor_area: a.floor_area_sq_ft ? parseFloat(a.floor_area_sq_ft as string) : null,
+        });
+      }
+    }
+
+    // Deduplicate applications by source + application_number
+    const uniqueApps = Array.from(
+      new Map(applicationRecords.map(a => [`${a.source}:${a.application_number}`, a])).values()
+    );
+
+    let newAppsCount = 0;
+    if (uniqueApps.length > 0 && property_id) {
+      const { data: existingApps } = await supabase
+        .from('applications')
+        .select('id, application_number, source')
+        .eq('property_id', property_id);
+
+      const existingAppKeys = new Set(
+        (existingApps || []).map(a => `${a.source}:${a.application_number}`)
+      );
+
+      const newApps = uniqueApps.filter(a => !existingAppKeys.has(`${a.source}:${a.application_number}`));
+      newAppsCount = newApps.length;
+
+      console.log(`Applications: ${existingAppKeys.size} existing, ${newApps.length} new`);
+
+      if (newApps.length > 0) {
+        const { error: appInsertError } = await supabase
+          .from('applications')
+          .insert(newApps);
+
+        if (appInsertError) {
+          console.error('Error inserting applications:', appInsertError);
+        } else {
+          console.log(`Inserted ${newApps.length} new applications`);
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -802,6 +952,8 @@ Deno.serve(async (req) => {
         critical_count: criticalCount,
         agencies_synced: agenciesToSync,
         sms_sent: newViolationsCount > 0 && ownerPhone ? true : false,
+        applications_found: uniqueApps.length,
+        new_applications: newAppsCount,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
