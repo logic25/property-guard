@@ -11,8 +11,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import DashboardOverview from "@/pages/dashboard/DashboardOverview";
 import PropertiesPage from "@/pages/dashboard/PropertiesPage";
 import PropertyDetailPage from "@/pages/dashboard/PropertyDetailPage";
-import PortfoliosPage from "@/pages/dashboard/PortfoliosPage";
-import PortfolioDetailPage from "@/pages/dashboard/PortfolioDetailPage";
+// Portfolio pages preserved in src/pages/dashboard/PortfoliosPage.tsx & PortfolioDetailPage.tsx
 import ApplicationsPage from "@/pages/dashboard/ApplicationsPage";
 import ViolationsPage from "@/pages/dashboard/ViolationsPage";
 import DDReportsPage from "@/pages/dashboard/DDReportsPage";
@@ -46,8 +45,7 @@ const App = () => (
               <Route index element={<DashboardOverview />} />
               <Route path="properties" element={<PropertiesPage />} />
               <Route path="properties/:id" element={<PropertyDetailPage />} />
-              <Route path="portfolios" element={<PortfoliosPage />} />
-              <Route path="portfolios/:id" element={<PortfolioDetailPage />} />
+              {/* Portfolio routes removed – files preserved for future use */}
               <Route path="applications" element={<ApplicationsPage />} />
               <Route path="violations" element={<ViolationsPage />} />
               <Route path="dd-reports" element={<DDReportsPage />} />

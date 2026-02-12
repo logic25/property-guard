@@ -25,7 +25,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 const navItems = [
   { icon: LayoutDashboard, label: 'Overview', href: '/dashboard' },
   { icon: Home, label: 'Properties', href: '/dashboard/properties' },
-  { icon: FolderOpen, label: 'Portfolios', href: '/dashboard/portfolios' },
   { icon: FileStack, label: 'Applications', href: '/dashboard/applications' },
   { icon: AlertTriangle, label: 'Violations', href: '/dashboard/violations' },
   { icon: Bell, label: 'Notifications', href: '/dashboard/notifications' },
