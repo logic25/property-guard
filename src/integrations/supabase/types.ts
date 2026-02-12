@@ -224,6 +224,65 @@ export type Database = {
           },
         ]
       }
+      compliance_scores: {
+        Row: {
+          calculated_at: string
+          compliance_details: Json | null
+          compliance_score: number
+          created_at: string
+          grade: string
+          id: string
+          property_id: string
+          resolution_details: Json | null
+          resolution_score: number
+          score: number
+          updated_at: string
+          user_id: string
+          violation_details: Json | null
+          violation_score: number
+        }
+        Insert: {
+          calculated_at?: string
+          compliance_details?: Json | null
+          compliance_score?: number
+          created_at?: string
+          grade?: string
+          id?: string
+          property_id: string
+          resolution_details?: Json | null
+          resolution_score?: number
+          score?: number
+          updated_at?: string
+          user_id: string
+          violation_details?: Json | null
+          violation_score?: number
+        }
+        Update: {
+          calculated_at?: string
+          compliance_details?: Json | null
+          compliance_score?: number
+          created_at?: string
+          grade?: string
+          id?: string
+          property_id?: string
+          resolution_details?: Json | null
+          resolution_score?: number
+          score?: number
+          updated_at?: string
+          user_id?: string
+          violation_details?: Json | null
+          violation_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compliance_scores_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: true
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dd_reports: {
         Row: {
           address: string
@@ -1352,7 +1411,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_compliance_score: {
+        Args: { p_property_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       agency_type:

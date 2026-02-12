@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useComplianceScore } from '@/hooks/useComplianceScore';
+import { ComplianceScoreCard } from '@/components/dashboard/ComplianceScoreCard';
 import { Badge } from '@/components/ui/badge';
 import { 
   Collapsible,
@@ -132,6 +134,14 @@ export const PropertyOverviewTab = ({
 }: PropertyOverviewTabProps) => {
   const [zoningOpen, setZoningOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const { score: complianceData, isLoading: scoreLoading, recalculate } = useComplianceScore(property.id);
+
+  // Auto-calculate score on first load if missing
+  useEffect(() => {
+    if (!scoreLoading && !complianceData && property.id) {
+      recalculate();
+    }
+  }, [scoreLoading, complianceData, property.id, recalculate]);
   
   // Filter to only active violations
   const activeViolations = violations.filter(isActiveViolation);
@@ -150,9 +160,9 @@ export const PropertyOverviewTab = ({
     ? Math.ceil((new Date(nextDeadline.cure_due_date!).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
 
-  // Calculate compliance score based on active violations
+  // Use DB-calculated compliance score or fallback
   const criticalIssues = activeViolations.filter(v => v.is_stop_work_order || v.is_vacate_order).length;
-  const complianceScore = Math.max(0, 100 - (openViolations * 5) - (criticalIssues * 25));
+  const complianceScore = complianceData?.score ?? Math.max(0, 100 - (openViolations * 5) - (criticalIssues * 25));
 
   const getCOStatusBadge = (status: string | null | undefined) => {
     switch (status) {
@@ -584,9 +594,29 @@ export const PropertyOverviewTab = ({
         </CardContent>
       </Card>
 
-      {/* Local Law Compliance Grid */}
-      <div id="local-law-compliance">
-        <LocalLawComplianceGrid property={property} />
+      {/* Compliance Score + Local Law Grid */}
+      <div id="local-law-compliance" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1">
+          {complianceData ? (
+            <ComplianceScoreCard
+              score={complianceData.score}
+              grade={complianceData.grade}
+              violationScore={complianceData.violation_score}
+              complianceScore={complianceData.compliance_score}
+              resolutionScore={complianceData.resolution_score}
+              violationDetails={complianceData.violation_details}
+              complianceDetails={complianceData.compliance_details}
+              resolutionDetails={complianceData.resolution_details}
+              calculatedAt={complianceData.calculated_at}
+              onRecalculate={recalculate}
+            />
+          ) : (
+            <div className="bg-card rounded-xl border border-border p-5 shadow-card animate-pulse h-64" />
+          )}
+        </div>
+        <div className="lg:col-span-2">
+          <LocalLawComplianceGrid property={property} />
+        </div>
       </div>
 
       {/* Property AI Widget */}
