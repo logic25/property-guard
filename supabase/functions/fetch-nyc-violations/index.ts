@@ -1315,17 +1315,14 @@ Deno.serve(async (req) => {
             'u': 'completed',
           };
 
-          // Find CO job: must have a CO-indicating status AND be a real job type
-          // NB = New Building, A1 = Major Alteration, A2 = Minor Alteration with CO impact, A3 = Minor Alteration
+          // Find CO job: ONLY NB (New Building) and A1 (Major Alteration) can receive a CO.
+          // A2/A3 are minor alterations and never result in a new CO.
+          // If a NB or A1 is signed off (X or I), that means a CO was issued.
           const coJob = (bisJobs as Record<string, unknown>[]).find(j => {
             const status = ((j.job_status || '') as string).toLowerCase();
             const jobType = ((j.job_type || '') as string).toUpperCase();
-            const isCOJobType = ['NB', 'A1', 'A2'].includes(jobType);
-            return (status in BIS_CO_STATUSES) && isCOJobType;
-          }) || (bisJobs as Record<string, unknown>[]).find(j => {
-            // Fallback: any job type with signed-off status (x or i) indicates a CO exists
-            const status = ((j.job_status || '') as string).toLowerCase();
-            return status === 'x' || status === 'i';
+            const isCOJobType = jobType === 'NB' || jobType === 'A1';
+            return isCOJobType && (status in BIS_CO_STATUSES);
           });
 
           if (coJob) {
