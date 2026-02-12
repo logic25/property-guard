@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { FileStack, Search, RefreshCw, Building2, ExternalLink, Filter } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { FileStack, Search, RefreshCw, Building2, ExternalLink, Filter, ChevronRight, ChevronDown, Calendar, User, DollarSign, FileText, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
-import { getSourceBadge } from '@/lib/application-utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { getSourceBadge } from '@/lib/application-utils';
 
 interface Application {
   id: string;
@@ -33,12 +34,34 @@ interface Application {
   applicant_name: string | null;
   owner_name: string | null;
   estimated_cost: number | null;
+  stories: number | null;
+  dwelling_units: number | null;
+  floor_area: number | null;
+  raw_data: Record<string, unknown> | null;
   created_at: string;
   properties?: {
     address: string;
     bin: string | null;
   };
 }
+
+// DOB BIS job status codes decoded
+const BIS_STATUS_CODES: Record<string, string> = {
+  'A': 'Pre-Filing', 'B': 'Plan Examination', 'C': 'Plan Exam Approval Pending',
+  'D': 'Plan Approved', 'E': 'Partial Permit Issued', 'F': 'Permit Issued - Entire',
+  'G': 'Permit Renewed', 'H': 'Completed', 'I': 'Signed Off',
+  'J': 'Letter of Completion', 'K': 'CO Issued', 'L': 'Withdrawn',
+  'M': 'Disapproved', 'N': 'Suspended', 'P': 'Permit Expired',
+  'Q': 'Partial Permit', 'R': 'Plan Exam - Incomplete', 'X': 'Signed Off / Completed',
+};
+
+const decodeStatus = (status: string | null, source: string): string => {
+  if (!status) return 'Unknown';
+  if (source === 'DOB BIS' && status.length <= 2) {
+    return BIS_STATUS_CODES[status.toUpperCase()] || status;
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+};
 
 const ApplicationsPage = () => {
   const { user } = useAuth();
@@ -48,18 +71,15 @@ const ApplicationsPage = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
   const [sourceFilterInit, setSourceFilterInit] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const { data: applications, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['applications', user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('applications')
-        .select(`
-          *,
-          properties:property_id (address, bin)
-        `)
+        .select(`*, properties:property_id (address, bin)`)
         .order('filing_date', { ascending: false });
-
       if (error) throw error;
       return data as Application[];
     },
@@ -67,12 +87,16 @@ const ApplicationsPage = () => {
   });
 
   const handleSync = async () => {
-    toast({
-      title: "Syncing applications...",
-      description: "Fetching latest data from NYC Open Data.",
-    });
-    // Future: Call sync edge function
+    toast({ title: "Syncing applications...", description: "Fetching latest data from NYC Open Data." });
     await refetch();
+  };
+
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   const filteredApplications = applications?.filter(app => {
@@ -80,31 +104,18 @@ const ApplicationsPage = () => {
       app.application_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
       app.properties?.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       app.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    
     const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
     const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
     const matchesSource = selectedSources.size === 0 || selectedSources.has(app.source);
-    
     return matchesSearch && matchesAgency && matchesStatus && matchesSource;
   });
 
-  const getStatusVariant = (status: string | null) => {
-    switch (status?.toLowerCase()) {
-      case 'approved':
-      case 'issued':
-      case 'complete':
-        return 'default';
-      case 'pending':
-      case 'in review':
-      case 'filed':
-        return 'secondary';
-      case 'denied':
-      case 'withdrawn':
-      case 'cancelled':
-        return 'destructive';
-      default:
-        return 'outline';
-    }
+  const getStatusVariant = (status: string | null, source: string) => {
+    const decoded = decodeStatus(status, source).toLowerCase();
+    if (['signed off', 'completed', 'co issued', 'permit issued'].some(s => decoded.includes(s))) return 'default' as const;
+    if (['pre-filing', 'plan exam', 'partial permit', 'pending', 'filed', 'in review', 'plan approved', 'letter of completion'].some(s => decoded.includes(s))) return 'secondary' as const;
+    if (['disapproved', 'withdrawn', 'suspended', 'expired', 'denied', 'cancelled'].some(s => decoded.includes(s))) return 'destructive' as const;
+    return 'outline' as const;
   };
 
   const getAgencyColor = (agency: string) => {
@@ -122,7 +133,6 @@ const ApplicationsPage = () => {
   const uniqueStatuses = [...new Set(applications?.map(a => a.status).filter(Boolean) || [])].sort() as string[];
   const uniqueSources = [...new Set(applications?.map(a => a.source) || [])].sort();
 
-  // Init source filter with all sources selected
   useEffect(() => {
     if (uniqueSources.length > 0 && !sourceFilterInit) {
       setSelectedSources(new Set(uniqueSources));
@@ -133,10 +143,113 @@ const ApplicationsPage = () => {
   const toggleSource = (source: string) => {
     setSelectedSources(prev => {
       const next = new Set(prev);
-      if (next.has(source)) next.delete(source);
-      else next.add(source);
+      if (next.has(source)) next.delete(source); else next.add(source);
       return next;
     });
+  };
+
+  const renderExpandedDetails = (app: Application) => {
+    const raw = app.raw_data || {};
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        {/* Dates */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5" /> Dates & Permit
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Filed: <span className="text-foreground">{app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}</span></p>
+            <p>Approved: <span className="text-foreground">{app.approval_date ? format(new Date(app.approval_date), 'MM/dd/yy') : '—'}</span></p>
+            <p>Expires: <span className="text-foreground">{app.expiration_date ? format(new Date(app.expiration_date), 'MM/dd/yy') : '—'}</span></p>
+            {raw.first_permit_date && <p>First Permit: <span className="text-foreground">{format(new Date(raw.first_permit_date as string), 'MM/dd/yy')}</span></p>}
+          </div>
+        </div>
+
+        {/* Applicant */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5" /> Applicant
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Name: <span className="text-foreground">{app.applicant_name || '—'}</span></p>
+            <p>Owner: <span className="text-foreground">{app.owner_name || '—'}</span></p>
+            {raw.applicant_phone && <p>Phone: <span className="text-foreground">{raw.applicant_phone as string}</span></p>}
+            {raw.applicant_email && <p>Email: <span className="text-foreground">{raw.applicant_email as string}</span></p>}
+            {(raw.applicant_business_name || raw.applicant_business) && (
+              <p>Company: <span className="text-foreground">{(raw.applicant_business_name || raw.applicant_business) as string}</span></p>
+            )}
+            {raw.applicant_license && <p>License #: <span className="text-foreground">{raw.applicant_license as string}</span></p>}
+          </div>
+        </div>
+
+        {/* Cost & Scope */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-foreground flex items-center gap-1.5">
+            <DollarSign className="w-3.5 h-3.5" /> Cost & Scope
+          </h4>
+          <div className="space-y-1 text-muted-foreground">
+            <p>Est. Cost: <span className="text-foreground">{app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}</span></p>
+            {app.floor_area != null && app.floor_area > 0 && (
+              <p>Floor Area: <span className="text-foreground">{app.floor_area.toLocaleString()} sqft</span></p>
+            )}
+            {raw.apt_condo && <p>Apt/Condo #: <span className="text-foreground">{raw.apt_condo as string}</span></p>}
+            {raw.work_on_floor && <p>Work Location: <span className="text-foreground">{raw.work_on_floor as string}</span></p>}
+          </div>
+        </div>
+
+        {/* Technical */}
+        {(raw.special_inspection || raw.progress_inspection || raw.building_code || raw.review_building_code) && (
+          <div className="space-y-2">
+            <h4 className="font-medium text-foreground flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" /> Technical
+            </h4>
+            <div className="space-y-1 text-muted-foreground">
+              {(raw.review_building_code || raw.building_code) && (
+                <p>Building Code: <span className="text-foreground">{(raw.review_building_code || raw.building_code) as string}</span></p>
+              )}
+              {raw.special_inspection && <p>Special Inspection: <span className="text-foreground">{raw.special_inspection as string}</span></p>}
+              {raw.progress_inspection && <p>Progress Inspection: <span className="text-foreground">{raw.progress_inspection as string}</span></p>}
+            </div>
+          </div>
+        )}
+
+        {/* Description */}
+        {app.description && (
+          <div className="col-span-2 md:col-span-3 space-y-2">
+            <h4 className="font-medium text-foreground flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" /> Scope of Work
+            </h4>
+            <p className="text-muted-foreground whitespace-pre-wrap">{app.description}</p>
+          </div>
+        )}
+
+        {/* Status decode for BIS */}
+        {app.source === 'DOB BIS' && app.status && app.status.length <= 2 && (
+          <div className="col-span-2 md:col-span-3 bg-muted/50 rounded-lg p-3">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Status Code "{app.status}"</span> → {decodeStatus(app.status, app.source)}
+            </p>
+          </div>
+        )}
+
+        {/* External Link */}
+        <div className="col-span-2 md:col-span-3 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const url = app.source === 'DOB BIS'
+                ? `https://a810-bisweb.nyc.gov/bisweb/JobsQueryByNumberServlet?passjobnumber=${app.application_number}`
+                : `https://a810-dobnow.nyc.gov/Publish/#!/job/${app.application_number}`;
+              window.open(url, '_blank');
+            }}
+          >
+            <ExternalLink className="w-3 h-3 mr-2" />
+            View on NYC Portal
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -145,9 +258,7 @@ const ApplicationsPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-display font-bold text-foreground">Applications</h1>
-          <p className="text-muted-foreground mt-1">
-            Track permits and applications from all NYC agencies
-          </p>
+          <p className="text-muted-foreground mt-1">Track permits and applications from all NYC agencies</p>
         </div>
         <Button onClick={handleSync} disabled={isRefetching}>
           <RefreshCw className={`w-4 h-4 mr-2 ${isRefetching ? 'animate-spin' : ''}`} />
@@ -162,23 +273,14 @@ const ApplicationsPage = () => {
             <div className="flex-1 min-w-[200px]">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by application #, address, or description..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+                <Input placeholder="Search by application #, address, or description..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
               </div>
             </div>
             <Select value={agencyFilter} onValueChange={setAgencyFilter}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Agency" />
-              </SelectTrigger>
+              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Agency" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Agencies</SelectItem>
-                {uniqueAgencies.map(agency => (
-                  <SelectItem key={agency} value={agency}>{agency}</SelectItem>
-                ))}
+                {uniqueAgencies.map(agency => (<SelectItem key={agency} value={agency}>{agency}</SelectItem>))}
               </SelectContent>
             </Select>
             <Popover>
@@ -199,25 +301,18 @@ const ApplicationsPage = () => {
                 <div className="space-y-1.5 max-h-60 overflow-y-auto">
                   {uniqueSources.map(source => (
                     <label key={source} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1">
-                      <Checkbox
-                        checked={selectedSources.has(source)}
-                        onCheckedChange={() => toggleSource(source)}
-                      />
-                      <span className="text-sm">{source}</span>
+                      <Checkbox checked={selectedSources.has(source)} onCheckedChange={() => toggleSource(source)} />
+                      <span className="text-sm">{getSourceBadge(source).label}</span>
                     </label>
                   ))}
                 </div>
               </PopoverContent>
             </Popover>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
+              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                {uniqueStatuses.map(status => (
-                  <SelectItem key={status} value={status || 'unknown'}>{status}</SelectItem>
-                ))}
+                {uniqueStatuses.map(status => (<SelectItem key={status} value={status || 'unknown'}>{status}</SelectItem>))}
               </SelectContent>
             </Select>
           </div>
@@ -231,25 +326,19 @@ const ApplicationsPage = () => {
             <FileStack className="w-5 h-5" />
             Applications ({filteredApplications?.length || 0})
           </CardTitle>
-          <CardDescription>
-            Permits, jobs, and applications from DOB BIS, DOB NOW, FDNY, and other NYC agencies
-          </CardDescription>
+          <CardDescription>Permits, jobs, and applications from DOB BIS, DOB NOW, FDNY, and other NYC agencies</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
+              {[...Array(5)].map((_, i) => (<Skeleton key={i} className="h-16 w-full" />))}
             </div>
           ) : !filteredApplications?.length ? (
             <div className="text-center py-12">
               <FileStack className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium text-foreground mb-1">No applications found</h3>
               <p className="text-muted-foreground">
-                {applications?.length === 0 
-                  ? "Applications will appear here once synced from NYC Open Data."
-                  : "Try adjusting your search or filters."}
+                {applications?.length === 0 ? "Applications will appear here once synced from NYC Open Data." : "Try adjusting your search or filters."}
               </p>
             </div>
           ) : (
@@ -257,6 +346,7 @@ const ApplicationsPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10"></TableHead>
                     <TableHead>Application #</TableHead>
                     <TableHead>Property</TableHead>
                     <TableHead>Type</TableHead>
@@ -265,66 +355,60 @@ const ApplicationsPage = () => {
                     <TableHead>Status</TableHead>
                     <TableHead>Filed</TableHead>
                     <TableHead>Est. Cost</TableHead>
-                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredApplications.map((app) => (
-                    <TableRow key={app.id}>
-                      <TableCell className="font-mono text-sm">
-                        {app.application_number}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <span className="text-sm truncate max-w-[200px]">
-                            {app.properties?.address || 'Unknown'}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {app.application_type}
-                          {app.work_type && (
-                            <span className="text-muted-foreground ml-1">({app.work_type})</span>
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>
-                          {app.agency}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const sb = getSourceBadge(app.source);
-                          return (
-                            <span className={`inline-flex items-center justify-center w-[90px] px-2 py-0.5 rounded text-xs font-semibold ${sb.bgColor} ${sb.color}`}>
-                              {sb.label}
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusVariant(app.status)}>
-                          {app.status || 'Unknown'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {app.filing_date ? format(new Date(app.filing_date), 'MMM d, yyyy') : '—'}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {app.estimated_cost 
-                          ? `$${app.estimated_cost.toLocaleString()}`
-                          : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredApplications.map((app) => {
+                    const isExpanded = expandedRows.has(app.id);
+                    const decodedStatus = decodeStatus(app.status, app.source);
+                    const sb = getSourceBadge(app.source);
+                    return (
+                      <Collapsible key={app.id} asChild open={isExpanded} onOpenChange={() => toggleRow(app.id)}>
+                        <>
+                          <TableRow className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => toggleRow(app.id)}>
+                            <TableCell className="px-2">
+                              {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">{app.application_number}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                                <span className="text-sm truncate max-w-[200px]">{app.properties?.address || 'Unknown'}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm">
+                                {app.application_type}
+                                {app.work_type && <span className="text-muted-foreground ml-1">({app.work_type})</span>}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>{app.agency}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center justify-center w-[90px] px-2 py-0.5 rounded text-xs font-semibold ${sb.bgColor} ${sb.color}`}>{sb.label}</span>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={getStatusVariant(app.status, app.source)}>{decodedStatus}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {app.filing_date ? format(new Date(app.filing_date), 'MM/dd/yy') : '—'}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {app.estimated_cost ? `$${app.estimated_cost.toLocaleString()}` : '—'}
+                            </TableCell>
+                          </TableRow>
+                          <CollapsibleContent asChild>
+                            <TableRow className="bg-muted/20 hover:bg-muted/20">
+                              <TableCell colSpan={9} className="py-4 px-6">
+                                {renderExpandedDetails(app)}
+                              </TableCell>
+                            </TableRow>
+                          </CollapsibleContent>
+                        </>
+                      </Collapsible>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

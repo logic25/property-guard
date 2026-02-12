@@ -103,6 +103,59 @@ export type Database = {
           },
         ]
       }
+      change_log: {
+        Row: {
+          change_type: string
+          created_at: string
+          description: string | null
+          entity_id: string
+          entity_label: string | null
+          entity_type: string
+          id: string
+          new_value: string | null
+          notified: boolean
+          previous_value: string | null
+          property_id: string
+          user_id: string
+        }
+        Insert: {
+          change_type: string
+          created_at?: string
+          description?: string | null
+          entity_id: string
+          entity_label?: string | null
+          entity_type: string
+          id?: string
+          new_value?: string | null
+          notified?: boolean
+          previous_value?: string | null
+          property_id: string
+          user_id: string
+        }
+        Update: {
+          change_type?: string
+          created_at?: string
+          description?: string | null
+          entity_id?: string
+          entity_label?: string | null
+          entity_type?: string
+          id?: string
+          new_value?: string | null
+          notified?: boolean
+          previous_value?: string | null
+          property_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_log_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dd_reports: {
         Row: {
           address: string

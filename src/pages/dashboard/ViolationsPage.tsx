@@ -6,43 +6,30 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
-  AlertTriangle, 
-  Plus, 
-  Search,
-  Loader2,
-  Calendar,
-  Building2,
-  RefreshCw,
-  ArrowUpDown,
-  ExternalLink,
-  DollarSign,
-  Gavel
+  AlertTriangle, Plus, Search, Loader2, Calendar, Building2, RefreshCw,
+  ArrowUpDown, ExternalLink, DollarSign, Gavel, ChevronRight, ChevronDown,
+  FileText, User, MessageSquare, Save, MoreHorizontal, Wrench
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { isActiveViolation, getAgencyColor, getAgencyLookupUrl } from '@/lib/violation-utils';
+import { isActiveViolation, getAgencyColor, getAgencyLookupUrl, getStatusColor } from '@/lib/violation-utils';
+import { calculateViolationSeverity } from '@/lib/violation-severity';
 
 interface Property {
   id: string;
@@ -62,10 +49,13 @@ interface Violation {
   status: string;
   oath_status: string | null;
   violation_class: string | null;
+  violation_type: string | null;
+  severity: string | null;
   penalty_amount: number | null;
   respondent_name: string | null;
   is_stop_work_order: boolean | null;
   is_vacate_order: boolean | null;
+  notes: string | null;
   property: Property | null;
 }
 
@@ -85,30 +75,21 @@ const ViolationsPage = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
+  const [savingNotes, setSavingNotes] = useState<Set<string>>(new Set());
 
   const [formData, setFormData] = useState({
-    property_id: '',
-    agency: '' as string,
-    violation_number: '',
-    issued_date: '',
-    hearing_date: '',
-    cure_due_date: '',
-    description_raw: '',
-    notes: '',
+    property_id: '', agency: '' as string, violation_number: '', issued_date: '',
+    hearing_date: '', cure_due_date: '', description_raw: '', notes: '',
   });
 
   const fetchData = async () => {
     if (!user) return;
     try {
       const [violationsRes, propertiesRes] = await Promise.all([
-        supabase
-          .from('violations')
-          .select('*, property:properties(id, address, bin, bbl)')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('properties')
-          .select('id, address, bin, bbl')
-          .order('address'),
+        supabase.from('violations').select('*, property:properties(id, address, bin, bbl)').order('created_at', { ascending: false }),
+        supabase.from('properties').select('id, address, bin, bbl').order('address'),
       ]);
       if (violationsRes.error) throw violationsRes.error;
       if (propertiesRes.error) throw propertiesRes.error;
@@ -117,9 +98,7 @@ const ViolationsPage = () => {
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load violations');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const syncViolations = async () => {
@@ -129,8 +108,7 @@ const ViolationsPage = () => {
       return;
     }
     setIsSyncing(true);
-    let totalNew = 0;
-    let errors = 0;
+    let totalNew = 0; let errors = 0;
     try {
       for (const property of propertiesWithBin) {
         try {
@@ -184,25 +162,39 @@ const ViolationsPage = () => {
     } catch { toast.error('Failed to update status'); }
   };
 
+  const saveNotes = async (id: string) => {
+    const notes = editingNotes[id];
+    if (notes === undefined) return;
+    setSavingNotes(prev => new Set(prev).add(id));
+    try {
+      const { error } = await supabase.from('violations').update({ notes }).eq('id', id);
+      if (error) throw error;
+      toast.success('Notes saved');
+      fetchData();
+    } catch { toast.error('Failed to save notes'); }
+    finally { setSavingNotes(prev => { const s = new Set(prev); s.delete(id); return s; }); }
+  };
+
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('desc'); }
   };
 
-  const getDaysUntil = (dateStr: string | null) => {
-    if (!dateStr) return null;
-    const d = new Date(dateStr);
-    const today = new Date();
-    return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
-  // Get unique agencies for filter
-  const agencies = useMemo(() => {
-    const set = new Set(violations.map(v => v.agency));
-    return Array.from(set).sort();
-  }, [violations]);
+  const getDaysUntil = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    return Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+  };
 
-  // Summary stats
+  const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))].sort(), [violations]);
+
   const summaryStats = useMemo(() => {
     const active = violations.filter(isActiveViolation);
     const totalPenalties = active.reduce((s, v) => s + (v.penalty_amount || 0), 0);
@@ -227,30 +219,17 @@ const ViolationsPage = () => {
       const matchesAgency = agencyFilter === 'all' || v.agency === agencyFilter;
       return matchesSearch && matchesStatus && matchesAgency;
     });
-
-    // Sort
     filtered.sort((a, b) => {
       let cmp = 0;
       switch (sortField) {
-        case 'issued_date':
-          cmp = new Date(a.issued_date).getTime() - new Date(b.issued_date).getTime();
-          break;
-        case 'agency':
-          cmp = a.agency.localeCompare(b.agency);
-          break;
-        case 'status':
-          cmp = a.status.localeCompare(b.status);
-          break;
-        case 'hearing_date':
-          cmp = (a.hearing_date || '').localeCompare(b.hearing_date || '');
-          break;
-        case 'penalty_amount':
-          cmp = (a.penalty_amount || 0) - (b.penalty_amount || 0);
-          break;
+        case 'issued_date': cmp = new Date(a.issued_date).getTime() - new Date(b.issued_date).getTime(); break;
+        case 'agency': cmp = a.agency.localeCompare(b.agency); break;
+        case 'status': cmp = a.status.localeCompare(b.status); break;
+        case 'hearing_date': cmp = (a.hearing_date || '').localeCompare(b.hearing_date || ''); break;
+        case 'penalty_amount': cmp = (a.penalty_amount || 0) - (b.penalty_amount || 0); break;
       }
       return sortDir === 'asc' ? cmp : -cmp;
     });
-
     return filtered;
   }, [violations, searchQuery, statusFilter, agencyFilter, sortField, sortDir]);
 
@@ -260,7 +239,6 @@ const ViolationsPage = () => {
     if (daysUntilHearing !== null && daysUntilHearing >= 0 && daysUntilHearing <= 7) return 'bg-destructive/5 hover:bg-destructive/10';
     if (daysUntilHearing !== null && daysUntilHearing > 7 && daysUntilHearing <= 14) return 'bg-warning/5 hover:bg-warning/10';
     if (v.status === 'closed' || !isActiveViolation(v)) return 'bg-success/5 hover:bg-success/10';
-    if (v.status === 'open') return 'hover:bg-muted/50';
     return 'hover:bg-muted/50';
   };
 
@@ -290,9 +268,7 @@ const ViolationsPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-3xl font-bold text-foreground">Violations</h1>
-          <p className="text-muted-foreground mt-1">
-            Track and manage NYC violations across your properties
-          </p>
+          <p className="text-muted-foreground mt-1">Track and manage NYC violations across your properties</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={syncViolations} disabled={isSyncing || properties.length === 0}>
@@ -302,8 +278,7 @@ const ViolationsPage = () => {
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="hero" disabled={properties.length === 0}>
-                <Plus className="w-4 h-4" />
-                Log Violation
+                <Plus className="w-4 h-4" /> Log Violation
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
@@ -326,15 +301,9 @@ const ViolationsPage = () => {
                     <Select value={formData.agency} onValueChange={(v) => setFormData({ ...formData, agency: v })} required>
                       <SelectTrigger><SelectValue placeholder="Select agency" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="DOB">DOB</SelectItem>
-                        <SelectItem value="ECB">ECB</SelectItem>
-                        <SelectItem value="FDNY">FDNY</SelectItem>
-                        <SelectItem value="HPD">HPD</SelectItem>
-                        <SelectItem value="DEP">DEP</SelectItem>
-                        <SelectItem value="DOT">DOT</SelectItem>
-                        <SelectItem value="DSNY">DSNY</SelectItem>
-                        <SelectItem value="LPC">LPC</SelectItem>
-                        <SelectItem value="DOF">DOF</SelectItem>
+                        {['DOB','ECB','FDNY','HPD','DEP','DOT','DSNY','LPC','DOF'].map(a => (
+                          <SelectItem key={a} value={a}>{a}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -448,6 +417,7 @@ const ViolationsPage = () => {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40">
+                <TableHead className="w-10"></TableHead>
                 <SortableHeader field="issued_date">Issued</SortableHeader>
                 <TableHead>Address</TableHead>
                 <TableHead>Violation #</TableHead>
@@ -456,83 +426,185 @@ const ViolationsPage = () => {
                 <SortableHeader field="status">Status</SortableHeader>
                 <SortableHeader field="hearing_date">Hearing</SortableHeader>
                 <SortableHeader field="penalty_amount">Fines</SortableHeader>
-                <TableHead className="w-[80px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredViolations.map((v) => {
                 const daysUntilHearing = getDaysUntil(v.hearing_date);
                 const isCritical = v.is_stop_work_order || v.is_vacate_order;
+                const isExpanded = expandedRows.has(v.id);
+                const sev = calculateViolationSeverity(v);
+                const dotColor = { Critical: 'bg-red-500', High: 'bg-orange-500', Medium: 'bg-yellow-500', Low: 'bg-blue-500' }[sev.level] || 'bg-muted-foreground';
                 
                 return (
-                  <TableRow key={v.id} className={`${getRowColor(v)} transition-colors`}>
-                    <TableCell className="text-xs tabular-nums whitespace-nowrap">
-                      {new Date(v.issued_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}
-                    </TableCell>
-                    <TableCell className="max-w-[180px]">
-                      <Link to={`/dashboard/properties/${v.property?.id}`} className="text-sm font-medium text-foreground hover:text-accent hover:underline truncate block">
-                        {v.property?.address || 'Unknown'}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-sm font-mono whitespace-nowrap">{v.violation_number}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={`${getAgencyColor(v.agency)} text-[10px] font-bold`}>
-                        {v.agency}
-                      </Badge>
-                      {isCritical && (
-                        <Badge variant="destructive" className="ml-1 text-[10px]">
-                          {v.is_stop_work_order ? 'SWO' : 'Vacate'}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-[250px]">
-                      <p className="text-xs text-muted-foreground truncate">{v.description_raw || '—'}</p>
-                    </TableCell>
-                    <TableCell>
-                      <Select value={v.status} onValueChange={(s) => updateStatus(v.id, s)}>
-                        <SelectTrigger className={`w-28 h-7 text-[11px] font-medium border ${
-                          v.status === 'open' ? 'border-destructive/50 text-destructive' :
-                          v.status === 'in_progress' ? 'border-warning/50 text-warning' :
-                          'border-success/50 text-success'
-                        }`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="open">Open</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="closed">Closed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">
-                      {v.hearing_date ? (
-                        <div className="flex flex-col">
-                          <span className="tabular-nums">{new Date(v.hearing_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}</span>
-                          {daysUntilHearing !== null && daysUntilHearing >= 0 && (
-                            <span className={`text-[10px] font-semibold ${daysUntilHearing <= 7 ? 'text-destructive' : daysUntilHearing <= 14 ? 'text-warning' : 'text-muted-foreground'}`}>
-                              {daysUntilHearing === 0 ? 'Today' : daysUntilHearing === 1 ? 'Tomorrow' : `${daysUntilHearing}d away`}
+                  <Collapsible key={v.id} asChild open={isExpanded} onOpenChange={() => toggleRow(v.id)}>
+                    <>
+                      <TableRow className={`${getRowColor(v)} transition-colors cursor-pointer`} onClick={() => toggleRow(v.id)}>
+                        <TableCell className="px-2">
+                          {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums whitespace-nowrap">
+                          {new Date(v.issued_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}
+                        </TableCell>
+                        <TableCell className="max-w-[180px]">
+                          <Link to={`/dashboard/properties/${v.property?.id}`} className="text-sm font-medium text-foreground hover:text-accent hover:underline truncate block" onClick={(e) => e.stopPropagation()}>
+                            {v.property?.address || 'Unknown'}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${sev.color}`}>
+                              <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                              {sev.level}
                             </span>
+                            <span className="text-sm font-mono whitespace-nowrap">{v.violation_number}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={`${getAgencyColor(v.agency)} text-[10px] font-bold`}>
+                            {v.agency}
+                          </Badge>
+                          {isCritical && (
+                            <Badge variant="destructive" className="ml-1 text-[10px]">
+                              {v.is_stop_work_order ? 'SWO' : 'Vacate'}
+                            </Badge>
                           )}
-                        </div>
-                      ) : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell className="text-xs tabular-nums font-medium whitespace-nowrap">
-                      {v.penalty_amount && v.penalty_amount > 0 
-                        ? <span className="text-destructive">${v.penalty_amount.toLocaleString()}</span>
-                        : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      <a 
-                        href={getAgencyLookupUrl(v.agency, v.violation_number, v.property?.bbl)}
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground hover:text-accent transition-colors"
-                        title="View on NYC portal"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </TableCell>
-                  </TableRow>
+                        </TableCell>
+                        <TableCell className="max-w-[250px]">
+                          <p className="text-xs text-muted-foreground truncate">{v.description_raw || '—'}</p>
+                        </TableCell>
+                        <TableCell>
+                          <Select value={v.status} onValueChange={(s) => { updateStatus(v.id, s); }} >
+                            <SelectTrigger className={`w-28 h-7 text-[11px] font-medium border ${getStatusColor(v.status)}`} onClick={(e) => e.stopPropagation()}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="open">Open</SelectItem>
+                              <SelectItem value="in_progress">In Progress</SelectItem>
+                              <SelectItem value="closed">Closed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {v.hearing_date ? (
+                            <div className="flex flex-col">
+                              <span className="tabular-nums">{new Date(v.hearing_date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}</span>
+                              {daysUntilHearing !== null && daysUntilHearing >= 0 && (
+                                <span className={`text-[10px] font-semibold ${daysUntilHearing <= 7 ? 'text-destructive' : daysUntilHearing <= 14 ? 'text-warning' : 'text-muted-foreground'}`}>
+                                  {daysUntilHearing === 0 ? 'Today' : daysUntilHearing === 1 ? 'Tomorrow' : `${daysUntilHearing}d away`}
+                                </span>
+                              )}
+                            </div>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums font-medium whitespace-nowrap">
+                          {v.penalty_amount && v.penalty_amount > 0 
+                            ? <span className="text-destructive">${v.penalty_amount.toLocaleString()}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                      </TableRow>
+                      <CollapsibleContent asChild>
+                        <TableRow className="bg-muted/20 hover:bg-muted/20">
+                          <TableCell colSpan={9} className="py-4 px-6">
+                            <div className="space-y-4">
+                              {/* Severity Banner */}
+                              <div className={`rounded-lg border p-4 ${sev.bgColor} ${sev.borderColor}`}>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-lg">{sev.icon}</span>
+                                  <span className={`font-bold text-sm uppercase tracking-wide ${sev.color}`}>{sev.level} Severity</span>
+                                </div>
+                                <p className="text-sm text-foreground/80 mb-3">{sev.explanation}</p>
+                                <div className="flex items-start gap-2">
+                                  <span className="text-xs font-semibold text-muted-foreground shrink-0 mt-0.5">🎯 Recommended:</span>
+                                  <p className="text-xs text-foreground/70">{sev.recommended_action}</p>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Details */}
+                                <div className="space-y-3">
+                                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                                    <FileText className="w-4 h-4" /> Violation Details
+                                  </h4>
+                                  <div className="space-y-2 text-sm">
+                                    <div className="flex gap-2">
+                                      <span className="text-muted-foreground w-28 shrink-0">Violation Code:</span>
+                                      <span className="flex-1 font-mono text-xs">{v.description_raw || '—'}</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <span className="text-muted-foreground w-28 shrink-0">Issued Date:</span>
+                                      <span>{new Date(v.issued_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                    </div>
+                                    {v.violation_class && (
+                                      <div className="flex gap-2">
+                                        <span className="text-muted-foreground w-28 shrink-0">Class/Code:</span>
+                                        <span>{v.violation_class}</span>
+                                      </div>
+                                    )}
+                                    {v.oath_status && (
+                                      <div className="flex gap-2">
+                                        <span className="text-muted-foreground w-28 shrink-0">OATH Status:</span>
+                                        <Badge variant="outline">{v.oath_status}</Badge>
+                                      </div>
+                                    )}
+                                    {v.penalty_amount && v.penalty_amount > 0 && (
+                                      <div className="flex gap-2 items-center">
+                                        <span className="text-muted-foreground w-28 shrink-0">Penalty:</span>
+                                        <span className="text-destructive font-medium flex items-center">
+                                          <DollarSign className="w-3 h-3" />{v.penalty_amount.toLocaleString()}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {v.respondent_name && (
+                                      <div className="flex gap-2 items-center">
+                                        <span className="text-muted-foreground w-28 shrink-0">Respondent:</span>
+                                        <span className="flex items-center gap-1"><User className="w-3 h-3" />{v.respondent_name}</span>
+                                      </div>
+                                    )}
+                                    {v.hearing_date && (
+                                      <div className="flex gap-2">
+                                        <span className="text-muted-foreground w-28 shrink-0">Hearing Date:</span>
+                                        <span>{new Date(v.hearing_date).toLocaleDateString()}</span>
+                                      </div>
+                                    )}
+                                    <div className="pt-2">
+                                      <Button
+                                        variant="outline" size="sm"
+                                        onClick={() => window.open(getAgencyLookupUrl(v.agency, v.violation_number, v.property?.bbl), '_blank')}
+                                      >
+                                        <ExternalLink className="w-3 h-3 mr-2" /> View on {v.agency} Portal
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Notes */}
+                                <div className="space-y-3">
+                                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                                    <MessageSquare className="w-4 h-4" /> Notes
+                                  </h4>
+                                  <Textarea
+                                    placeholder="Add notes about this violation..."
+                                    value={editingNotes[v.id] ?? v.notes ?? ''}
+                                    onChange={(e) => setEditingNotes(prev => ({ ...prev, [v.id]: e.target.value }))}
+                                    className="min-h-[100px]"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <Button 
+                                    size="sm" onClick={() => saveNotes(v.id)}
+                                    disabled={savingNotes.has(v.id) || (editingNotes[v.id] ?? v.notes ?? '') === (v.notes ?? '')}
+                                  >
+                                    {savingNotes.has(v.id) ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Save className="w-3 h-3 mr-2" />}
+                                    Save Notes
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      </CollapsibleContent>
+                    </>
+                  </Collapsible>
                 );
               })}
             </TableBody>
@@ -545,9 +617,7 @@ const ViolationsPage = () => {
             {properties.length === 0 ? 'Add a property first' : 'No violations found'}
           </h3>
           <p className="text-muted-foreground mb-6">
-            {properties.length === 0 
-              ? 'You need to add a property before logging violations'
-              : 'Your properties are in good standing!'}
+            {properties.length === 0 ? 'You need to add a property before logging violations' : 'Your properties are in good standing!'}
           </p>
         </div>
       )}
