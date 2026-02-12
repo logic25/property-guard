@@ -365,9 +365,10 @@ async function getPropertyContext(supabase: any, userId: string): Promise<{ cont
         if (d.expiration_date) context += ` | Expires: ${d.expiration_date}`;
         context += "\n";
         if (d.extracted_text) {
-          // Include first 8000 chars of document text for AI context
-          const excerpt = d.extracted_text.slice(0, 8000);
-          context += `    Content: ${excerpt}${d.extracted_text.length > 8000 ? "..." : ""}\n`;
+          // Include up to 40K chars per document — Gemini Flash handles large context
+          const maxPerDoc = 40000;
+          const excerpt = d.extracted_text.slice(0, maxPerDoc);
+          context += `    Content: ${excerpt}${d.extracted_text.length > maxPerDoc ? "...(truncated)" : ""}\n`;
         }
       }
     }
