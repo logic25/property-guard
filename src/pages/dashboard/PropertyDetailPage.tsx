@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PropertyOverviewTab } from '@/components/properties/detail/PropertyOverviewTab';
+import { PropertyApplicationsTab } from '@/components/properties/detail/PropertyApplicationsTab';
 import { PropertyViolationsTab } from '@/components/properties/detail/PropertyViolationsTab';
 import { PropertyDocumentsTab } from '@/components/properties/detail/PropertyDocumentsTab';
 import { PropertyWorkOrdersTab } from '@/components/properties/detail/PropertyWorkOrdersTab';
@@ -347,11 +348,12 @@ const PropertyDetailPage = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-6 max-w-3xl">
+        <TabsList className="grid w-full grid-cols-7 max-w-4xl">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="violations">
             Violations {openViolations > 0 && `(${openViolations})`}
           </TabsTrigger>
+          <TabsTrigger value="applications">Applications</TabsTrigger>
           <TabsTrigger value="documents">
             Docs {documents.length > 0 && `(${documents.length})`}
           </TabsTrigger>
@@ -379,6 +381,10 @@ const PropertyDetailPage = () => {
             bbl={property.bbl}
             propertyId={property.id}
           />
+        </TabsContent>
+
+        <TabsContent value="applications" className="mt-6">
+          <PropertyApplicationsTab propertyId={property.id} />
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">
