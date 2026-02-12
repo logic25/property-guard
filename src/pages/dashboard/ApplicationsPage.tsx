@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { FileStack, Search, RefreshCw, Building2, ExternalLink, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,7 +45,8 @@ const ApplicationsPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [agencyFilter, setAgencyFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
+  const [sourceFilterInit, setSourceFilterInit] = useState(false);
 
   const { data: applications, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['applications', user?.id],
@@ -79,7 +82,7 @@ const ApplicationsPage = () => {
     
     const matchesAgency = agencyFilter === 'all' || app.agency === agencyFilter;
     const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
-    const matchesSource = sourceFilter === 'all' || app.source === sourceFilter;
+    const matchesSource = selectedSources.size === 0 || selectedSources.has(app.source);
     
     return matchesSearch && matchesAgency && matchesStatus && matchesSource;
   });
@@ -114,9 +117,26 @@ const ApplicationsPage = () => {
     return colors[agency] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
   };
 
-  const uniqueAgencies = [...new Set(applications?.map(a => a.agency) || [])];
-  const uniqueStatuses = [...new Set(applications?.map(a => a.status).filter(Boolean) || [])];
-  const uniqueSources = [...new Set(applications?.map(a => a.source) || [])];
+  const uniqueAgencies = [...new Set(applications?.map(a => a.agency) || [])].sort();
+  const uniqueStatuses = [...new Set(applications?.map(a => a.status).filter(Boolean) || [])].sort() as string[];
+  const uniqueSources = [...new Set(applications?.map(a => a.source) || [])].sort();
+
+  // Init source filter with all sources selected
+  useEffect(() => {
+    if (uniqueSources.length > 0 && !sourceFilterInit) {
+      setSelectedSources(new Set(uniqueSources));
+      setSourceFilterInit(true);
+    }
+  }, [uniqueSources, sourceFilterInit]);
+
+  const toggleSource = (source: string) => {
+    setSelectedSources(prev => {
+      const next = new Set(prev);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -160,17 +180,34 @@ const ApplicationsPage = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                {uniqueSources.map(source => (
-                  <SelectItem key={source} value={source}>{source}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-[180px] justify-start text-sm">
+                  <Filter className="w-4 h-4 mr-2" />
+                  Source ({selectedSources.size}/{uniqueSources.length})
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3" align="start">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">Filter by source</p>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setSelectedSources(new Set(uniqueSources))}>All</Button>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setSelectedSources(new Set())}>None</Button>
+                  </div>
+                </div>
+                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                  {uniqueSources.map(source => (
+                    <label key={source} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1">
+                      <Checkbox
+                        checked={selectedSources.has(source)}
+                        onCheckedChange={() => toggleSource(source)}
+                      />
+                      <span className="text-sm">{source}</span>
+                    </label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Status" />
