@@ -1133,7 +1133,7 @@ Deno.serve(async (req) => {
     if (bin) {
       try {
         const coData = await safeFetch(
-          `${NYC_OPEN_DATA_ENDPOINTS.CO}?bin=${bin}&$limit=10&$order=issuance_dd DESC`,
+          `${NYC_OPEN_DATA_ENDPOINTS.CO}?bin=${bin}&$limit=10&$order=c_o_issue_date%20DESC`,
           "CO"
         );
 
@@ -1141,9 +1141,9 @@ Deno.serve(async (req) => {
 
         if (coData.length > 0) {
           const latest = coData[0] as Record<string, unknown>;
-          const coType = (latest.certificatetype || latest.certificate_type || '') as string;
-          const issuanceDate = (latest.issuance_dd || latest.issuance_date) as string;
-          const jobNumber = (latest.job_number || latest.job__) as string;
+          const coType = (latest.issue_type || latest.job_type || '') as string;
+          const issuanceDate = (latest.c_o_issue_date || '') as string;
+          const jobNumber = (latest.job_number || '') as string;
           
           let coStatus = 'valid';
           if (coType.toLowerCase().includes('temporary') || coType.toLowerCase().includes('tco')) {
