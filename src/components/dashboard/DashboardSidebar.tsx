@@ -13,7 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FileStack,
-  FileText
+  FileText,
+  Calendar
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ const navItems = [
   { icon: FileText, label: 'DD Reports', href: '/dashboard/dd-reports' },
   { icon: Users, label: 'Vendors', href: '/dashboard/vendors' },
   { icon: ClipboardList, label: 'Work Orders', href: '/dashboard/work-orders' },
+  { icon: Calendar, label: 'Calendar', href: '/dashboard/calendar' },
 ];
 
 const DashboardSidebar = () => {

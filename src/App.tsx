@@ -19,6 +19,7 @@ import DDReportsPage from "@/pages/dashboard/DDReportsPage";
 import VendorsPage from "@/pages/dashboard/VendorsPage";
 import WorkOrdersPage from "@/pages/dashboard/WorkOrdersPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
+import CalendarPage from "@/pages/dashboard/CalendarPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +52,7 @@ const App = () => (
               <Route path="dd-reports" element={<DDReportsPage />} />
               <Route path="vendors" element={<VendorsPage />} />
               <Route path="work-orders" element={<WorkOrdersPage />} />
+              <Route path="calendar" element={<CalendarPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
