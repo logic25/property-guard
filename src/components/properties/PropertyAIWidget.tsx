@@ -145,7 +145,15 @@ export const PropertyAIWidget = ({
 
   useEffect(() => {
     if (existingMessages && existingMessages.length > 0) {
-      setMessages(existingMessages);
+      // Always sync from DB to pick up Telegram messages
+      setMessages(prev => {
+        // If DB has more messages, use DB version
+        if (existingMessages.length >= prev.length) {
+          return existingMessages;
+        }
+        // If local has more (mid-streaming), keep local
+        return prev;
+      });
     }
   }, [existingMessages]);
 
@@ -166,10 +174,11 @@ export const PropertyAIWidget = ({
         (payload) => {
           const newMsg = payload.new as { id: string; role: string; content: string };
           setMessages(prev => {
-            // Avoid duplicates
             if (prev.some(m => m.id === newMsg.id)) return prev;
             return [...prev, { id: newMsg.id, role: newMsg.role as 'user' | 'assistant', content: newMsg.content }];
           });
+          // Also invalidate the query so preview card stays in sync
+          queryClient.invalidateQueries({ queryKey: ['property-ai-messages', conversationId] });
         }
       )
       .subscribe();
@@ -177,7 +186,7 @@ export const PropertyAIWidget = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId]);
+  }, [conversationId, queryClient]);
 
   // Fetch all documents with extracted text for context
   const { data: allDocuments } = useQuery({
