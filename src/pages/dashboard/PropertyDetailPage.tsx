@@ -437,6 +437,10 @@ const PropertyDetailPage = () => {
             ownerName={property.owner_name ?? null}
             ownerPhone={property.owner_phone ?? null}
             smsEnabled={property.sms_enabled ?? null}
+            hasGas={property.has_gas ?? null}
+            hasBoiler={property.has_boiler ?? null}
+            hasElevator={property.has_elevator ?? null}
+            hasSprinkler={property.has_sprinkler ?? null}
             onUpdate={fetchPropertyData}
           />
         </TabsContent>

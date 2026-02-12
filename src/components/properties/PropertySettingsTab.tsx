@@ -51,7 +51,12 @@ import {
   Trash2,
   Check,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Wrench,
+  Flame,
+  ArrowUpDown,
+  Droplets,
+  Shield
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -69,6 +74,10 @@ interface PropertySettingsTabProps {
   ownerName: string | null;
   ownerPhone: string | null;
   smsEnabled: boolean | null;
+  hasGas: boolean | null;
+  hasBoiler: boolean | null;
+  hasElevator: boolean | null;
+  hasSprinkler: boolean | null;
   onUpdate: () => void;
 }
 
@@ -77,6 +86,10 @@ export const PropertySettingsTab = ({
   ownerName,
   ownerPhone,
   smsEnabled,
+  hasGas,
+  hasBoiler,
+  hasElevator,
+  hasSprinkler,
   onUpdate,
 }: PropertySettingsTabProps) => {
   const { user } = useAuth();
@@ -94,6 +107,11 @@ export const PropertySettingsTab = ({
   const [formOwnerName, setFormOwnerName] = useState(ownerName || '');
   const [formOwnerPhone, setFormOwnerPhone] = useState(ownerPhone || '');
   const [formSmsEnabled, setFormSmsEnabled] = useState(smsEnabled || false);
+  const [formHasGas, setFormHasGas] = useState(hasGas || false);
+  const [formHasBoiler, setFormHasBoiler] = useState(hasBoiler || false);
+  const [formHasElevator, setFormHasElevator] = useState(hasElevator || false);
+  const [formHasSprinkler, setFormHasSprinkler] = useState(hasSprinkler || false);
+  const [savingFeatures, setSavingFeatures] = useState(false);
 
   useEffect(() => {
     fetchMembers();
@@ -103,7 +121,11 @@ export const PropertySettingsTab = ({
     setFormOwnerName(ownerName || '');
     setFormOwnerPhone(ownerPhone || '');
     setFormSmsEnabled(smsEnabled || false);
-  }, [ownerName, ownerPhone, smsEnabled]);
+    setFormHasGas(hasGas || false);
+    setFormHasBoiler(hasBoiler || false);
+    setFormHasElevator(hasElevator || false);
+    setFormHasSprinkler(hasSprinkler || false);
+  }, [ownerName, ownerPhone, smsEnabled, hasGas, hasBoiler, hasElevator, hasSprinkler]);
 
   const fetchMembers = async () => {
     try {
@@ -143,6 +165,30 @@ export const PropertySettingsTab = ({
       toast.error('Failed to save settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveBuildingFeatures = async () => {
+    setSavingFeatures(true);
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .update({
+          has_gas: formHasGas,
+          has_boiler: formHasBoiler,
+          has_elevator: formHasElevator,
+          has_sprinkler: formHasSprinkler,
+        })
+        .eq('id', propertyId);
+
+      if (error) throw error;
+      toast.success('Building features saved');
+      onUpdate();
+    } catch (error) {
+      console.error('Error saving building features:', error);
+      toast.error('Failed to save building features');
+    } finally {
+      setSavingFeatures(false);
     }
   };
 
@@ -299,6 +345,70 @@ export const PropertySettingsTab = ({
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Building Features */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Wrench className="w-5 h-5 text-primary" />
+            Building Features
+          </CardTitle>
+          <CardDescription>
+            These features determine which Local Law requirements apply to this property.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">Gas Piping</p>
+                  <p className="text-xs text-muted-foreground">LL152 gas inspections</p>
+                </div>
+              </div>
+              <Switch checked={formHasGas} onCheckedChange={setFormHasGas} />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Droplets className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">Boiler</p>
+                  <p className="text-xs text-muted-foreground">LL62 boiler inspections</p>
+                </div>
+              </div>
+              <Switch checked={formHasBoiler} onCheckedChange={setFormHasBoiler} />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">Elevator</p>
+                  <p className="text-xs text-muted-foreground">LL126 elevator inspections</p>
+                </div>
+              </div>
+              <Switch checked={formHasElevator} onCheckedChange={setFormHasElevator} />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">Sprinkler System</p>
+                  <p className="text-xs text-muted-foreground">LL26 sprinkler inspections</p>
+                </div>
+              </div>
+              <Switch checked={formHasSprinkler} onCheckedChange={setFormHasSprinkler} />
+            </div>
+          </div>
+          <Button
+            onClick={handleSaveBuildingFeatures}
+            disabled={savingFeatures}
+          >
+            {savingFeatures && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Save Building Features
+          </Button>
         </CardContent>
       </Card>
 
