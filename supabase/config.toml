@@ -51,3 +51,6 @@ verify_jwt = false
 
 [functions.generate-dd-report]
 verify_jwt = false
+
+[functions.send-email-digest]
+verify_jwt = false
