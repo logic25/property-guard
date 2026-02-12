@@ -297,7 +297,7 @@ async function getPortfolioSummary(supabase: any, userId: string): string {
 async function getPropertyContext(supabase: any, userId: string): Promise<{ context: string; properties: any[] }> {
   const { data: properties } = await supabase
     .from("properties")
-    .select("id, address, borough, bin, bbl, stories, dwelling_units, year_built, zoning_district, compliance_status")
+    .select("id, address, borough, bin, bbl, stories, dwelling_units, year_built, zoning_district, compliance_status, co_status, co_data")
     .eq("user_id", userId);
 
   if (!properties || properties.length === 0) return { context: "No properties found.", properties: [] };
@@ -308,6 +308,13 @@ async function getPropertyContext(supabase: any, userId: string): Promise<{ cont
     context += `\n--- PROPERTY: ${prop.address} ---\n`;
     context += `Borough: ${prop.borough || "N/A"}, BIN: ${prop.bin || "N/A"}, BBL: ${prop.bbl || "N/A"}\n`;
     context += `Stories: ${prop.stories || "N/A"}, Units: ${prop.dwelling_units || "N/A"}, Built: ${prop.year_built || "N/A"}\n`;
+    context += `CO Status: ${prop.co_status || "Unknown"}\n`;
+    if (prop.co_data) {
+      try {
+        const coInfo = typeof prop.co_data === 'string' ? JSON.parse(prop.co_data) : prop.co_data;
+        context += `Certificate of Occupancy Data: ${JSON.stringify(coInfo).slice(0, 2000)}\n`;
+      } catch { context += `CO Data: ${String(prop.co_data).slice(0, 2000)}\n`; }
+    }
 
     // Violations
     const { data: violations } = await supabase
