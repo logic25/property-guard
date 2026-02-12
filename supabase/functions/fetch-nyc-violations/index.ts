@@ -887,8 +887,7 @@ Deno.serve(async (req) => {
           a.building_type ? `Building Type: ${a.building_type}` : null,
         ].filter(Boolean);
 
-        // Build a full job description from available fields
-        const jobDesc = (a.job_description as string) || null;
+        // DOB NOW Build API does NOT have job_description — only on the website
 
         applicationRecords.push({
           property_id,
@@ -902,7 +901,7 @@ Deno.serve(async (req) => {
           expiration_date: a.expiration_date ? (a.expiration_date as string).split('T')[0] : null,
           job_type: jobType,
           work_type: (a.building_type as string) || null,
-          description: jobDesc || descParts.join(' — ') || null,
+          description: descParts.join(' — ') || null,
           applicant_name: (a.applicant_first_name && a.applicant_last_name)
             ? `${a.applicant_first_name} ${a.applicant_last_name}`.trim()
             : null,
@@ -915,7 +914,6 @@ Deno.serve(async (req) => {
           dwelling_units: null,
           floor_area: a.total_construction_floor_area ? parseFloat(a.total_construction_floor_area as string) : null,
           raw_data: {
-            job_description: jobDesc,
             applicant_license: a.applicant_license || null,
             applicant_title: a.applicant_professional_title || null,
             applicant_business_name: a.applicant_business_name || null,
