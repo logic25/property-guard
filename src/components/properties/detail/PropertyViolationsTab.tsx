@@ -509,10 +509,17 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                         <div className="flex items-center gap-2">
                           {(() => {
                             const sev = calculateViolationSeverity(violation);
+                            const dotColor = {
+                              Critical: 'bg-red-500',
+                              High: 'bg-orange-500',
+                              Medium: 'bg-yellow-500',
+                              Low: 'bg-blue-500',
+                            }[sev.level] || 'bg-muted-foreground';
                             return (
-                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${getSeverityBadgeClasses(sev.level)}`}>
-                                {sev.icon} {sev.level}
-                              </Badge>
+                              <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${sev.color}`}>
+                                <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                                {sev.level}
+                              </span>
                             );
                           })()}
                           {(violation.is_stop_work_order || violation.is_vacate_order) && (
