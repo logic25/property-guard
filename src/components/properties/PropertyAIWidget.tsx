@@ -75,11 +75,12 @@ export const PropertyAIWidget = ({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+  const [unreadCount, setUnreadCount] = useState(0);
   // Refetch messages when dialog opens (catches Telegram messages)
   const handleDialogOpen = (open: boolean) => {
     setIsDialogOpen(open);
     if (open) {
+      setUnreadCount(0);
       queryClient.invalidateQueries({ queryKey: ['property-ai-conversation', propertyId] });
       queryClient.invalidateQueries({ queryKey: ['property-ai-messages'] });
     }
@@ -177,7 +178,10 @@ export const PropertyAIWidget = ({
             if (prev.some(m => m.id === newMsg.id)) return prev;
             return [...prev, { id: newMsg.id, role: newMsg.role as 'user' | 'assistant', content: newMsg.content }];
           });
-          // Also invalidate the query so preview card stays in sync
+          // Track unread when dialog is closed
+          if (!isDialogOpen) {
+            setUnreadCount(prev => prev + 1);
+          }
           queryClient.invalidateQueries({ queryKey: ['property-ai-messages', conversationId] });
         }
       )
@@ -186,7 +190,7 @@ export const PropertyAIWidget = ({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId, queryClient]);
+  }, [conversationId, queryClient, isDialogOpen]);
 
   // Fetch all documents with extracted text for context
   const { data: allDocuments } = useQuery({
@@ -449,6 +453,11 @@ export const PropertyAIWidget = ({
         <CardTitle className="text-base flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-primary" />
           Property AI
+          {unreadCount > 0 && (
+            <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full bg-destructive text-destructive-foreground animate-pulse">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
@@ -549,7 +558,10 @@ export const PropertyAIWidget = ({
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {messages.map((message) => (
+                      {messages.map((message) => {
+                        const isTelegram = message.content.startsWith('[via Telegram]');
+                        const displayContent = isTelegram ? message.content.replace('[via Telegram] ', '') : message.content;
+                        return (
                         <div
                           key={message.id}
                           className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -566,12 +578,17 @@ export const PropertyAIWidget = ({
                                 : 'bg-secondary text-secondary-foreground rounded-tl-none'
                             }`}
                           >
+                            {isTelegram && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 mb-1">
+                                📱 Telegram
+                              </span>
+                            )}
                             {message.role === 'assistant' ? (
                               <div className="prose prose-sm dark:prose-invert max-w-none">
-                                <ReactMarkdown>{message.content || '...'}</ReactMarkdown>
+                                <ReactMarkdown>{displayContent || '...'}</ReactMarkdown>
                               </div>
                             ) : (
-                              <p className="text-sm">{message.content}</p>
+                              <p className="text-sm">{displayContent}</p>
                             )}
                           </div>
                           {message.role === 'user' && (
@@ -580,7 +597,8 @@ export const PropertyAIWidget = ({
                             </div>
                           )}
                         </div>
-                      ))}
+                        );
+                      })}
                       {isLoading && messages[messages.length - 1]?.role === 'user' && (
                         <div className="flex gap-3 justify-start">
                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
