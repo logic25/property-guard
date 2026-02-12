@@ -1461,6 +1461,7 @@ Deno.serve(async (req) => {
 
           // ===== STOP WORK ORDER DETECTION from BIS Jobs =====
           // special_action_status: W = partial SWO, S = full SWO, R = partial vacate, V = full vacate
+          // N = no special action (skip)
           const SWO_CODES: Record<string, { isSWO: boolean; isVacate: boolean; label: string }> = {
             'w': { isSWO: true, isVacate: false, label: 'Partial Stop Work Order' },
             's': { isSWO: true, isVacate: false, label: 'Full Stop Work Order' },
@@ -1468,9 +1469,16 @@ Deno.serve(async (req) => {
             'v': { isSWO: false, isVacate: true, label: 'Full Vacate Order' },
           };
 
+          // Job statuses that indicate the job is terminal/closed — SWO is no longer active
+          const TERMINAL_JOB_STATUSES = new Set(['j', 'x', 'i', 'g']); // J=Disapproved, X=Withdrawn, I=Signed-off, G=Permit Entire Job
+
           const swoJobs = (bisJobs as Record<string, unknown>[]).filter(j => {
             const sas = ((j.special_action_status || '') as string).toLowerCase();
-            return sas in SWO_CODES;
+            if (!(sas in SWO_CODES) || sas === 'n') return false;
+            // Skip jobs with terminal statuses — SWO is likely rescinded or moot
+            const jobStatus = ((j.job_status || '') as string).toLowerCase();
+            if (TERMINAL_JOB_STATUSES.has(jobStatus)) return false;
+            return true;
           });
 
           for (const swoJob of swoJobs) {
