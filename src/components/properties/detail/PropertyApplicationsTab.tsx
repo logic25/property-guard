@@ -66,22 +66,47 @@ const BIS_STATUS_CODES: Record<string, string> = {
 
 const COMPLETED_STATUSES = ['Signed Off', 'Signed Off / Completed', 'Completed', 'CO Issued', 'Letter of Completion'];
 
+const normalizeStatusLabel = (status: string): string => {
+  // Clean up verbose/redundant status labels from API
+  const cleanups: [RegExp, string][] = [
+    [/^filing\s+/i, ''],           // "Filing withdrawn" → "Withdrawn"
+    [/^permit\s+issued\s*-\s*/i, 'Permit Issued – '], // normalize dash
+  ];
+  let result = status;
+  cleanups.forEach(([pattern, replacement]) => {
+    result = result.replace(pattern, replacement);
+  });
+  // Title-case the first letter
+  return result.charAt(0).toUpperCase() + result.slice(1);
+};
+
 const decodeStatus = (status: string | null, source: string): string => {
   if (!status) return 'Unknown';
   if (source === 'DOB BIS' && status.length <= 2) {
     return BIS_STATUS_CODES[status.toUpperCase()] || status;
   }
-  return status;
+  return normalizeStatusLabel(status);
 };
 
 const getStatusVariant = (status: string | null, source: string) => {
   const decoded = decodeStatus(status, source).toLowerCase();
-  if (['signed off', 'completed', 'co issued', 'letter of completion', 'permit issued', 'permit entire', 'issued'].some(s => decoded.includes(s))) {
+  // Fully completed — dark/primary badge
+  if (['signed off', 'completed', 'co issued'].some(s => decoded.includes(s))) {
     return 'default' as const;
   }
+  // Letter of completion — intermediate completion, use secondary to differentiate from signed off
+  if (decoded.includes('letter of completion')) {
+    return 'secondary' as const;
+  }
+  // Active/issued permits
+  if (['permit issued', 'issued', 'permit entire'].some(s => decoded.includes(s))) {
+    return 'default' as const;
+  }
+  // In-progress
   if (['pre-filing', 'plan exam', 'partial permit', 'pending', 'filed', 'in review', 'plan approved'].some(s => decoded.includes(s))) {
     return 'secondary' as const;
   }
+  // Terminal/negative
   if (['disapproved', 'withdrawn', 'suspended', 'expired', 'denied', 'cancelled'].some(s => decoded.includes(s))) {
     return 'destructive' as const;
   }
@@ -632,15 +657,15 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             )}
           </TableCell>
           <TableCell>
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>
+            <span className={`inline-flex items-center justify-center w-12 px-2 py-0.5 rounded text-xs font-medium ${getAgencyColor(app.agency)}`}>
               {app.agency}
             </span>
           </TableCell>
           <TableCell>
-            <Badge variant="outline" className="text-xs w-[120px] justify-center">{app.source}</Badge>
+            <Badge variant="outline" className="text-xs whitespace-nowrap">{app.source}</Badge>
           </TableCell>
           <TableCell>
-            <Badge variant={getStatusVariant(app.status, app.source)}>
+            <Badge variant={getStatusVariant(app.status, app.source)} className="whitespace-nowrap">
               {decodedStatus}
             </Badge>
           </TableCell>
