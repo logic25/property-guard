@@ -418,7 +418,8 @@ export const PropertyAIWidget = ({
       setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
 
       let buffer = '';
-      while (true) {
+      let streamDone = false;
+      while (!streamDone) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -434,7 +435,10 @@ export const PropertyAIWidget = ({
           if (!line.startsWith('data: ')) continue;
 
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') break;
+          if (jsonStr === '[DONE]') {
+            streamDone = true;
+            break;
+          }
 
           try {
             const parsed = JSON.parse(jsonStr);
@@ -448,8 +452,7 @@ export const PropertyAIWidget = ({
               );
             }
           } catch {
-            buffer = line + '\n' + buffer;
-            break;
+            // Skip malformed JSON lines instead of re-buffering (prevents infinite loops)
           }
         }
       }
