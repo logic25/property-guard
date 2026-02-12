@@ -267,30 +267,17 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
           </div>
         </div>
 
-        {/* Compliance */}
-        <div className="space-y-2">
-          <h4 className="font-medium text-foreground flex items-center gap-1.5">
-            <Wrench className="w-3.5 h-3.5" />
-            Compliance
-          </h4>
-          <div className="space-y-1 text-muted-foreground">
-            {raw.in_compliance_nycecc && (
-              <p>NYCECC Compliance: <span className="text-foreground">{raw.in_compliance_nycecc as string}</span></p>
-            )}
-            {raw.little_e && (
-              <p>Little e: <span className="text-foreground">{raw.little_e as string}</span></p>
-            )}
-          </div>
-        </div>
-
         {/* Description / Scope of Work */}
-        {(app.description || raw.job_description) && (
+        {app.description && (
           <div className="col-span-2 md:col-span-3 space-y-2">
             <h4 className="font-medium text-foreground flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5" />
-              Job Description / Scope of Work
+              Scope of Work
             </h4>
-            <p className="text-muted-foreground">{(raw.job_description as string) || app.description}</p>
+            <p className="text-muted-foreground">{app.description}</p>
+            <p className="text-xs text-muted-foreground italic">
+              Note: Full job description is only available on the DOB NOW website — click the link below to view.
+            </p>
           </div>
         )}
       </div>
