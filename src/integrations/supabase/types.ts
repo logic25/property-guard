@@ -38,6 +38,8 @@ export type Database = {
           status: string | null
           stories: number | null
           synced_at: string | null
+          tenant_name: string | null
+          tenant_notes: string | null
           updated_at: string
           work_type: string | null
         }
@@ -64,6 +66,8 @@ export type Database = {
           status?: string | null
           stories?: number | null
           synced_at?: string | null
+          tenant_name?: string | null
+          tenant_notes?: string | null
           updated_at?: string
           work_type?: string | null
         }
@@ -90,6 +94,8 @@ export type Database = {
           status?: string | null
           stories?: number | null
           synced_at?: string | null
+          tenant_name?: string | null
+          tenant_notes?: string | null
           updated_at?: string
           work_type?: string | null
         }
@@ -1180,6 +1186,80 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "property_members_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      property_taxes: {
+        Row: {
+          amount_paid: number | null
+          assessed_value: number | null
+          balance_due: number | null
+          created_at: string
+          due_date: string | null
+          id: string
+          notes: string | null
+          paid_date: string | null
+          payment_status: string
+          property_id: string
+          protest_filed_date: string | null
+          protest_hearing_date: string | null
+          protest_outcome_notes: string | null
+          protest_status: string | null
+          tax_amount: number | null
+          tax_year: number
+          tenant_name: string | null
+          tenant_responsible: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          amount_paid?: number | null
+          assessed_value?: number | null
+          balance_due?: number | null
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          paid_date?: string | null
+          payment_status?: string
+          property_id: string
+          protest_filed_date?: string | null
+          protest_hearing_date?: string | null
+          protest_outcome_notes?: string | null
+          protest_status?: string | null
+          tax_amount?: number | null
+          tax_year: number
+          tenant_name?: string | null
+          tenant_responsible?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          amount_paid?: number | null
+          assessed_value?: number | null
+          balance_due?: number | null
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          paid_date?: string | null
+          payment_status?: string
+          property_id?: string
+          protest_filed_date?: string | null
+          protest_hearing_date?: string | null
+          protest_outcome_notes?: string | null
+          protest_status?: string | null
+          tax_amount?: number | null
+          tax_year?: number
+          tenant_name?: string | null
+          tenant_responsible?: boolean | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_taxes_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
