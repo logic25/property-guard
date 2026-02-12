@@ -1267,6 +1267,42 @@ export type Database = {
           },
         ]
       }
+      telegram_users: {
+        Row: {
+          chat_id: number
+          created_at: string
+          first_name: string | null
+          id: string
+          is_active: boolean
+          linked_at: string
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          chat_id: number
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          is_active?: boolean
+          linked_at?: string
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          chat_id?: number
+          created_at?: string
+          first_name?: string | null
+          id?: string
+          is_active?: boolean
+          linked_at?: string
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       vendors: {
         Row: {
           coi_expiration_date: string | null
