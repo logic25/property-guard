@@ -274,7 +274,13 @@ export const PropertyOverviewTab = ({
           </CardContent>
         </Card>
 
-        <Card className="cursor-default">
+        <Card 
+          className="cursor-pointer hover:border-success/50 transition-colors"
+          onClick={() => {
+            const el = document.getElementById('local-law-compliance');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        >
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-success/10 flex items-center justify-center">
@@ -579,7 +585,9 @@ export const PropertyOverviewTab = ({
       </Card>
 
       {/* Local Law Compliance Grid */}
-      <LocalLawComplianceGrid property={property} />
+      <div id="local-law-compliance">
+        <LocalLawComplianceGrid property={property} />
+      </div>
 
       {/* Property AI Widget */}
       <PropertyAIWidget 
