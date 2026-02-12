@@ -146,43 +146,7 @@ export const SmartAddressAutocomplete = ({
     }
   };
 
-  // Fetch PAD (Property Address Directory) for authoritative BIN/BBL
-  const fetchPADData = async (houseNumber: string, streetName: string, borough: string): Promise<{ bin: string; bbl: string } | null> => {
-    try {
-      const url = new URL('https://data.cityofnewyork.us/resource/bc8t-ecyu.json');
-      const cleanStreet = streetName.toUpperCase()
-        .replace(/\bAVENUE\b/g, 'AVE')
-        .replace(/\bSTREET\b/g, 'ST')
-        .replace(/\bBOULEVARD\b/g, 'BLVD')
-        .replace(/\bPLACE\b/g, 'PL')
-        .replace(/\bDRIVE\b/g, 'DR')
-        .trim();
-      
-      url.searchParams.set('$where', `upper(stname) LIKE '%${cleanStreet}%' AND boro = '${borough}'`);
-      url.searchParams.set('$limit', '10');
-      
-      const response = await fetch(url.toString());
-      if (!response.ok) return null;
-      
-      const results = await response.json();
-      const match = results.find((r: any) => {
-        const low = parseInt(r.lhnd) || 0;
-        const high = parseInt(r.hhnd) || 0;
-        const house = parseInt(houseNumber) || 0;
-        return house >= low && house <= high;
-      });
-      
-      if (!match) return null;
-      
-      return {
-        bin: match.bin || '',
-        bbl: `${match.boro}${(match.block || '').padStart(5, '0')}${(match.lot || '').padStart(4, '0')}`,
-      };
-    } catch (error) {
-      console.error('Error fetching PAD data:', error);
-      return null;
-    }
-  };
+  // PAD dataset no longer accessible (403) - BIN/BBL resolved from DOB Jobs + PLUTO directly
 
   // Search NYC DOB buildings database
   const searchNYCBuildings = async (query: string): Promise<AutocompleteResult[]> => {
@@ -217,32 +181,27 @@ export const SmartAddressAutocomplete = ({
         return true;
       });
 
-      // Map and enrich with PLUTO + PAD data for authoritative BBL/BIN
+      // Map and enrich with PLUTO data (PAD no longer accessible)
       const results = await Promise.all(
         uniqueBuildings.slice(0, 10).map(async building => {
           const boroughCode = getBoroughCode(building.borough || '');
-          const houseNum = building.house__ || '';
-          const street = building.street_name || '';
+          const bin = building.bin__ || '';
           
-          // Get authoritative BBL/BIN from PAD first
-          const padData = await fetchPADData(houseNum, street, boroughCode);
-          
-          const bbl = padData?.bbl || (building.block && building.lot 
-            ? `${boroughCode}${building.block.padStart(5, '0')}${building.lot.padStart(4, '0')}` 
-            : '');
-          const bin = padData?.bin || building.bin__ || '';
+          // Build BBL from DOB Jobs block/lot data directly
+          const bbl = (building.block && building.lot) 
+            ? `${boroughCode}${building.block.padStart(5, '0').slice(-5)}${building.lot.padStart(4, '0').slice(-4)}` 
+            : '';
 
-          // Get PLUTO data using authoritative BBL
+          // Get PLUTO data for rich building characteristics
           const plutoData = bbl ? await fetchPLUTODataByBBL(bbl) : null;
           
           return {
             bin,
-            address: `${houseNum} ${street}`.trim(),
+            address: `${building.house__ || ''} ${building.street_name || ''}`.trim(),
             borough: boroughCode,
             bbl,
             block: bbl.length >= 6 ? bbl.substring(1, 6) : building.block || '',
             lot: bbl.length >= 10 ? bbl.substring(6, 10) : building.lot || '',
-            // Use PLUTO data (same as ZoLa) for all building characteristics
             stories: plutoData?.numfloors 
               ? parseInt(plutoData.numfloors) 
               : (building.existingno_of_stories ? parseInt(building.existingno_of_stories) : null),

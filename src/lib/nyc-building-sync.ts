@@ -98,70 +98,14 @@ const PAD_API = 'https://data.cityofnewyork.us/resource/bc8t-ecyu.json';
 // NYC Geoclient API for cross streets (requires BBL)
 const GEOCLIENT_PLACE_API = 'https://data.cityofnewyork.us/resource/ahrc-nbvq.json';
 
-// Fetch authoritative BBL/BIN from PAD (Property Address Directory)
+// PAD dataset is no longer accessible (403 Forbidden as of Feb 2026)
+// BIN/BBL is now resolved from DOB Jobs + PLUTO directly
 export async function fetchPADData(houseNumber: string, streetName: string, borough: string): Promise<{
   bin: string;
   bbl: string;
 } | null> {
-  try {
-    // PAD uses numeric borough codes: 1=MN, 2=BX, 3=BK, 4=QN, 5=SI
-    const url = new URL(PAD_API);
-    
-    // Clean up street name - remove common suffixes for matching
-    const cleanStreet = streetName.toUpperCase()
-      .replace(/\bAVENUE\b/g, 'AVE')
-      .replace(/\bSTREET\b/g, 'ST')
-      .replace(/\bBOULEVARD\b/g, 'BLVD')
-      .replace(/\bPLACE\b/g, 'PL')
-      .replace(/\bDRIVE\b/g, 'DR')
-      .trim();
-    
-    url.searchParams.set('$where', `lhnd <= '${houseNumber}' AND hhnd >= '${houseNumber}' AND upper(stname) LIKE '%${cleanStreet}%' AND boro = '${borough}'`);
-    url.searchParams.set('$limit', '1');
-    
-    console.log('Fetching PAD data for:', houseNumber, streetName, borough);
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      console.error('PAD API error:', response.status);
-      return null;
-    }
-    
-    const results = await response.json();
-    if (!Array.isArray(results) || results.length === 0) {
-      console.log('No PAD results found, trying alternate query');
-      // Try simpler query
-      const altUrl = new URL(PAD_API);
-      altUrl.searchParams.set('$where', `upper(stname) LIKE '%${cleanStreet}%' AND boro = '${borough}'`);
-      altUrl.searchParams.set('$limit', '10');
-      
-      const altResponse = await fetch(altUrl.toString());
-      if (!altResponse.ok) return null;
-      
-      const altResults = await altResponse.json();
-      const match = altResults.find((r: any) => {
-        const low = parseInt(r.lhnd) || 0;
-        const high = parseInt(r.hhnd) || 0;
-        const house = parseInt(houseNumber) || 0;
-        return house >= low && house <= high;
-      });
-      
-      if (!match) return null;
-      
-      return {
-        bin: match.bin || '',
-        bbl: `${match.boro}${(match.block || '').replace(/\D/g, '').padStart(5, '0').slice(-5)}${(match.lot || '').replace(/\D/g, '').padStart(4, '0').slice(-4)}`,
-      };
-    }
-    
-    const r = results[0];
-    return {
-      bin: r.bin || '',
-      bbl: `${r.boro}${(r.block || '').replace(/\D/g, '').padStart(5, '0').slice(-5)}${(r.lot || '').replace(/\D/g, '').padStart(4, '0').slice(-4)}`,
-    };
-  } catch (error) {
-    console.error('Error fetching PAD data:', error);
-    return null;
-  }
+  console.warn('PAD dataset no longer accessible - using DOB Jobs fallback');
+  return null;
 }
 
 // Fetch building data from DOB Jobs by BIN
@@ -324,39 +268,11 @@ export async function fetchPLUTOData(bbl: string): Promise<Partial<NYCBuildingDa
   }
 }
 
-// Fetch cross streets from NYC Property Address Directory (PAD)
+// Cross streets lookup - PAD no longer accessible
 export async function fetchCrossStreets(bin: string): Promise<string | null> {
-  try {
-    // Use PAD BBL data which has cross streets info based on BIN
-    const url = new URL('https://data.cityofnewyork.us/resource/bc8t-ecyu.json');
-    url.searchParams.set('bin', bin);
-    url.searchParams.set('$limit', '1');
-
-    console.log('Fetching cross streets for BIN:', bin);
-    const response = await fetch(url.toString());
-    if (!response.ok) return null;
-
-    const results = await response.json();
-    if (!Array.isArray(results) || results.length === 0) return null;
-
-    const r = results[0] as Record<string, any>;
-    
-    // Build cross streets string from available fields
-    const crossStreets: string[] = [];
-    if (r.stname) crossStreets.push(r.stname);
-    if (r.segmentid && r.from_stnam) crossStreets.push(r.from_stnam);
-    if (r.to_stname) crossStreets.push(r.to_stname);
-    
-    // Alternative: use lhnd/hhnd (low/high house numbers) and street
-    if (crossStreets.length === 0 && r.sagrlhns && r.segrhhns) {
-      return `${r.sagrlhns} - ${r.segrhhns}`;
-    }
-
-    return crossStreets.length > 0 ? crossStreets.join(', ') : null;
-  } catch (error) {
-    console.error('Error fetching cross streets:', error);
-    return null;
-  }
+  // PAD dataset returns 403 as of Feb 2026
+  console.warn('Cross streets lookup unavailable - PAD dataset inaccessible');
+  return null;
 }
 
 // Fetch building data from DOB by address
