@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import StatsCard from '@/components/dashboard/StatsCard';
 import CriticalViolationsWidget from '@/components/dashboard/CriticalViolationsWidget';
+import { usePortfolioScores } from '@/hooks/useComplianceScore';
+import { ComplianceScoreCard } from '@/components/dashboard/ComplianceScoreCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { isActiveViolation, getAgencyColor } from '@/lib/violation-utils';
@@ -57,6 +59,7 @@ interface RecentViolation {
 
 const DashboardOverview = () => {
   const { user } = useAuth();
+  const { scores: portfolioScores, averageScore, averageGrade } = usePortfolioScores();
   const [stats, setStats] = useState<DashboardStats>({
     totalProperties: 0,
     activeViolations: 0,
@@ -251,6 +254,41 @@ const DashboardOverview = () => {
 
       {/* Critical Violations & Deadlines */}
       <CriticalViolationsWidget />
+
+      {/* Portfolio Compliance Score */}
+      {averageScore !== null && averageGrade !== null && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <ComplianceScoreCard
+            score={averageScore}
+            grade={averageGrade}
+            violationScore={Math.round(portfolioScores.reduce((s, p) => s + p.violation_score, 0) / portfolioScores.length)}
+            complianceScore={Math.round(portfolioScores.reduce((s, p) => s + p.compliance_score, 0) / portfolioScores.length)}
+            resolutionScore={Math.round(portfolioScores.reduce((s, p) => s + p.resolution_score, 0) / portfolioScores.length)}
+          />
+          <div className="lg:col-span-2 bg-card rounded-xl border border-border p-5 shadow-card">
+            <h3 className="font-display text-sm font-semibold uppercase tracking-wide mb-4">Property Scores</h3>
+            <div className="space-y-2">
+              {portfolioScores.map(s => {
+                const cfg = s.grade === 'A' ? 'text-emerald-600' : s.grade === 'B' ? 'text-blue-600' : s.grade === 'C' ? 'text-amber-600' : s.grade === 'D' ? 'text-orange-600' : 'text-red-600';
+                return (
+                  <div key={s.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
+                    <span className={`font-display text-lg font-bold w-8 ${cfg}`}>{s.grade}</span>
+                    <div className="flex-1">
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${s.score >= 80 ? 'bg-emerald-500' : s.score >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                          style={{ width: `${s.score}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-sm font-medium tabular-nums w-12 text-right">{s.score}/100</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
