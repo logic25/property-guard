@@ -6,6 +6,7 @@ import StatsCard from '@/components/dashboard/StatsCard';
 import CriticalViolationsWidget from '@/components/dashboard/CriticalViolationsWidget';
 import { usePortfolioScores } from '@/hooks/useComplianceScore';
 import { ComplianceScoreCard } from '@/components/dashboard/ComplianceScoreCard';
+import { ViolationTrendChart } from '@/components/dashboard/ViolationTrendChart';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { isActiveViolation, getAgencyColor } from '@/lib/violation-utils';
@@ -71,6 +72,7 @@ const DashboardOverview = () => {
   });
   const [agencyBreakdown, setAgencyBreakdown] = useState<AgencyBreakdown[]>([]);
   const [recentViolations, setRecentViolations] = useState<RecentViolation[]>([]);
+  const [allViolations, setAllViolations] = useState<{ id: string; issued_date: string; severity: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -85,8 +87,8 @@ const DashboardOverview = () => {
           supabase.from('work_orders').select('*', { count: 'exact', head: true }).neq('status', 'completed'),
         ]);
 
-        const allViolations = violationsRes.data || [];
-        const active = allViolations.filter(isActiveViolation);
+        const fetchedViolations = violationsRes.data || [];
+        const active = fetchedViolations.filter(isActiveViolation);
         
         // Calculate penalties
         const totalPenalties = active.reduce((sum, v) => sum + (v.penalty_amount || 0), 0);
@@ -133,6 +135,7 @@ const DashboardOverview = () => {
         // Recent active violations
         const recentActive = active.slice(0, 8) as unknown as RecentViolation[];
         setRecentViolations(recentActive);
+        setAllViolations(fetchedViolations.map((v: any) => ({ id: v.id, issued_date: v.issued_date, severity: v.severity || null })));
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -251,6 +254,9 @@ const DashboardOverview = () => {
           </div>
         </div>
       )}
+
+      {/* Violation Trend Chart */}
+      <ViolationTrendChart violations={allViolations} />
 
       {/* Critical Violations & Deadlines */}
       <CriticalViolationsWidget />

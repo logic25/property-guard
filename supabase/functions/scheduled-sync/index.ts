@@ -226,6 +226,18 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Generate deadline reminder notifications (7/3/1 days before)
+    try {
+      const { error: reminderError } = await supabase.rpc('generate_deadline_reminders');
+      if (reminderError) {
+        console.error("Error generating deadline reminders:", reminderError);
+      } else {
+        console.log("Deadline reminders generated successfully");
+      }
+    } catch (e) {
+      console.error("Error calling generate_deadline_reminders:", e);
+    }
+
     console.log(`Scheduled sync complete: ${results.synced} synced, ${results.errors} errors, ${results.new_violations} new violations, ${results.changes_detected} changes detected`);
 
     return new Response(JSON.stringify({ success: true, ...results }), {

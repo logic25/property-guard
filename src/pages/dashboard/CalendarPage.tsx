@@ -177,6 +177,11 @@ const CalendarPage = () => {
       .sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [filteredEvents]);
 
+  // Stats
+  const totalEvents = filteredEvents.length;
+  const overdueEvents = filteredEvents.filter(e => isPast(e.date) && !isToday(e.date)).length;
+  const urgentEvents = filteredEvents.filter(e => e.urgent).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -201,20 +206,65 @@ const CalendarPage = () => {
         </Select>
       </div>
 
+      {/* Stats Bar */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <CalendarIcon className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-2xl font-display font-bold">{totalEvents}</p>
+            <p className="text-xs text-muted-foreground">Total Events</p>
+          </div>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-warning" />
+          </div>
+          <div>
+            <p className="text-2xl font-display font-bold">{urgentEvents}</p>
+            <p className="text-xs text-muted-foreground">Due Within 7 Days</p>
+          </div>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-destructive" />
+          </div>
+          <div>
+            <p className="text-2xl font-display font-bold">{overdueEvents}</p>
+            <p className="text-xs text-muted-foreground">Overdue</p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Calendar Grid */}
         <div className="lg:col-span-2 bg-card rounded-xl border border-border p-4">
           {/* Month nav */}
           <div className="flex items-center justify-between mb-4">
-            <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(prev => subMonths(prev, 1))}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(prev => subMonths(prev, 1))}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCurrentMonth(new Date());
+                  setSelectedDay(new Date());
+                }}
+                className="text-xs"
+              >
+                Today
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
             <h2 className="font-display text-lg font-semibold">
               {format(currentMonth, 'MMMM yyyy')}
             </h2>
-            <Button variant="ghost" size="icon" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>
-              <ChevronRight className="w-4 h-4" />
-            </Button>
+            <div className="w-24" /> {/* spacer for centering */}
           </div>
 
           {/* Day headers */}
@@ -272,30 +322,41 @@ const CalendarPage = () => {
         <div className="space-y-4">
           {selectedDay ? (
             <div className="bg-card rounded-xl border border-border p-4">
-              <h3 className="font-semibold text-foreground mb-3">
+              <h3 className="font-semibold text-foreground mb-1">
                 {format(selectedDay, 'EEEE, MMM d, yyyy')}
               </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                {selectedDayEvents.length} event{selectedDayEvents.length !== 1 ? 's' : ''}
+              </p>
               {selectedDayEvents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No events on this day.</p>
+                <p className="text-sm text-muted-foreground py-4 text-center">No events on this day.</p>
               ) : (
                 <div className="space-y-2">
                   {selectedDayEvents.map(ev => {
                     const Icon = EVENT_ICONS[ev.type];
+                    const daysAway = Math.ceil((ev.date.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                    const isOverdue = daysAway < 0;
                     return (
                       <div
                         key={ev.id}
-                        className="p-3 rounded-lg border border-border hover:bg-muted/30 cursor-pointer transition-colors"
+                        className={`p-3 rounded-lg border cursor-pointer transition-colors hover:bg-muted/30 ${
+                          isOverdue ? 'border-destructive/40 bg-destructive/5' :
+                          ev.urgent ? 'border-warning/40 bg-warning/5' : 'border-border'
+                        }`}
                         onClick={() => navigate(`/dashboard/properties/${ev.propertyId}`)}
                       >
                         <div className="flex items-start gap-2">
-                          <Icon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                          <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${isOverdue ? 'text-destructive' : ev.urgent ? 'text-warning' : 'text-muted-foreground'}`} />
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 mb-1">
                               <span className="text-sm font-medium text-foreground">{ev.title}</span>
-                              <Badge variant="outline" className={`text-[10px] ${EVENT_COLORS[ev.type]}`}>
-                                {EVENT_LABELS[ev.type]}
-                              </Badge>
+                              {isOverdue && (
+                                <Badge variant="destructive" className="text-[10px] py-0">Overdue</Badge>
+                              )}
                             </div>
+                            <Badge variant="outline" className={`text-[10px] mb-1 ${EVENT_COLORS[ev.type]}`}>
+                              {EVENT_LABELS[ev.type]}
+                            </Badge>
                             <p className="text-xs text-muted-foreground truncate">{ev.subtitle}</p>
                             <p className="text-xs text-muted-foreground truncate mt-0.5">{ev.propertyAddress}</p>
                           </div>
