@@ -309,9 +309,38 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     return map;
   }, [applications]);
 
-  // For the table, show each filtered app as its own row (no nesting)
+  // Deduplicate: for job families, only show the primary (I1) row in the table.
+  // Subsequent filings (P1, P2, S1, etc.) are nested inside the expanded detail.
   const sortedFiltered = useMemo(() => {
-    return [...filtered].sort((a, b) => {
+    // Identify which prefixes have an I-filing (initial) present in the filtered set
+    const prefixInitialMap = new Map<string, Application>();
+    const subsequentPrefixes = new Set<string>();
+
+    filtered.forEach(app => {
+      const { prefix, suffix } = parseFilingNumber(app.application_number);
+      if (!suffix) return; // no suffix = standalone app, always show
+      const suffixUpper = suffix.replace(/-[A-Z]+$/, '').toUpperCase(); // strip agency tag
+      if (suffixUpper.startsWith('I')) {
+        prefixInitialMap.set(prefix, app);
+      } else {
+        subsequentPrefixes.add(prefix);
+      }
+    });
+
+    // Filter: keep apps that are either:
+    // 1. Standalone (no suffix)
+    // 2. Initial filings (I1, I1-EL, etc.)
+    // 3. Subsequent filings whose family has NO initial filing in the filtered set
+    const deduped = filtered.filter(app => {
+      const { prefix, suffix } = parseFilingNumber(app.application_number);
+      if (!suffix) return true; // standalone
+      const suffixUpper = suffix.replace(/-[A-Z]+$/, '').toUpperCase();
+      if (suffixUpper.startsWith('I')) return true; // initial filing
+      // Subsequent filing: only show if no initial filing exists for this family
+      return !prefixInitialMap.has(prefix);
+    });
+
+    return deduped.sort((a, b) => {
       const dateA = a.filing_date || '';
       const dateB = b.filing_date || '';
       return dateB.localeCompare(dateA);
@@ -573,6 +602,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
     const decodedStatus = decodeStatus(app.status, app.source);
     const isBuild = app.source.startsWith('DOB NOW');
     const { prefix, suffix } = parseFilingNumber(app.application_number);
+    // Show related filings for any app that belongs to a family (has suffix)
     const relatedApps = suffix ? (relatedFilingsMap.get(prefix) || []).filter(a => a.id !== app.id) : [];
 
     return (
