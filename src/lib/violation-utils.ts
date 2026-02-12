@@ -163,7 +163,11 @@ export const isActiveViolation = (violation: {
   status?: string | null;
   oath_status?: string | null;
   violation_class?: string | null;
+  suppressed?: boolean | null;
 }): boolean => {
+  // Exclude suppressed violations
+  if (violation.suppressed) return false;
+  
   // Exclude anything explicitly resolved first
   if (violation.status === 'closed') return false;
   if (isResolvedViolationStatus(violation.status)) return false;

@@ -999,6 +999,8 @@ export type Database = {
           severity: string | null
           source: string | null
           status: Database["public"]["Enums"]["violation_status"]
+          suppressed: boolean | null
+          suppression_reason: string | null
           synced_at: string | null
           updated_at: string
           violation_category: string | null
@@ -1036,6 +1038,8 @@ export type Database = {
           severity?: string | null
           source?: string | null
           status?: Database["public"]["Enums"]["violation_status"]
+          suppressed?: boolean | null
+          suppression_reason?: string | null
           synced_at?: string | null
           updated_at?: string
           violation_category?: string | null
@@ -1073,6 +1077,8 @@ export type Database = {
           severity?: string | null
           source?: string | null
           status?: Database["public"]["Enums"]["violation_status"]
+          suppressed?: boolean | null
+          suppression_reason?: string | null
           synced_at?: string | null
           updated_at?: string
           violation_category?: string | null

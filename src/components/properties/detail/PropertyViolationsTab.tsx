@@ -69,6 +69,9 @@ import {
 } from '@/lib/violation-utils';
 import { calculateViolationSeverity, getSeverityBadgeClasses } from '@/lib/violation-severity';
 import { CreateWorkOrderDialog } from '@/components/violations/CreateWorkOrderDialog';
+import { decodeComplaintCategory, getComplaintSeverityColor } from '@/lib/complaint-category-decoder';
+import { shouldSuppressViolation } from '@/lib/violation-aging';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Violation {
   id: string;
@@ -86,8 +89,11 @@ interface Violation {
   respondent_name?: string | null;
   violation_class?: string | null;
   violation_type?: string | null;
+  complaint_category?: string | null;
   oath_status?: string | null;
   notes?: string | null;
+  suppressed?: boolean | null;
+  suppression_reason?: string | null;
 }
 
 interface PropertyViolationsTabProps {
@@ -185,6 +191,8 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
   const [savingNotes, setSavingNotes] = useState<Set<string>>(new Set());
   // Active vs All toggle
   const [showActiveOnly, setShowActiveOnly] = useState(true);
+  // Show suppressed toggle
+  const [showSuppressed, setShowSuppressed] = useState(false);
 
   const agencies = useMemo(() => [...new Set(violations.map(v => v.agency))].sort(), [violations]);
   const violationTypes = useMemo(() => [...new Set(violations.map(v => v.violation_type).filter(Boolean))].sort() as string[], [violations]);
@@ -273,6 +281,11 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
   const filteredAndSortedViolations = useMemo(() => {
     // First filter by active vs all
     let base = showActiveOnly ? violations.filter(isActiveViolation) : violations;
+    
+    // Filter out suppressed unless toggled on
+    if (!showSuppressed) {
+      base = base.filter(v => !v.suppressed);
+    }
 
     let result = base.filter(v => {
       const matchesSearch = 
@@ -315,10 +328,11 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
     });
 
     return result;
-  }, [violations, showActiveOnly, searchQuery, statusFilter, agencyFilter, typeFilter, dateFrom, dateTo, sortField, sortDirection]);
+  }, [violations, showActiveOnly, showSuppressed, searchQuery, statusFilter, agencyFilter, typeFilter, dateFrom, dateTo, sortField, sortDirection]);
 
   // Calculate counts using proper active violation filtering
   const activeViolations = violations.filter(isActiveViolation);
+  const suppressedCount = violations.filter(v => v.suppressed).length;
   const openCount = activeViolations.filter(v => v.status === 'open').length;
 
   return (
@@ -330,6 +344,9 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
           <span><strong>{openCount}</strong> open</span>
           <span><strong>{activeViolations.filter(v => v.status === 'in_progress').length}</strong> in progress</span>
           <span className="text-muted-foreground/60"><strong>{violations.length - activeViolations.length}</strong> resolved</span>
+          {suppressedCount > 0 && (
+            <span className="text-muted-foreground/60"><strong>{suppressedCount}</strong> suppressed</span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -392,6 +409,21 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
               All ({violations.length})
             </button>
           </div>
+
+          {/* Show Suppressed toggle */}
+          {suppressedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSuppressed(!showSuppressed)}
+              className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+                showSuppressed
+                  ? 'bg-muted text-foreground border-border'
+                  : 'text-muted-foreground border-border/50 hover:text-foreground hover:border-border'
+              }`}
+            >
+              {showSuppressed ? 'Hide' : 'Show'} Suppressed ({suppressedCount})
+            </button>
+          )}
         </div>
       </div>
 
@@ -539,7 +571,7 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
               {filteredAndSortedViolations.map((violation) => (
                 <Collapsible key={violation.id} asChild open={expandedRows.has(violation.id)} onOpenChange={() => toggleRow(violation.id)}>
                   <>
-                    <TableRow className="hover:bg-muted/30">
+                    <TableRow className={`hover:bg-muted/30 ${violation.suppressed ? 'opacity-60' : ''}`}>
                       <TableCell>
                         <CollapsibleTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -575,6 +607,18 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                             </span>
                           )}
                           <span className="font-medium">#{violation.violation_number}</span>
+                          {violation.suppressed && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground">Suppressed</Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs max-w-[250px]">{violation.suppression_reason || 'Age-based suppression'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -710,6 +754,29 @@ export const PropertyViolationsTab = ({ violations, onRefresh, bbl, propertyId }
                                         <span className="text-muted-foreground w-28 shrink-0">Category:</span>
                                         <Badge variant="outline" className="text-xs">{getViolationTypeLabel(violation.violation_type)}</Badge>
                                       </div>
+
+                                      {/* Complaint Category Decoding */}
+                                      {violation.complaint_category && (() => {
+                                        const decoded = decodeComplaintCategory(violation.complaint_category);
+                                        return (
+                                          <div className="flex gap-2">
+                                            <span className="text-muted-foreground w-28 shrink-0">Complaint:</span>
+                                            <div className="flex-1">
+                                              {decoded ? (
+                                                <div className="flex items-center gap-2">
+                                                  <Badge variant="outline" className={`text-xs ${getComplaintSeverityColor(decoded.severity)}`}>
+                                                    {violation.complaint_category}
+                                                  </Badge>
+                                                  <span className="text-sm font-medium">{decoded.name}</span>
+                                                  <span className="text-xs text-muted-foreground">— {decoded.description}</span>
+                                                </div>
+                                              ) : (
+                                                <span className="text-sm">Category {violation.complaint_category}</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
                                       
                                       {violation.violation_class && (
                                         <div className="flex gap-2">
