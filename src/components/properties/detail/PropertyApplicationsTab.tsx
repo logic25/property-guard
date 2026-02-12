@@ -637,7 +637,7 @@ export const PropertyApplicationsTab = ({ propertyId }: PropertyApplicationsTabP
             </span>
           </TableCell>
           <TableCell>
-            <Badge variant="outline" className="text-xs w-[90px] justify-center truncate">{app.source}</Badge>
+            <Badge variant="outline" className="text-xs w-[120px] justify-center">{app.source}</Badge>
           </TableCell>
           <TableCell>
             <Badge variant={getStatusVariant(app.status, app.source)}>

@@ -295,7 +295,7 @@ const ApplicationsPage = () => {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs w-[90px] justify-center truncate">
+                        <Badge variant="outline" className="text-xs w-[120px] justify-center">
                           {app.source}
                         </Badge>
                       </TableCell>
