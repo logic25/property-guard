@@ -169,6 +169,78 @@ export type Database = {
         }
         Relationships: []
       }
+      email_log: {
+        Row: {
+          email_type: string
+          id: string
+          metadata: Json | null
+          recipient_email: string | null
+          sent_at: string
+          subject: string
+          user_id: string
+        }
+        Insert: {
+          email_type: string
+          id?: string
+          metadata?: Json | null
+          recipient_email?: string | null
+          sent_at?: string
+          subject: string
+          user_id: string
+        }
+        Update: {
+          email_type?: string
+          id?: string
+          metadata?: Json | null
+          recipient_email?: string | null
+          sent_at?: string
+          subject?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_preferences: {
+        Row: {
+          created_at: string
+          digest_day: string
+          digest_frequency: string
+          email: string | null
+          id: string
+          notify_expirations: boolean
+          notify_new_applications: boolean
+          notify_new_violations: boolean
+          notify_status_changes: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          digest_day?: string
+          digest_frequency?: string
+          email?: string | null
+          id?: string
+          notify_expirations?: boolean
+          notify_new_applications?: boolean
+          notify_new_violations?: boolean
+          notify_status_changes?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          digest_day?: string
+          digest_frequency?: string
+          email?: string | null
+          id?: string
+          notify_expirations?: boolean
+          notify_new_applications?: boolean
+          notify_new_violations?: boolean
+          notify_status_changes?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       lease_conversations: {
         Row: {
           created_at: string

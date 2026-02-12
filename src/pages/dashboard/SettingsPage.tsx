@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2, User, Bell, Shield, CreditCard } from 'lucide-react';
+import EmailPreferencesTab from '@/components/settings/EmailPreferencesTab';
 
 const SettingsPage = () => {
   const { user } = useAuth();
@@ -187,43 +188,7 @@ const SettingsPage = () => {
         </TabsContent>
 
         <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>
-                Configure how you receive alerts and updates
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                <div>
-                  <p className="font-medium">Email Notifications</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive violation alerts via email
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                <div>
-                  <p className="font-medium">SMS Notifications</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive urgent alerts via text message
-                  </p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between p-4 rounded-lg border border-border">
-                <div>
-                  <p className="font-medium">Weekly Digest</p>
-                  <p className="text-sm text-muted-foreground">
-                    Summary of all activity sent every Monday
-                  </p>
-                </div>
-                <Switch />
-              </div>
-            </CardContent>
-          </Card>
+          <EmailPreferencesTab />
         </TabsContent>
 
         <TabsContent value="security">
