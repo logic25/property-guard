@@ -817,6 +817,7 @@ Deno.serve(async (req) => {
       stories: number | null;
       dwelling_units: number | null;
       floor_area: number | null;
+      raw_data?: Record<string, unknown> | null;
     }> = [];
 
     // Fetch DOB BIS Job Application Filings
@@ -878,7 +879,13 @@ Deno.serve(async (req) => {
         if (!appNum) continue;
 
         const jobType = (a.job_type as string) || null;
-        const workType = (a.work_type as string) || null;
+        const workOnFloor = (a.work_on_floor as string) || null;
+
+        // Build a rich description from available fields
+        const descParts = [
+          workOnFloor,
+          a.building_type ? `Building Type: ${a.building_type}` : null,
+        ].filter(Boolean);
 
         applicationRecords.push({
           property_id,
@@ -891,21 +898,34 @@ Deno.serve(async (req) => {
           approval_date: a.approved_date ? (a.approved_date as string).split('T')[0] : null,
           expiration_date: a.expiration_date ? (a.expiration_date as string).split('T')[0] : null,
           job_type: jobType,
-          work_type: workType,
-          description: [
-            a.job_description || a.filing_reason,
-            workType ? `Work: ${workType}` : null,
-          ].filter(Boolean).join(' — ') || null,
+          work_type: (a.building_type as string) || null,
+          description: descParts.join(' — ') || null,
           applicant_name: (a.applicant_first_name && a.applicant_last_name)
             ? `${a.applicant_first_name} ${a.applicant_last_name}`.trim()
-            : (a.applicant_business_name as string) || null,
-          owner_name: (a.owner_first_name && a.owner_last_name)
-            ? `${a.owner_first_name} ${a.owner_last_name}`.trim()
-            : (a.owner_business_name as string) || null,
-          estimated_cost: a.estimated_job_costs ? parseFloat(a.estimated_job_costs as string) : null,
-          stories: a.stories ? parseInt(a.stories as string) : null,
-          dwelling_units: a.dwelling_units ? parseInt(a.dwelling_units as string) : null,
-          floor_area: a.floor_area_sq_ft ? parseFloat(a.floor_area_sq_ft as string) : null,
+            : null,
+          owner_name: (a.owner_s_business_name as string) || 
+            ((a.owner_first_name && a.owner_last_name)
+              ? `${a.owner_first_name} ${a.owner_last_name}`.trim()
+              : null),
+          estimated_cost: a.initial_cost ? parseFloat(a.initial_cost as string) : null,
+          stories: null,
+          dwelling_units: null,
+          floor_area: a.total_construction_floor_area ? parseFloat(a.total_construction_floor_area as string) : null,
+          raw_data: {
+            applicant_license: a.applicant_license || null,
+            applicant_title: a.applicant_professional_title || null,
+            filing_rep_name: (a.filing_representative_first_name && a.filing_representative_last_name)
+              ? `${a.filing_representative_first_name} ${a.filing_representative_last_name}`.trim()
+              : null,
+            filing_rep_company: a.filing_representative_business_name || null,
+            work_on_floor: workOnFloor,
+            first_permit_date: a.first_permit_date ? (a.first_permit_date as string).split('T')[0] : null,
+            special_inspection: a.specialinspectionrequirement || null,
+            special_inspection_agency: a.special_inspection_agency_number || null,
+            review_building_code: a.review_building_code || null,
+            plumbing_work: a.plumbing_work_type === '1',
+            sprinkler_work: a.sprinkler_work_type === '1',
+          },
         });
       }
     }
@@ -941,6 +961,36 @@ Deno.serve(async (req) => {
         } else {
           console.log(`Inserted ${newApps.length} new applications`);
         }
+      }
+
+      // Update existing applications with latest data
+      const appsToUpdate = uniqueApps.filter(a => existingAppKeys.has(`${a.source}:${a.application_number}`));
+      if (appsToUpdate.length > 0) {
+        for (const app of appsToUpdate) {
+          const existingApp = (existingApps || []).find(
+            e => `${e.source}:${e.application_number}` === `${app.source}:${app.application_number}`
+          );
+          if (!existingApp) continue;
+
+          const { error: updateError } = await supabase
+            .from('applications')
+            .update({
+              status: app.status,
+              approval_date: app.approval_date,
+              expiration_date: app.expiration_date,
+              description: app.description,
+              applicant_name: app.applicant_name,
+              owner_name: app.owner_name,
+              estimated_cost: app.estimated_cost,
+              raw_data: app.raw_data || null,
+            })
+            .eq('id', existingApp.id);
+
+          if (updateError) {
+            console.error(`Error updating application ${app.application_number}:`, updateError);
+          }
+        }
+        console.log(`Updated ${appsToUpdate.length} existing applications`);
       }
     }
 
