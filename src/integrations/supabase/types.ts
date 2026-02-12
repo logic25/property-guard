@@ -374,6 +374,78 @@ export type Database = {
           },
         ]
       }
+      oath_hearings: {
+        Row: {
+          amount_paid: number | null
+          balance_due: number | null
+          created_at: string
+          disposition: string | null
+          disposition_date: string | null
+          hearing_date: string | null
+          hearing_status: string | null
+          id: string
+          last_synced_at: string | null
+          penalty_amount: number | null
+          penalty_paid: boolean | null
+          property_id: string | null
+          raw_data: Json | null
+          summons_number: string
+          updated_at: string
+          violation_id: string | null
+        }
+        Insert: {
+          amount_paid?: number | null
+          balance_due?: number | null
+          created_at?: string
+          disposition?: string | null
+          disposition_date?: string | null
+          hearing_date?: string | null
+          hearing_status?: string | null
+          id?: string
+          last_synced_at?: string | null
+          penalty_amount?: number | null
+          penalty_paid?: boolean | null
+          property_id?: string | null
+          raw_data?: Json | null
+          summons_number: string
+          updated_at?: string
+          violation_id?: string | null
+        }
+        Update: {
+          amount_paid?: number | null
+          balance_due?: number | null
+          created_at?: string
+          disposition?: string | null
+          disposition_date?: string | null
+          hearing_date?: string | null
+          hearing_status?: string | null
+          id?: string
+          last_synced_at?: string | null
+          penalty_amount?: number | null
+          penalty_paid?: boolean | null
+          property_id?: string | null
+          raw_data?: Json | null
+          summons_number?: string
+          updated_at?: string
+          violation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oath_hearings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oath_hearings_violation_id_fkey"
+            columns: ["violation_id"]
+            isOneToOne: false
+            referencedRelation: "violations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolios: {
         Row: {
           created_at: string

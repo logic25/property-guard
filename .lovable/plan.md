@@ -204,12 +204,12 @@ The existing `CalendarPage.tsx` already shows hearings, cure deadlines, certific
 
 ## Implementation Sequence
 
-1. **Phase 3A + 3D** (suppression + complaint decoding) -- pure client-side logic, no API calls needed
-2. **Phase 3B** (OATH reconciliation) -- extends existing sync; database + edge function changes
-3. **Phase 3C** (violation guidance) -- new utility file + UI cards
+1. ~~**Phase 3A + 3D** (suppression + complaint decoding)~~ ✅ DONE
+2. ~~**Phase 3B** (OATH reconciliation)~~ ✅ DONE
+3. **Phase 3C** (violation guidance) -- ROADMAPPED for later refinement
 4. **Phase 4A** (notification center) -- database + new component + sidebar update
 5. **Phase 4B + 4C** (priority routing + per-property settings) -- builds on 4A
-6. **Phase 5A** (trend charts) -- recharts already installed, client-side aggregation
+6. **Phase 5A** (trend charts) -- ROADMAPPED
 7. **Phase 5B** (compliance score) -- database + scoring logic + UI cards
 8. **Phase 5C** (hearing calendar enhancement) -- extends existing calendar page
 
