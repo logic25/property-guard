@@ -1199,7 +1199,7 @@ Deno.serve(async (req) => {
         }
 
         // Strategy 2: If no CO in DOB NOW dataset, check BIS Jobs for CO status codes
-        // BIS job_status: J = CO issued, H = completed, I = signed-off
+        // BIS job_status: X = signed off (CO issued), H = completed, I = signed-off, J = plan exam
         if (!coFound) {
           const bisJobs = await safeFetch(
             `${NYC_OPEN_DATA_ENDPOINTS.DOB_BIS_JOBS}?bin__=${bin}&$limit=50&$order=latest_action_date%20DESC`,
@@ -1207,23 +1207,27 @@ Deno.serve(async (req) => {
           );
 
           const BIS_CO_STATUSES: Record<string, string> = {
+            'x': 'signed off',
             'h': 'completed',
             'i': 'signed off',
-            'j': 'co issued',
-            'k': 'final co',
+            'u': 'completed',
           };
 
+          // Find CO job: must have a CO-indicating status AND be a real job type (not PA/DM)
           const coJob = (bisJobs as Record<string, unknown>[]).find(j => {
             const status = ((j.job_status || '') as string).toLowerCase();
-            return status in BIS_CO_STATUSES;
+            const jobType = ((j.job_type || '') as string).toUpperCase();
+            // Only count NB (new building) or A1 (major alteration) as CO-bearing jobs
+            const isCOJobType = ['NB', 'A1'].includes(jobType);
+            return (status in BIS_CO_STATUSES) && isCOJobType;
           });
 
           if (coJob) {
             const jobStatus = ((coJob.job_status || '') as string).toLowerCase();
-            const statusLabel = BIS_CO_STATUSES[jobStatus] || 'co issued';
+            const statusLabel = BIS_CO_STATUSES[jobStatus] || 'signed off';
             const jobNumber = (coJob.job__ || '') as string;
             const jobType = (coJob.job_type || '') as string;
-            const actionDate = (coJob.latest_action_date || '') as string;
+            const signoffDate = (coJob.signoff_date || coJob.latest_action_date || '') as string;
 
             const coMetadata = {
               source: 'BIS_JOBS',
@@ -1232,7 +1236,7 @@ Deno.serve(async (req) => {
               job_type: jobType,
               job_status: jobStatus,
               status_label: statusLabel,
-              action_date: actionDate,
+              signoff_date: signoffDate,
             };
 
             await supabase
@@ -1241,7 +1245,7 @@ Deno.serve(async (req) => {
               .eq('id', property_id);
 
             coFound = true;
-            console.log(`CO status updated from BIS Jobs: valid (${statusLabel}, Job #${jobNumber})`);
+            console.log(`CO status updated from BIS Jobs: valid (${statusLabel}, Job #${jobNumber}, signoff: ${signoffDate})`);
 
             // Create document reference linking to BIS
             const { data: existingCODoc } = await supabase
@@ -1253,7 +1257,7 @@ Deno.serve(async (req) => {
 
             if (!existingCODoc || existingCODoc.length === 0) {
               const bisUrl = `http://a810-bisweb.nyc.gov/bisweb/COsByLocationServlet?allbin=${bin}`;
-              const coDescription = `BIS Certificate of Occupancy — Job #${jobNumber} (${jobType}), Status: ${statusLabel}`;
+              const coDescription = `BIS Certificate of Occupancy — Job #${jobNumber} (${jobType}), ${statusLabel} on ${signoffDate}`;
 
               await supabase.from('property_documents').insert({
                 property_id,
@@ -1265,6 +1269,53 @@ Deno.serve(async (req) => {
                 metadata: coMetadata,
               });
               console.log(`CO document reference created (BIS)`);
+            }
+          }
+
+          // ===== STOP WORK ORDER DETECTION from BIS Jobs =====
+          // special_action_status: W = partial SWO, S = full SWO, R = partial vacate, V = full vacate
+          const SWO_CODES: Record<string, { isSWO: boolean; isVacate: boolean; label: string }> = {
+            'w': { isSWO: true, isVacate: false, label: 'Partial Stop Work Order' },
+            's': { isSWO: true, isVacate: false, label: 'Full Stop Work Order' },
+            'r': { isSWO: false, isVacate: true, label: 'Partial Vacate Order' },
+            'v': { isSWO: false, isVacate: true, label: 'Full Vacate Order' },
+          };
+
+          const swoJobs = (bisJobs as Record<string, unknown>[]).filter(j => {
+            const sas = ((j.special_action_status || '') as string).toLowerCase();
+            return sas in SWO_CODES;
+          });
+
+          for (const swoJob of swoJobs) {
+            const sas = ((swoJob.special_action_status || '') as string).toLowerCase();
+            const swoInfo = SWO_CODES[sas];
+            const swoJobNumber = (swoJob.job__ || '') as string;
+            const swoViolationNumber = `SWO-${swoJobNumber}`;
+
+            // Check if we already have this SWO violation
+            const { data: existingSWO } = await supabase
+              .from('violations')
+              .select('id')
+              .eq('property_id', property_id)
+              .eq('violation_number', swoViolationNumber)
+              .limit(1);
+
+            if (!existingSWO || existingSWO.length === 0) {
+              const swoDescription = `${swoInfo.label} — BIS Job #${swoJobNumber} (${(swoJob.job_type || '') as string})`;
+              await supabase.from('violations').insert({
+                property_id,
+                agency: 'DOB',
+                violation_number: swoViolationNumber,
+                issued_date: (swoJob.latest_action_date || new Date().toISOString()) as string,
+                status: 'open',
+                description_raw: swoDescription,
+                is_stop_work_order: swoInfo.isSWO,
+                is_vacate_order: swoInfo.isVacate,
+                severity: 'critical',
+                source: 'BIS_JOBS',
+                violation_type: swoInfo.label,
+              });
+              console.log(`Created SWO violation: ${swoViolationNumber} (${swoInfo.label})`);
             }
           }
         }
