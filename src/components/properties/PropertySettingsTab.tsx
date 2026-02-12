@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -27,6 +30,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { 
   Phone, 
   Bell, 
@@ -36,7 +50,8 @@ import {
   Mail,
   Trash2,
   Check,
-  Clock
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -65,7 +80,9 @@ export const PropertySettingsTab = ({
   onUpdate,
 }: PropertySettingsTabProps) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [members, setMembers] = useState<PropertyMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -178,6 +195,60 @@ export const PropertySettingsTab = ({
     } catch (error) {
       console.error('Error removing member:', error);
       toast.error('Failed to remove member');
+    }
+  };
+
+  const handleDeleteProperty = async () => {
+    setDeleting(true);
+    try {
+      // Delete related data first, then the property
+      await Promise.all([
+        supabase.from('applications').delete().eq('property_id', propertyId),
+        supabase.from('violations').delete().eq('property_id', propertyId),
+        supabase.from('work_orders').delete().eq('property_id', propertyId),
+        supabase.from('property_documents').delete().eq('property_id', propertyId),
+        supabase.from('property_activity_log').delete().eq('property_id', propertyId),
+        supabase.from('property_members').delete().eq('property_id', propertyId),
+      ]);
+
+      // Delete AI conversations and messages
+      const { data: convos } = await supabase
+        .from('property_ai_conversations')
+        .select('id')
+        .eq('property_id', propertyId);
+      
+      if (convos && convos.length > 0) {
+        const convoIds = convos.map(c => c.id);
+        await supabase.from('property_ai_messages').delete().in('conversation_id', convoIds);
+        await supabase.from('property_ai_conversations').delete().eq('property_id', propertyId);
+      }
+
+      // Delete lease conversations and messages
+      const { data: leaseConvos } = await supabase
+        .from('lease_conversations')
+        .select('id')
+        .eq('property_id', propertyId);
+      
+      if (leaseConvos && leaseConvos.length > 0) {
+        const leaseIds = leaseConvos.map(c => c.id);
+        await supabase.from('lease_messages').delete().in('conversation_id', leaseIds);
+        await supabase.from('lease_conversations').delete().eq('property_id', propertyId);
+      }
+
+      const { error } = await supabase
+        .from('properties')
+        .delete()
+        .eq('id', propertyId);
+
+      if (error) throw error;
+      
+      toast.success('Property deleted');
+      navigate('/dashboard/properties');
+    } catch (error) {
+      console.error('Error deleting property:', error);
+      toast.error('Failed to delete property');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -406,6 +477,56 @@ export const PropertySettingsTab = ({
               <p className="text-xs">Invite managers or supers to collaborate</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Danger Zone */}
+      <Card className="border-destructive/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg text-destructive">
+            <AlertTriangle className="w-5 h-5" />
+            Danger Zone
+          </CardTitle>
+          <CardDescription>
+            Irreversible actions for this property
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 rounded-lg border border-destructive/20 bg-destructive/5">
+            <div>
+              <p className="font-medium">Delete this property</p>
+              <p className="text-sm text-muted-foreground">
+                Permanently remove this property and all its violations, applications, documents, and work orders.
+              </p>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Property
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete this property and all associated data including violations, applications, documents, work orders, and activity logs. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteProperty}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={deleting}
+                  >
+                    {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Delete Property
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </CardContent>
       </Card>
     </div>

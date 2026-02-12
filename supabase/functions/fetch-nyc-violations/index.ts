@@ -887,6 +887,9 @@ Deno.serve(async (req) => {
           a.building_type ? `Building Type: ${a.building_type}` : null,
         ].filter(Boolean);
 
+        // Build a full job description from available fields
+        const jobDesc = (a.job_description as string) || null;
+
         applicationRecords.push({
           property_id,
           application_number: String(appNum),
@@ -899,7 +902,7 @@ Deno.serve(async (req) => {
           expiration_date: a.expiration_date ? (a.expiration_date as string).split('T')[0] : null,
           job_type: jobType,
           work_type: (a.building_type as string) || null,
-          description: descParts.join(' — ') || null,
+          description: jobDesc || descParts.join(' — ') || null,
           applicant_name: (a.applicant_first_name && a.applicant_last_name)
             ? `${a.applicant_first_name} ${a.applicant_last_name}`.trim()
             : null,
@@ -912,19 +915,33 @@ Deno.serve(async (req) => {
           dwelling_units: null,
           floor_area: a.total_construction_floor_area ? parseFloat(a.total_construction_floor_area as string) : null,
           raw_data: {
+            job_description: jobDesc,
             applicant_license: a.applicant_license || null,
             applicant_title: a.applicant_professional_title || null,
+            applicant_business_name: a.applicant_business_name || null,
+            applicant_phone: a.applicant_phone || null,
+            applicant_email: a.applicant_email || null,
             filing_rep_name: (a.filing_representative_first_name && a.filing_representative_last_name)
               ? `${a.filing_representative_first_name} ${a.filing_representative_last_name}`.trim()
               : null,
             filing_rep_company: a.filing_representative_business_name || null,
+            filing_rep_street: a.filing_representative_street_name || null,
+            filing_rep_city: a.filing_representative_city || null,
+            filing_rep_state: a.filing_representative_state || null,
+            filing_rep_zip: a.filing_representative_zip || null,
             work_on_floor: workOnFloor,
             first_permit_date: a.first_permit_date ? (a.first_permit_date as string).split('T')[0] : null,
             special_inspection: a.specialinspectionrequirement || null,
             special_inspection_agency: a.special_inspection_agency_number || null,
+            progress_inspection: a.progressinspectionrequirement || null,
+            progress_inspection_agency: a.progress_inspection_agency_number || null,
             review_building_code: a.review_building_code || null,
             plumbing_work: a.plumbing_work_type === '1',
             sprinkler_work: a.sprinkler_work_type === '1',
+            in_compliance_nycecc: a.in_compliance_with_nycecc || null,
+            little_e: a.little_e || null,
+            job_filing_number: a.job_filing_number || null,
+            dobrunjobnumber: a.dobrunjobnumber || null,
           },
         });
       }
